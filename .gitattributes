@@ -1,0 +1,7 @@
+# Keep one line ending in the working tree on every platform.
+#
+# Windows checkouts otherwise get CRLF, which `prettier --check` rejects because
+# its endOfLine default is "lf". That produces a local failure CI never sees -
+# CI checks out LF, so the same commit passes there. Committing LF and checking
+# out LF keeps the two in agreement.
+* text=auto eol=lf
