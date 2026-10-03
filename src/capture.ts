@@ -334,8 +334,11 @@ export class TransientCounter {
   }
 }
 
-/** The threshold actually applied: a whole number of at least 1. */
-function threshold(value: number): number {
+/**
+ * The `transientThreshold` actually applied: a whole number of at least 1.
+ * index.ts reports a setting this changes; this stays the one rule for it.
+ */
+export function effectiveTransientThreshold(value: number): number {
   if (!Number.isFinite(value))
     return DEFAULT_CAPTURE_OPTIONS.transientThreshold;
   return Math.max(1, Math.ceil(value));
@@ -473,7 +476,7 @@ export function classify(
   if (!transient) return { decision: "record", record, transient };
 
   const count = counter.bump(record.signature);
-  const promoted = count === threshold(o.transientThreshold);
+  const promoted = count === effectiveTransientThreshold(o.transientThreshold);
   return {
     decision: promoted ? "record" : "count-only",
     record,

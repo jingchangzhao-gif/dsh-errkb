@@ -19,6 +19,7 @@ import {
 } from "./plugin";
 import type { InjectionOptions, RecorderOptions } from "./plugin";
 import { registerTools } from "./tools";
+import { effectiveTransientThreshold } from "./capture";
 
 // The plugin's runtime name, matching `id` in cordis.patch.yml. The installed
 // harness plugins follow the same rule: dsh-spill-policy exports "spill-policy",
@@ -42,7 +43,9 @@ export const inject = ["tools", "systemPrompt"];
 // `share` is read, and anything but "private" counts as "public", the safer
 // of the two. `labels` is the exception: it is new, so it starts out as the
 // union it documents (§17 Q2). The store reads both label sets whatever this
-// says; it only decides the language of blocks it writes.
+// says; it only decides the language of blocks it writes. The numeric settings
+// and idPrefix are clamped to their documented ranges by normalizeSettings(),
+// with a warning, rather than rejected here: a rejected value would stop apply.
 export const Config = z.object({
   kbDir: z.string().default(""),
   idPrefix: z.string().default("E-"),
@@ -65,6 +68,85 @@ export const Config = z.object({
 
 /** The plugin's settings, as apply() receives them. */
 export type Config = Schemastery.TypeT<typeof Config>;
+
+/**
+ * The `idPrefix` shape: letters, digits, `-` and `_`, not ending in a digit, so
+ * the trailing digits of an ID are its number alone (match.ts and tools.ts
+ * both read them that way) and a prefix never spans a header's ` · `.
+ */
+export const ID_PREFIX_PATTERN = /^[A-Za-z0-9_-]*[A-Za-z_-]$/;
+
+/** One numeric setting's documented range and whether it is a whole number. */
+interface NumericBounds {
+  min: number;
+  max: number;
+  integer: boolean;
+}
+
+/** The documented ranges, checked by normalizeSettings(). */
+export const SETTING_BOUNDS = {
+  fuzzyThreshold: { min: 0.5, max: 1, integer: false },
+  idWidth: { min: 1, max: 9, integer: true },
+  maxEntries: { min: 1, max: Infinity, integer: true },
+  maxSampleChars: { min: 0, max: Infinity, integer: true },
+} as const satisfies Record<string, NumericBounds>;
+
+/** `value` inside `bounds`; a non-finite value takes `fallback`. */
+function clampSetting(
+  value: number,
+  bounds: NumericBounds,
+  fallback: number,
+): number {
+  if (Number.isNaN(value)) return fallback;
+  const whole =
+    bounds.integer && Number.isFinite(value) ? Math.floor(value) : value;
+  return Math.min(bounds.max, Math.max(bounds.min, whole));
+}
+
+/**
+ * Keep the numeric settings and `idPrefix` inside their documented ranges, so
+ * a typo degrades instead of silently breaking matching, archiving or IDs.
+ * `transientThreshold` follows capture.ts's own rule
+ * (effectiveTransientThreshold), reported here so the change is visible.
+ *
+ * @param config - the plugin's settings.
+ * @param warn - called once per setting that changed, naming it, the value
+ *   given and the value used.
+ * @returns the settings with every out-of-range value replaced.
+ */
+export function normalizeSettings(
+  config: Config,
+  warn: (message: string) => void = () => undefined,
+): Config {
+  const defaults = Config({});
+  const out: Config = { ...config };
+  const show = (value: unknown) =>
+    typeof value === "string" ? JSON.stringify(value) : String(value);
+  const report = (key: string, given: unknown, used: unknown) =>
+    warn(
+      `err-kb: setting ${key}=${show(given)} is out of range; using ${show(used)}`,
+    );
+  for (const key of Object.keys(SETTING_BOUNDS) as Array<
+    keyof typeof SETTING_BOUNDS
+  >) {
+    const given = config[key];
+    const used = clampSetting(given, SETTING_BOUNDS[key], defaults[key]);
+    if (!Object.is(used, given)) {
+      out[key] = used;
+      report(key, given, used);
+    }
+  }
+  const threshold = effectiveTransientThreshold(config.transientThreshold);
+  if (threshold !== config.transientThreshold) {
+    out.transientThreshold = threshold;
+    report("transientThreshold", config.transientThreshold, threshold);
+  }
+  if (!ID_PREFIX_PATTERN.test(config.idPrefix)) {
+    out.idPrefix = defaults.idPrefix;
+    report("idPrefix", config.idPrefix, defaults.idPrefix);
+  }
+  return out;
+}
 
 /**
  * The recorder settings a configuration selects.
@@ -129,7 +211,10 @@ export function injectionOptions(config: Config): InjectionOptions {
 // One startup line with the resolved directory and its tier (T05), then the
 // two capture listeners (T11), the four injection points (T13) and the five
 // tools (T15).
-export function apply(ctx: Context, config: Config) {
+export function apply(ctx: Context, given: Config) {
+  const config = normalizeSettings(given, (message) =>
+    ctx.logger.warn(message),
+  );
   const kb = resolveKbDir(config.kbDir, defaultProbe());
   ctx.logger.info(formatKbLog(kb));
   const recorder = createRecorder({

@@ -2,7 +2,7 @@
 
 Six questions that the design document (`docs/设计说明书.md`) either leaves open or does not raise. Each one states the problem, the options and a recommendation, and ends with questions for the owner. Items are numbered so they can be answered line by line in review; the answers belong in §17 / §19 of the design document once settled.
 
-None of this changes behaviour. It is input for T06–T13 and for §17.
+Several items are now decided and implemented; each says so at its top, with a pointer to the code: 1.2, 2(a), 2(c), 4 and 5.1–5.2, plus §17 Q2 and Q4 (topic 6). Everything else is still an open question for the owner, and nothing here decides it.
 
 ---
 
@@ -43,9 +43,9 @@ On one failing step the model can therefore read "apply E-0007, do not re-diagno
 
 The matched code (`ERR_PNPM_…`, `EPERM`, `TS2307`, `ModuleNotFoundError`) is stored as a strong key next to `sig`.
 
-**(b) Localised OS text.** On a Chinese Windows system, EPERM can surface as `拒绝访问` rather than `operation not permitted`. Same error, two signatures, two IDs. Proposal: when category + code + filename agree, treat it as a near hit (reuse the ID, mark "approximate match, verify first") even if the text differs.
+**(b) Localised OS text.** **Partly implemented, rule still open (2.2):** `src/match.ts` has a code fallback that gives a near hit when category and code agree and both messages are under 40 characters after normalisation (`SHORT_MESSAGE_CHARS`). It does not compare filenames, and a longer localised message with a different wording still misses. On a Chinese Windows system, EPERM can surface as `拒绝访问` rather than `operation not permitted`. Same error, two signatures, two IDs. Proposal: when category + code + filename agree, treat it as a near hit (reuse the ID, mark "approximate match, verify first") even if the text differs.
 
-**(c) Jaccard on CJK.** §5.2 computes Jaccard over a "normalised token set" without saying how tokens are split. If they are split on whitespace, a Chinese message has no spaces, so it becomes one token and Jaccard is 0 or 1 — the 0.72 threshold means nothing. Proposal: Latin word tokens plus CJK character bigrams (`拒绝访问` → `拒绝`, `绝访`, `访问`).
+**(c) Jaccard on CJK.** **Decided and implemented (T09):** Latin word tokens plus CJK character bigrams, in `src/match.ts` (2.3). §5.2 computes Jaccard over a "normalised token set" without saying how tokens are split. If they are split on whitespace, a Chinese message has no spaces, so it becomes one token and Jaccard is 0 or 1 — the 0.72 threshold means nothing. Proposal: Latin word tokens plus CJK character bigrams (`拒绝访问` → `拒绝`, `绝访`, `访问`).
 
 **Questions.**
 
@@ -56,6 +56,8 @@ The matched code (`ERR_PNPM_…`, `EPERM`, `TS2307`, `ModuleNotFoundError`) is s
 ---
 
 ## 3. A labelled corpus before trusting 0.72
+
+**Not implemented; still open.** There is no `tests/fixtures/corpus/` and no threshold sweep. The T09 tests pin behaviour at 0.71 / 0.72 / 0.73 only, so 0.72 remains a placeholder.
 
 **Problem.** T09 checks that 0.71 / 0.72 / 0.73 behave as coded. It does not check that 0.72 is the right number. A threshold that is too low merges different errors under one ID — the worst failure, because the wrong fix is then injected with "do not re-diagnose".
 
@@ -76,7 +78,7 @@ The matched code (`ERR_PNPM_…`, `EPERM`, `TS2307`, `ModuleNotFoundError`) is s
 
 ## 4. Fix trust: a negative signal
 
-**Decided (T12):** the proposal below, implemented in `src/inject.ts` (`FixTrust`, `trustLevel`). Answers: 4.1 — the 1 / 2 thresholds are accepted (`DOUBT_AFTER`, `SUPPRESS_AFTER`). 4.2 — "recurred" means the same entry is captured again later in the same turn that injected its fix. 4.3 — yes: the counts are kept against a hash of the fix text, so editing the fix starts them again. A recorded success (`succeeded`, fed by resolution detection in T14) lifts the suppression. The state is a plain serializable object behind an injectable `TrustStore`, held in memory until `src/state.ts` persists it to `state.json`; it is never written into `ERRORS.md`. Listing suppressed IDs in `err_stats` belongs to T15.
+**Decided (T12):** the proposal below, implemented in `src/inject.ts` (`FixTrust`, `trustLevel`). Answers: 4.1 — the 1 / 2 thresholds are accepted (`DOUBT_AFTER`, `SUPPRESS_AFTER`). 4.2 — "recurred" means the same entry is captured again later in the same turn that injected its fix. 4.3 — yes: the counts are kept against a hash of the fix text, so editing the fix starts them again. A recorded success (`succeeded`, fed by resolution detection in T14) lifts the suppression. The state is a plain serializable object behind an injectable `TrustStore`, persisted by `src/state.ts` in `state.json`, which is machine-local and never committed; it is never written into `ERRORS.md`. Listing suppressed IDs in `err_stats` belongs to T15.
 
 **Problem.** Nothing in the design notices that a fix did not work. If E-0007 is injected and the same error recurs on the next step, the next notice still says "apply this, do not re-diagnose". Only a human marking `wontfix` or a misjudgment stops it.
 
@@ -97,6 +99,8 @@ Prior art: `compounded` promotes lessons after clean uses and demotes them when 
 ---
 
 ## 5. Redaction cannot be complete → revisit §17 Q4
+
+**5.1 decided (T07):** one shared pattern list in `src/redact-patterns.ts`, used by `src/redact.ts`; `tests/redact-patterns.test.ts` checks it against the regular expression in `.github/workflows/privacy-guard.yml`, which as a shell step keeps its own copy. **5.2 decided (§17 Q4):** real entries go in a private KB repository; this repository ignores `errors/` and publishes only curated, redacted entries in `seeds/`. **5.3 stays open:** nothing records `device` or `proj` yet, so whether public mode hashes or drops them has not had to be answered.
 
 **Problem.** §4.4 replaces `sk-`, `Bearer`, `api_key=`, `token=`, long base64/hex, e-mail and request IDs. It would still let through:
 
@@ -124,6 +128,8 @@ Prior art: `compounded` promotes lessons after clean uses and demotes them when 
 ---
 
 ## 6. §17 decisions, with recommendations
+
+**Q2 and Q4 are decided**, as recorded in both READMEs: English labels by default with `labels: 'zh'`, both always parsed (Q2); a private KB repository with public seeds only (Q4). The other six rows are still open; the recommendations below are not decisions.
 
 | # | Question | Recommendation |
 | - | -------- | -------------- |

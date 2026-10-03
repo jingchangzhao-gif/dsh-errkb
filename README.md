@@ -413,22 +413,24 @@ Settings live in the profile patch, not in a separate config file:
 | Setting              | Default                            | Purpose                                                                                        |
 | -------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `kbDir`              | `''`                               | Empty resolves automatically: config → plugin root `errors/` → `$DSH_HOME/errkb/` ([details](#where-the-knowledge-base-lives)). A relative path is resolved against the plugin package root |
-| `idPrefix`           | `'E-'`                             | Entry ID prefix (§8 of the design document; it is not in §10's table)                           |
-| `idWidth`            | `4`                                | Zero-padding width for IDs                                                                      |
+| `idPrefix`           | `'E-'`                             | Entry ID prefix (§8 of the design document; it is not in §10's table). Letters, digits, `-` and `_`, not ending in a digit; anything else uses `E-`                           |
+| `idWidth`            | `4`                                | Zero-padding width for IDs, a whole number from 1 to 9                                                                      |
 | `capture`            | `['tool','command','llm','agent']` | Capture toggles, each can be off                                                                |
 | `captureExitCodes`   | `true`                             | Record commands that exited non-zero                                                            |
-| `transientThreshold` | `5`                                | Occurrences before a transient LLM error earns an ID                                            |
-| `fuzzyThreshold`     | `0.72`                             | Similarity needed for a fuzzy match (range 0.5–1.0)                                             |
+| `transientThreshold` | `5`                                | Occurrences before a transient LLM error earns an ID; rounded up to a whole number, at least 1                                            |
+| `fuzzyThreshold`     | `0.72`                             | Similarity needed for a fuzzy match, from 0.5 to 1.0                                             |
 | `captureFix`         | `'prompt-once'`                    | `prompt-once` or `off`: ask the model once per session to state the fix of an entry that has none, when it looks resolved; any other value falls back to `prompt-once` |
 | `inject`             | `'hit-only'`                       | `hit-only`, `always` or `off`; any other value falls back to `hit-only`                         |
 | `sessionDigest`      | `'counts'`                         | Session-opening digest: `off`, `counts` or `index` (at most 10 entries); any other value falls back to `counts` |
 | `systemPromptHint`   | `true`                             | The 50-token behavioural section                                                                |
-| `providers`          | `['*']`                            | Restrict which providers are recorded (e.g. `deepseek-official`)                                 |
+| `providers`          | `['*']`                            | Restrict which providers are recorded (e.g. `deepseek-official`) — not read yet; the `agent/request-error` listener that uses it arrives in T16                                 |
 | `share`              | `'public'`                         | Redaction strength — `public` or `private` ([details](#privacy-and-redaction))                   |
-| `maxEntries`         | `200`                              | Above this, entries archive to `ERRORS.archive.md`                                              |
-| `maxSampleChars`     | `500`                              | Cap on the stored raw sample                                                                    |
-| `exportDir`          | `''`                               | Optional device-local export; empty disables it (e.g. an Obsidian vault path on one machine)     |
+| `maxEntries`         | `200`                              | Above this, entries archive to `ERRORS.archive.md`; a whole number, at least 1                                              |
+| `maxSampleChars`     | `500`                              | Cap on the stored raw sample, a whole number, at least 0; `0` means no cap                                                                  |
+| `exportDir`          | `''`                               | Optional device-local export; empty disables it (e.g. an Obsidian vault path on one machine) — not read yet (T18)     |
 | `labels`             | `'en'`                             | Language of the field labels in newly written entries: `en` or `zh`. Both are always parsed ([details](#the-errorsmd-format)) |
+
+A numeric setting outside its range, or an `idPrefix` of the wrong shape, does not stop the plugin: it starts with the nearest allowed value instead (a fraction in a whole-number setting rounds down, except in `transientThreshold`, which rounds up; a value that is not a number, or a bad `idPrefix`, takes the default) and logs one warning naming the setting, the value given and the value used.
 
 ## Privacy and redaction
 
@@ -474,7 +476,7 @@ The plugin's own mistakes must never become the agent's problem. Each risk below
 
 **This does not take over retries, by design.** `dsh-llm-retry` owns retry, and every retry is billed again. The `agent/request-error` listener must `await next()` and return the result unchanged. A plugin that "helpfully" recovered here would be fighting the retry owner's correctness contract.
 
-**Fuzzy matching can merge two errors that only look alike.** At 0.72 similarity a near miss is still a miss. The mitigation is social rather than algorithmic: near misses are labelled as approximate in the injected text, and any entry can be marked as a misjudgment to take it out of injection permanently.
+**Fuzzy matching can merge two errors that only look alike.** At 0.72 similarity a near miss is still a miss. The mitigation is social rather than algorithmic: near misses are labelled as approximate in the injected text, and any entry can be marked as a misjudgment to take it out of injection permanently. Writes are guarded too: `err_record` with a `message` updates an entry only on an exact match; on an approximate match it writes nothing and returns the closest ID, which the model must confirm by calling `err_record` with that `id`.
 
 **0.72 is a placeholder, not a measured value.** The T09 tests prove the threshold behaves as coded at 0.71 / 0.72 / 0.73 and that Chinese text is tokenized into bigrams; they do not prove 0.72 is the right number. That needs the labelled corpus of real errors and look-alike pairs proposed in [`docs/discussions.md`](docs/discussions.md) §3, which does not exist yet.
 
@@ -484,7 +486,7 @@ The plugin's own mistakes must never become the agent's problem. Each risk below
 
 **Knowledge travels by git, and that is the only channel.** No cloud service, no remote sharing. Two devices converge by merging append-only Markdown, which is reliable but manual.
 
-**One shared knowledge base across all projects.** Entries carry a project field to tell them apart, but there is no per-project isolation yet.
+**One shared knowledge base across all projects.** There is no per-project isolation, and the project and device fields described in §8 of the design document are not recorded yet: nothing writes them, so the matcher's same-project tie-break never fires in practice. Whether public mode will hash or drop those fields once they are recorded is still open ([`docs/discussions.md`](docs/discussions.md) §5.3).
 
 **No GUI panel.** Rejected for now. The design document records it as a post-release candidate.
 
@@ -494,17 +496,19 @@ The plugin's own mistakes must never become the agent's problem. Each risk below
 
 Seven criteria define "done" (§1 of the design document), each with its own verification method:
 
-| #  | Criterion                                                              | How to verify                                                          |
-| -- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| S1 | Errors are filed automatically and get a unique ID from `E-0001`        | Trigger one failing tool call → a new numbered block appears in `ERRORS.md` |
-| S2 | The same error is never numbered twice — even as path, line, PID and timestamp change | Re-run in a different temp directory with a different line number → hit count +1, same ID |
-| S3 | A hit injects a ≤ 120-token known fix                                   | A `plugin`-sourced notice appears in the session and the model stops re-diagnosing |
-| S4 | A new error gets its fix written into the entry after resolution        | The model calls `err_record`, or answers the one-shot prompt             |
-| S5 | No plugin failure interrupts a turn or affects retry                    | Unit test injects an exception → the listener swallows it and `agent/request-error` still returns the downstream result |
-| S6 | The document is editable by hand and by model, and the index can be rebuilt | Hand-edit a fix in `ERRORS.md` → the next hit reads the edited text   |
-| S7 | Cross-device safe: no absolute paths, no secrets                         | Full-text search for `D:\`, `sk-`, `Bearer` returns zero hits           |
+| #  | Criterion                                                              | How to verify                                                          | Status today |
+| -- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------ |
+| S1 | Errors are filed automatically and get a unique ID from `E-0001`        | Trigger one failing tool call → a new numbered block appears in `ERRORS.md` | Covered by unit and integration tests against a fake host; real host after T17 |
+| S2 | The same error is never numbered twice — even as path, line, PID and timestamp change | Re-run in a different temp directory with a different line number → hit count +1, same ID | Covered by unit and integration tests against a fake host; real host after T17 |
+| S3 | A hit injects a ≤ 120-token known fix                                   | A `plugin`-sourced notice appears in the session and the model stops re-diagnosing | Covered by unit and integration tests against a fake host; real host after T17 |
+| S4 | A new error gets its fix written into the entry after resolution        | The model calls `err_record`, or answers the one-shot prompt             | Covered by unit and integration tests against a fake host; real host after T17 |
+| S5 | No plugin failure interrupts a turn or affects retry                    | Unit test injects an exception → the listener swallows it and `agent/request-error` still returns the downstream result | Swallowing is tested for the listeners that exist; the `agent/request-error` part waits for T16 |
+| S6 | The document is editable by hand and by model, and the index can be rebuilt | Hand-edit a fix in `ERRORS.md` → the next hit reads the edited text   | Covered by unit and integration tests against a fake host; real host after T17 |
+| S7 | Cross-device safe: no absolute paths, no secrets                         | Full-text search for `D:\`, `sk-`, `Bearer` returns zero hits           | Covered by redaction tests and the CI privacy guard; real host after T17 |
 
 ### Manual acceptance
+
+These steps need the plugin installed in a real `dsh`, so they can be run only after T17 (installation).
 
 1. `dsh --profile web --dump-config` shows the `err-kb` entry (proving the bundle layer works).
 2. Trigger a command that must fail (for example, a drive letter that does not exist) → `## E-0001` appears.
