@@ -13,6 +13,8 @@ coverage/
 # author wrote it.
 README.md
 README.zh-CN.md
+README.toolbox.md
+README.toolbox.zh-CN.md
 docs/
 
 # Written byte-for-byte by src/store.ts, and tests/seeds.test.ts fails if a
