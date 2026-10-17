@@ -593,6 +593,31 @@ export type LockOptions = Pick<
 >;
 
 /**
+ * Read `.lock`, treating a Windows handle that is being deleted as "no lock".
+ * Another process removing the file can make it refuse to open with EPERM or
+ * EBUSY until its handle closes; the lock loop already retries contention, so
+ * that race must not become a failure. Real permission problems still surface
+ * from the reads and writes that follow.
+ */
+async function readLock(
+  fs: StoreFs,
+  lock: string,
+): Promise<string | undefined> {
+  try {
+    return await fs.readFile(lock);
+  } catch (error) {
+    const code = errorCode(error);
+    if (
+      process.platform === "win32" &&
+      (code === "EPERM" || code === "EBUSY")
+    ) {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+/**
  * Run `fn` holding the knowledge base's `.lock` (§13): created with `wx`, one
  * older than `lockStaleMs` is taken over, and waiting gives up after
  * `lockTimeoutMs` with a LockTimeoutError. The store and state.json take the
@@ -618,7 +643,7 @@ export async function withFileLock<T>(
   // fully would need an atomic compare-and-delete the filesystem does not
   // offer.
   async function removeIfUnchanged(held: string | undefined): Promise<void> {
-    if ((await fs.readFile(lock)) === held) await fs.remove(lock);
+    if ((await readLock(fs, lock)) === held) await fs.remove(lock);
   }
 
   await fs.mkdir(dirname(lock));
@@ -626,8 +651,8 @@ export async function withFileLock<T>(
   const deadline = clock.now().getTime() + o.lockTimeoutMs;
   for (;;) {
     if (await fs.createExclusive(lock, token)) break;
-    const held = await fs.readFile(lock);
-    const mtime = await fs.mtimeMs(lock);
+    const held = await readLock(fs, lock);
+    const mtime = held === undefined ? undefined : await fs.mtimeMs(lock);
     const now = clock.now().getTime();
     if (mtime !== undefined && now - mtime > o.lockStaleMs) {
       await removeIfUnchanged(held);
@@ -641,7 +666,7 @@ export async function withFileLock<T>(
   } finally {
     // Only release our own lock: if this write outlived lockStaleMs and
     // someone took over, the lock on disk is theirs now.
-    if ((await fs.readFile(lock)) === token) await fs.remove(lock);
+    if ((await readLock(fs, lock)) === token) await fs.remove(lock);
   }
 }
 
@@ -892,7 +917,14 @@ export function nodeStoreFs(): StoreFs {
         await fsp.writeFile(path, data, { encoding: "utf8", flag: "wx" });
         return true;
       } catch (error) {
-        if (errorCode(error) === "EEXIST") return false;
+        const code = errorCode(error);
+        if (code === "EEXIST") return false;
+        // Windows reports an existing lock that another handle holds or has
+        // just deleted as EPERM or EBUSY rather than EEXIST. The lock caller
+        // treats "not created" as contention and retries, which is the same
+        // answer those races need; a directory denial still surfaces on the
+        // reads that follow.
+        if (code === "EPERM" || code === "EBUSY") return false;
         throw error;
       }
     },
@@ -900,7 +932,15 @@ export function nodeStoreFs(): StoreFs {
       try {
         return (await fsp.stat(path)).mtimeMs;
       } catch (error) {
-        if (errorCode(error) === "ENOENT") return undefined;
+        if (errorCode(error) === "ENOENT") {
+          // Windows reports a path that walks through a regular file as
+          // ENOENT, where POSIX reports ENOTDIR. A parent that exists but is
+          // not a directory is a real failure on both, so it propagates
+          // instead of reading as "missing".
+          const parent = await fsp.stat(dirname(path)).catch(() => undefined);
+          if (parent !== undefined && !parent.isDirectory()) throw error;
+          return undefined;
+        }
         throw error;
       }
     },
