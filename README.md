@@ -6,9 +6,21 @@
 
 [简体中文](README.zh-CN.md)
 
+> **Roadmap rebaselined on 2026-10-13.** The ordered implementation source is now
+> [`docs/implementation-plan.md`](docs/implementation-plan.md), starting at `EKB-001`.
+> The detailed sections below document the current DSH prototype and retain some legacy
+> `T`/`X` task references until the README closeout card `EKB-055`.
+
 > Recycles errors: the same failure is diagnosed once, recorded, and handed back as a known fix the next time it appears.
 
-`dsh-errkb` is a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) plugin that turns the errors a model hits into a numbered, human-editable knowledge base — then pushes the recorded fix back into context *before* the model starts diagnosing.
+`dsh-errkb` keeps one numbered, human-editable error knowledge base and delivers it in **two forms**:
+
+| Form | What it is | State |
+| ---- | ---------- | ----- |
+| **The plugin** (in-process) | A [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (`dsh`) plugin that turns the errors a model hits into a numbered knowledge base, then pushes the recorded fix back into context *before* the model starts diagnosing | T01–T15 merged; installation waits for T17 |
+| **The toolbox** (external) | A Windows application — `errkb.exe`, Go + PostgreSQL, CUE for its schemas — that watches logs, wrapped processes and windows, searches the knowledge base like a browser, and serves any MCP client, `dsh` or not | **Planned, not started** — [details](#external-toolbox-planned) |
+
+Both forms share one set of rules (normalize, fingerprint, redact, match) and, once the toolbox ships, one knowledge base.
 
 > **Status: P5 complete.** The design document is written and under review —
 > six of the eight decisions in its §17 are still open (Q2 and Q4 are decided) —
@@ -36,10 +48,15 @@
 > profile yourself. Anything below tied to T16–T18 is still a description of
 > the intended path.
 >
-> - Design document: [`docs/设计说明书.md`](docs/设计说明书.md) — 19 sections, Chinese
+> - Implementation plan: [`docs/implementation-plan.md`](docs/implementation-plan.md)
 > - What the plugin will do: [How it works](#how-it-works)
 > - Where your data will land: [Where the knowledge base lives](#where-the-knowledge-base-lives)
 > - What is still open: [Open decisions](#open-decisions) — Q2 and Q4 of §17 are decided, six remain
+>
+> **A second delivery form is planned.** An external Windows toolbox (`errkb.exe`, Go + PostgreSQL, CUE for its
+> schemas) will watch logs, wrapped processes and windows and serve any MCP client, so the knowledge base stops
+> being `dsh`-only. None of it is written yet; the requirements, architecture decisions, 55 ordered task cards, and
+> implementation order are consolidated in [`docs/implementation-plan.md`](docs/implementation-plan.md).
 
 ## Contents
 
@@ -59,6 +76,7 @@
 - [Failure modes and safety](#failure-modes-and-safety)
 - [Known limitations](#known-limitations)
 - [Verifying it works](#verifying-it-works)
+- [External toolbox (planned)](#external-toolbox-planned)
 - [Roadmap](#roadmap)
 - [Development](#development)
 - [Troubleshooting](#troubleshooting)
@@ -73,7 +91,7 @@
 
 | Piece                                                                     | State                      |
 | ------------------------------------------------------------------------- | -------------------------- |
-| `docs/设计说明书.md` — the design document (19 sections)                  | ✅ Written, pending review |
+| `docs/implementation-plan.md` — the ordered implementation plan           | ✅ Rebaselined; start at `EKB-001` |
 | `README.md`, `README.zh-CN.md`                                            | ✅ In place                |
 | `LICENSE`                                                                 | ✅ In place                |
 | `.github/` — CI, privacy guard and PR template                            | ✅ In place                |
@@ -93,9 +111,11 @@
 | `src/inject.ts` — notice generation, hard caps and fix trust              | ✅ In place (T12), 100% statements and lines — wired to the four injection points (T13) |
 | `src/resolve-detect.ts` — resolution detection                            | ✅ In place (T14), 100% statements and lines — fed by `tools/result`; `recordFix()` is called by `err_record` (T15) |
 | `src/tools.ts` — the five agent tools                                     | ✅ In place (T15), 100% statements and lines — `err_lookup`, `err_record`, `err_list`, `err_forget`, `err_stats`, registered through `ctx.tools.register()` |
-| `tests/`                                                                  | ✅ 554 cases (one skipped off Windows): `paths` 39 (T05), `signature` 30 (T06), `redact` 52 (T07), `store` 62 and `seeds` 5 (T08, T15), `match` 40 (T09), `capture` 67 (T10), `plugin` 44 (T11, T14), `inject` 70 (T12–T15), `injection` 68 (T13, T14), `resolve-detect` 19 (T14), `tools` 40 (T15), `state` 18 (§4.3) |
+| `tests/`                                                                  | ⚠ 598 discovered locally: 596 pass and 2 Windows real-filesystem store tests fail; repair is `EKB-003` |
 | Installed into the `web` profile                                          | ⛔ Not started             |
-| Published to npm                                                          | ⛔ Not started — no task covers it yet, see [Roadmap](#roadmap) |
+| Published release                                                         | ⛔ Not started — release workflow is `EKB-054` |
+| External toolbox — implementation plan | ✅ Rebaselined as `EKB-001`–`EKB-055` across `P0`–`P7` |
+| External toolbox — code (`cmd/`, `internal/`, `db/`, `spec/`) | ⛔ Not started — begin with `EKB-001`, see [External toolbox (planned)](#external-toolbox-planned) |
 
 ## Why
 
@@ -179,7 +199,7 @@ When it lands (T16), the listener on `agent/request-error` must `await next()` a
 
 **Promotion happens once.** A transient error's count is kept per session and per signature, and it takes an ID on the occurrence that *reaches* `transientThreshold` — not on every occurrence after it. With a source left out of `capture`, nothing is produced for it at all, not even a count.
 
-**One line decides the signature (decided, [`docs/discussions.md`](docs/discussions.md) §2a).** Multi-line output — `tsc` with forty errors, a `pnpm install` log, a Python traceback — is reduced to one headline before fingerprinting, so a forty-first error or a reordered log keeps the same ID. `src/capture.ts` picks:
+**One line decides the signature.** Multi-line output — `tsc` with forty errors, a `pnpm install` log, a Python traceback — is reduced to one headline before fingerprinting, so a forty-first error or a reordered log keeps the same ID. The behavior is preserved by `EKB-012` in the [implementation plan](docs/implementation-plan.md). `src/capture.ts` picks:
 
 1. for a Python traceback (`Traceback (most recent call last):`), the last non-empty line — checked first, because a traceback quotes source lines such as `raise ValueError(...)`;
 2. otherwise the first line matching `ERR_[A-Z0-9_]+|E[A-Z]{2,}|[A-Z]\w*Error|error TS\d+` (log-level words such as `ERR` and `ERROR` do not count);
@@ -259,7 +279,7 @@ One entry, in the default English labels, with machine fields carried in an HTML
 
 **Entry status:** `open`, `fixed`, or `wontfix`. Setting `wontfix` (or flagging an entry as a misjudgment) takes it out of automatic injection permanently while it keeps counting, so one bad record cannot keep poisoning the context.
 
-> **Field language is decided (§17 Q2):** English labels by default, `labels: 'zh'` for Chinese, both always parsed. The `device` and `proj` machine fields in the design document's sample are left out here; they arrive with the capture layer, and whether public mode hashes or drops them is still open (`docs/discussions.md` §5).
+> **Prototype field language:** English labels by default, `labels: 'zh'` for Chinese, both always parsed. The platform replacement is governed by the versioned event and configuration contracts in `EKB-006` and `EKB-007`.
 
 ## Injection: when it speaks and how much
 
@@ -279,7 +299,7 @@ pnpm install --config.node-linker=hoisted. Known fix: try this first, before
 re-diagnosing or researching.
 ```
 
-(Wrapped here for reading; the real notice is one line.) The closing sentence orders the work instead of forbidding any, so it does not contradict a research nudge from another plugin on the same step ([`docs/discussions.md`](docs/discussions.md) §1.2). The other wordings, exactly as `src/inject.ts` (T12) writes them:
+(Wrapped here for reading; the real notice is one line.) The closing sentence orders the work instead of forbidding any, so it does not contradict a research nudge from another plugin on the same step. The other wordings, exactly as `src/inject.ts` (T12) writes them:
 
 | Case                                   | Notice                                                                                     |
 | -------------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -292,7 +312,7 @@ re-diagnosing or researching.
 
 **Hard caps, and the caps are the point.** One notice per step, three per turn, two per ID per session; each notice ≤ 120 tokens by a conservative estimate (every non-ASCII character one token, ASCII three characters a token) and ≤ 400 characters. A long cause gives way first, then the fix; the closing instruction is never cut. The plugin-source `summary` goes through dsh-llm's own `boundContextSummary`, so it is ≤ 120 characters, for the `{kind: 'plugin', plugin: 'err-kb', form: 'notice', summary}` message shape (`MessageSourceMap['plugin']` in `@deepseek-ai/dsh-llm`). An entry whose status is `fixed` announces itself once and then goes quiet. An uncapped version of this plugin would be worse than no plugin: a hit rate bought with constant noise turns a saving into a cost.
 
-**A fix that does not work stops being pushed** ([`docs/discussions.md`](docs/discussions.md) §4). When the same entry is captured again later in the turn that injected its fix, that counts as a recurrence: after one, the notice changes to "This fix failed here last time; verify before applying."; after two with no recorded success, the entry is not injected on this machine any more. Editing the entry's fix starts the count again. The counters are machine-local and never touch `ERRORS.md`: they live in `state.json` under `trust`, so a suppressed fix stays suppressed after a restart, on this machine only. Deleting `state.json` resets them.
+**A fix that does not work stops being pushed.** When the same entry is captured again later in the turn that injected its fix, that counts as a recurrence: after one, the notice changes to "This fix failed here last time; verify before applying."; after two with no recorded success, the entry is not injected on this machine any more. Editing the entry's fix starts the count again. The future platform moves this evidence into versioned solution outcomes under `EKB-021`.
 
 Every cap is configurable downwards, and `inject: 'off'` stops every notice while capture keeps recording. The session digest and the standing section have their own switches, `sessionDigest: 'off'` and `systemPromptHint: false`.
 
@@ -478,7 +498,7 @@ The plugin's own mistakes must never become the agent's problem. Each risk below
 
 **Fuzzy matching can merge two errors that only look alike.** At 0.72 similarity a near miss is still a miss. The mitigation is social rather than algorithmic: near misses are labelled as approximate in the injected text, and any entry can be marked as a misjudgment to take it out of injection permanently. Writes are guarded too: `err_record` with a `message` updates an entry only on an exact match; on an approximate match it writes nothing and returns the closest ID, which the model must confirm by calling `err_record` with that `id`.
 
-**0.72 is a placeholder, not a measured value.** The T09 tests prove the threshold behaves as coded at 0.71 / 0.72 / 0.73 and that Chinese text is tokenized into bigrams; they do not prove 0.72 is the right number. That needs the labelled corpus of real errors and look-alike pairs proposed in [`docs/discussions.md`](docs/discussions.md) §3, which does not exist yet.
+**0.72 is a placeholder, not a measured value.** The T09 tests prove the threshold behaves as coded at 0.71 / 0.72 / 0.73 and that Chinese text is tokenized into bigrams; they do not prove 0.72 is the right number. `EKB-010` and `EKB-024` require a labelled corpus and a zero-false-merge gate.
 
 **The knowledge base is only as good as what gets written into it.** An entry recorded without a fix will be injected without a fix — a notice that spends tokens to say nothing. This is why new entries prompt once for the fix, and why `err_stats` reports how many open entries are doing nothing useful.
 
@@ -486,7 +506,7 @@ The plugin's own mistakes must never become the agent's problem. Each risk below
 
 **Knowledge travels by git, and that is the only channel.** No cloud service, no remote sharing. Two devices converge by merging append-only Markdown, which is reliable but manual.
 
-**One shared knowledge base across all projects.** There is no per-project isolation, and the project and device fields described in §8 of the design document are not recorded yet: nothing writes them, so the matcher's same-project tie-break never fires in practice. Whether public mode will hash or drop those fields once they are recorded is still open ([`docs/discussions.md`](docs/discussions.md) §5.3).
+**One shared knowledge base across all projects.** There is no per-project isolation, and project and device fields are not recorded yet, so the matcher's same-project tie-break never fires in practice. The platform schema and privacy behavior are defined by `EKB-006`, `EKB-014` and `EKB-019`.
 
 **No GUI panel.** Rejected for now. The design document records it as a post-release candidate.
 
@@ -516,6 +536,29 @@ These steps need the plugin installed in a real `dsh`, so they can be run only a
 4. A plugin notice line appears in the session, and the model does **not** re-diagnose.
 5. `err_stats` prints the resolved KB path, the hit rate and the estimated savings.
 
+## External toolbox (planned)
+
+**Nothing in this section is built yet.** It exists so the README stops implying that `dsh-errkb` only lives
+inside `dsh`. The upgrade checklist below is the canonical implementation source; the toolbox README remains only
+as a short entry point:
+
+- [`docs/implementation-plan.md`](docs/implementation-plan.md) — the canonical execution plan: product boundary,
+  current-file audit, 55 ordered cards, acceptance gates, quality checks, and fallbacks
+- [`README.toolbox.md`](README.toolbox.md) — a short entry point to the checklist
+
+| | |
+| --- | --- |
+| What it is | A resident Windows application (`errkb.exe`) plus a PostgreSQL knowledge base |
+| Stack | Go for everything that runs; PostgreSQL + PL/pgSQL for the store and its invariants; CUE for the config and contract schemas |
+| Capture | V1: structured host adapters, wrapped processes (`errkb run --`), log tailing and manual input. UIA and OCR are post-v1 candidates |
+| Retrieval | Exact fingerprint first, then `pg_trgm` trigram search, then a Jaccard re-rank. No word-segmentation FTS, no embeddings, no model calls |
+| Reaches | Generic CLI, DSH, Codex and Claude Code first; other hosts use CLI, logs or manual channels until a stable adapter exists |
+| Requires | Windows 10/11 x64, Go, PostgreSQL 16 and CUE during development; release packaging is decided by `EKB-004` and `EKB-051` |
+| Not built | `cmd/`, `internal/`, `db/`, `spec/` and `packaging/` do not exist yet; the first card is `EKB-001` |
+
+The first usable gate is **P4**: PostgreSQL, local service, CLI, wrapped processes and logs complete a technical-error
+reuse loop without any model dependency. Host adapters and the Windows UI follow only after that gate.
+
 ## Roadmap
 
 The design is complete and the work is broken into **eighteen tasks** across seven milestones. Each task's deliverable and acceptance criteria are in [Full task breakdown](#full-task-breakdown) below.
@@ -533,6 +576,27 @@ The design is complete and the work is broken into **eighteen tasks** across sev
 | 🔜    | T18 — optional: Obsidian export                                                         |
 
 T01–T15 are checked off and merged upstream (T14 and T15 in PR #12). The rest are open; T18 can be dropped at any point without touching the main line.
+
+### External toolbox series (planned)
+
+The second delivery form is now the continuous **`EKB-001`–`EKB-055`** series across phases `P0`–`P7`. The order, prerequisites, and acceptance conditions live
+in [`docs/implementation-plan.md`](docs/implementation-plan.md); this README's legacy stage table is retained only as prototype history.
+
+| State | Stage | Gate |
+| ----- | ----- | ---- |
+| ⛔ | S0 decisions and skeleton | `ci` green for both toolchains; the four owner answers recorded |
+| ⛔ | S1 feasibility probe | **go/no-go**: which channel reads each real host's text, with measured bridge latency |
+| ⛔ | S2 core port | the conformance corpus is green |
+| ⛔ | S3 PostgreSQL store and search | 100k rows at p95 < 150 ms; 50 concurrent records give one row |
+| ⛔ | S4 capture | a real failing command creates one entry, and re-running hits it |
+| ⛔ | S5 UI, CLI and tray | **MVP**: a human can search, read and edit; one keystroke yields the fix |
+| ⛔ | S6 MCP and local API | a real client completes error → lookup → fix |
+| ⛔ | S7 window capture | each named host has a recorded success case |
+| ⛔ | S8 hand-back and auto-apply | one audit row; one refusal |
+| ⛔ | S9 packaging | a clean VM passes the first-run wizard |
+| ⛔ | S10 unification and docs | one store; the export round-trip is green |
+
+The series does not use the P-phase numbering above: `P0`–`P7` covers T01–T18 only.
 
 ### Milestone mapping
 
@@ -632,7 +696,7 @@ What is true today: installing a plugin adds an entry to `dsh.profile.bundles` (
 
 ## Open decisions
 
-**Two are decided, six remain.** Q2 and Q4 were answered for T07–T08 and are recorded in §17. The rest still decide what later tasks build: Q5 (scope of reuse) affects matching in T09, and Q6 (`captureExitCodes`) affects classification in T10 (see [Milestone mapping](#milestone-mapping)). Write answers in the "your answer" column of §17, or anything at all in the §19 annotation area of [`docs/设计说明书.md`](docs/设计说明书.md).
+The former open-decision tables have been replaced by explicit decisions and gates in [`docs/implementation-plan.md`](docs/implementation-plan.md). New decisions must be added as numbered `EKB` cards rather than informal document annotations.
 
 | # | Question                                                             | Proposed default                                                        | State |
 | - | -------------------------------------------------------------------- | ----------------------------------------------------------------------- | ----- |
@@ -648,7 +712,11 @@ What is true today: installing a plugin adds an entry to `dsh.profile.bundles` (
 Two further gaps are **not** in §17 and will need an answer before the README can stop saying "not specified":
 
 - **Requirements**: Node and pnpm are pinned in `package.json` (`engines.node >=22.13`, `packageManager pnpm@11.7.0`), but there is still no OS support statement.
-- **Distribution and maintenance**: no task covers publishing to npm, checking that the npm name is free, CI, or uninstalling.
+- **Distribution and maintenance**: release, upgrade and uninstall are covered by `EKB-051`–`EKB-055`.
+
+**The toolbox adds four key decisions.** The first hosts to support, how PostgreSQL is deployed, the boundary of
+automatic fix execution, and the stack itself. They gate the whole `X` series and are collected under “开工前由项目所有者确认”
+in [`docs/implementation-plan.md`](docs/implementation-plan.md).
 
 ## Future work
 
@@ -689,13 +757,14 @@ Where `dsh-errkb` sits: **stable, human-readable IDs** (`E-0007`) that survive a
 
 T01–T15 are implemented and tested; T16 and T17 are open, and nothing is installed or published yet. Contributions are welcome — fixes, tests, a review of the design, or disagreement with it while the open §17 decisions are still cheap to change.
 
-- **The design document is the source of truth.** If this README and [`docs/设计说明书.md`](docs/设计说明书.md) disagree, the design document wins (and this README has a bug worth reporting).
+- **The implementation plan is the source of truth.** If this README and [`docs/implementation-plan.md`](docs/implementation-plan.md) disagree, the plan wins and this README must be corrected.
 - **Feedback goes in the document.** §17 is a table with an empty "your answer" column; §19 is an annotation area. Both are meant to be written in directly.
 - **Keep the two READMEs in sync.** `README.md` is English and `README.zh-CN.md` is Chinese, and they have already drifted once. Any change to one belongs in the same change as the other.
 - **Language rules for the repository**: English for `README.md` and for code, comments, commits and documentation; Chinese for `README.zh-CN.md` and for the design document, which is written in Chinese by choice.
 - **`pnpm test` enforces the coverage gate.** It runs vitest with coverage and fails under 99% statements or lines; run it with `pnpm typecheck`, `pnpm lint`, `pnpm format:check` and `pnpm build` before you push — CI runs the same five.
 - **The privacy guard must pass.** `.github/workflows/privacy-guard.yml` rejects absolute user paths, personal e-mail addresses and credential-shaped tokens anywhere in the tree; write `<repo-root>` and other placeholders instead.
 - **One task per commit**, with a conventional prefix and the task tag: `feat: add the five err_ tools (T15)`, `fix: … (T15)`, `docs: …`.
+- **New toolbox work uses `EKB-nnn`.** Commits read `feat: … (EKB-031)` and follow the order and gates in `docs/implementation-plan.md`. Legacy `Tnn` references describe the existing plugin history only.
 
 ## License
 
