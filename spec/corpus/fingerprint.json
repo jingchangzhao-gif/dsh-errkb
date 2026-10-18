@@ -1,0 +1,186 @@
+{
+  "corpus": "fingerprint",
+  "sources": [
+    "tests/signature.test.ts",
+    "tests/gen-corpus.ts (curated categories)"
+  ],
+  "coverage": [
+    "sha256(category + NUL + normalize(message)) truncated to 12 lowercase hex characters",
+    "every capture category the TypeScript side knows",
+    "identical normalized messages under different categories stay distinct"
+  ],
+  "not_covered": ["signature calls built from helpers or variables"],
+  "cases": [
+    {
+      "case_id": "fingerprint-001",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "boom"
+      },
+      "expected": "008941f357be"
+    },
+    {
+      "case_id": "fingerprint-002",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "\u001b[1mError:  Boom\u001b[0m."
+      },
+      "expected": "528cd24a0e2b"
+    },
+    {
+      "case_id": "fingerprint-003",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "error: boom"
+      },
+      "expected": "528cd24a0e2b"
+    },
+    {
+      "case_id": "fingerprint-004",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "ENOENT: no such file"
+      },
+      "expected": "a5207ef6864d"
+    },
+    {
+      "case_id": "fingerprint-005",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "EACCES: permission denied"
+      },
+      "expected": "011abb000a24"
+    },
+    {
+      "case_id": "fingerprint-006",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "ENOENT 'D\u003a\\a\\b\\package.json'"
+      },
+      "expected": "ee139fe88f67"
+    },
+    {
+      "case_id": "fingerprint-007",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "ENOENT 'D\u003a\\a\\b\\tsconfig.json'"
+      },
+      "expected": "d9b9039db7b3"
+    },
+    {
+      "case_id": "fingerprint-008",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "拒绝访问"
+      },
+      "expected": "fd7c7fdbd960"
+    },
+    {
+      "case_id": "fingerprint-009",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "找不到文件"
+      },
+      "expected": "25d06f330e29"
+    },
+    {
+      "case_id": "fingerprint-010",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "llm",
+        "message": "boom"
+      },
+      "expected": "7e48264f5f14"
+    },
+    {
+      "case_id": "fingerprint-011",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "a",
+        "message": "bc"
+      },
+      "expected": "40bb547d936b"
+    },
+    {
+      "case_id": "fingerprint-012",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "ab",
+        "message": "c"
+      },
+      "expected": "6c032e631d39"
+    },
+    {
+      "case_id": "fingerprint-013",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "",
+        "message": ""
+      },
+      "expected": "6e340b9cffb3"
+    },
+    {
+      "case_id": "fingerprint-014",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "\u001b[0m"
+      },
+      "expected": "1c5317d60575"
+    },
+    {
+      "case_id": "fingerprint-015",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": ""
+      },
+      "expected": "1c5317d60575"
+    },
+    {
+      "case_id": "fingerprint-016",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "tool",
+        "message": "EPERM: operation not permitted, rename '<path>'"
+      },
+      "expected": "51fa33b778e1"
+    },
+    {
+      "case_id": "fingerprint-017",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "command-exit",
+        "message": "npm error code ENOENT"
+      },
+      "expected": "f94c632475d0"
+    },
+    {
+      "case_id": "fingerprint-018",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "llm",
+        "message": "拒绝访问：无法读取配置"
+      },
+      "expected": "36d5598f7118"
+    },
+    {
+      "case_id": "fingerprint-019",
+      "source_test": "tests/signature.test.ts#signature",
+      "input": {
+        "category": "agent",
+        "message": "NO_ADAPTER: missing adapter"
+      },
+      "expected": "34473e4f6590"
+    }
+  ]
+}

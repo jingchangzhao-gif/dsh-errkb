@@ -1,0 +1,135 @@
+{
+  "corpus": "headline",
+  "sources": [
+    "tests/capture.test.ts",
+    "tests/gen-corpus.ts (curated overlong and traceback cases)"
+  ],
+  "coverage": [
+    "ANSI stripping, CR/LF splitting, empty-line skipping",
+    "first line naming an error code, else the last line",
+    "Python traceback: the last non-empty line",
+    "the 200-character cap"
+  ],
+  "not_covered": [
+    "payload constants (TSC, PNPM) stay in tests/capture.test.ts",
+    "case ids are exercised only through the cap"
+  ],
+  "cases": [
+    {
+      "case_id": "headline-001",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "something went wrong",
+      "expected": {
+        "line": "something went wrong"
+      }
+    },
+    {
+      "case_id": "headline-002",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "EPERM: operation not permitted, rename 'a' -> 'b'",
+      "expected": {
+        "line": "EPERM: operation not permitted, rename 'a' -> 'b'",
+        "code": "EPERM"
+      }
+    },
+    {
+      "case_id": "headline-003",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "TypeError: x is not a function",
+      "expected": {
+        "line": "TypeError: x is not a function",
+        "code": "TypeError"
+      }
+    },
+    {
+      "case_id": "headline-004",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "${TRACEBACK}  File \"x.py\"\nKeyboardInterrupt\n",
+      "expected": {
+        "line": "KeyboardInterrupt"
+      }
+    },
+    {
+      "case_id": "headline-005",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "building...\ncompiling\nfailed to link\n\n",
+      "expected": {
+        "line": "failed to link"
+      }
+    },
+    {
+      "case_id": "headline-006",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "npm ERR! code ENOENT\nnpm ERR! syscall open",
+      "expected": {
+        "line": "npm ERR! code ENOENT",
+        "code": "ENOENT"
+      }
+    },
+    {
+      "case_id": "headline-007",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "ERROR: build broke\nExit status 2",
+      "expected": {
+        "line": "Exit status 2"
+      }
+    },
+    {
+      "case_id": "headline-008",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "\u001b[31mEACCES\u001b[0m: permission denied\r\nnext\r\n",
+      "expected": {
+        "line": "EACCES: permission denied",
+        "code": "EACCES"
+      }
+    },
+    {
+      "case_id": "headline-009",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "first\rsecond",
+      "expected": {
+        "line": "second"
+      }
+    },
+    {
+      "case_id": "headline-010",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "",
+      "expected": {
+        "line": ""
+      }
+    },
+    {
+      "case_id": "headline-011",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": " \n\t\n",
+      "expected": {
+        "line": ""
+      }
+    },
+    {
+      "case_id": "headline-012",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "THEEND reached",
+      "expected": {
+        "line": "THEEND reached"
+      }
+    },
+    {
+      "case_id": "headline-013",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy THEEND",
+      "expected": {
+        "line": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…"
+      }
+    },
+    {
+      "case_id": "headline-014",
+      "source_test": "tests/capture.test.ts#extractHeadline",
+      "input": "Traceback (most recent call last):\n  File \"x.py\", line 1\nKeyboardInterrupt\n",
+      "expected": {
+        "line": "KeyboardInterrupt"
+      }
+    }
+  ]
+}

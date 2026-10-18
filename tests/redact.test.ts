@@ -303,3 +303,32 @@ describe("committed seeds", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Conformance corpus (EKB-009): the same cases the Go port must reproduce.
+
+function corpus<T>(name: string): T[] {
+  const file = resolve(
+    fileURLToPath(new URL("..", import.meta.url)),
+    "spec",
+    "corpus",
+    `${name}.json`,
+  );
+  return (JSON.parse(readFileSync(file, "utf8")) as { cases: T[] }).cases;
+}
+
+interface RedactCase {
+  case_id: string;
+  source_test: string;
+  input: string;
+  options?: { share: "public" | "private" };
+  expected: string;
+}
+
+describe("conformance corpus: redaction", () => {
+  for (const c of corpus<RedactCase>("redact")) {
+    it(`${c.case_id} (${c.source_test})`, () => {
+      expect(redact(c.input, c.options ?? {})).toBe(c.expected);
+    });
+  }
+});

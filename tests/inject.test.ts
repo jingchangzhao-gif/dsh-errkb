@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { boundContextSummary } from "@deepseek-ai/dsh-llm";
 import { describe, expect, it } from "vitest";
 import {
@@ -835,4 +838,37 @@ describe("the standing section", () => {
       "record a working fix with err_record",
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+// Conformance corpus (EKB-009): the same cases the Go port must reproduce.
+
+function corpus<T>(name: string): T[] {
+  const file = resolve(
+    fileURLToPath(new URL("..", import.meta.url)),
+    "spec",
+    "corpus",
+    `${name}.json`,
+  );
+  return (JSON.parse(readFileSync(file, "utf8")) as { cases: T[] }).cases;
+}
+
+interface NoticeCase {
+  case_id: string;
+  source_test: string;
+  input: { event: NoticeEvent; trust?: string };
+  expected: { kind: string; text: string };
+}
+
+describe("conformance corpus: notice", () => {
+  for (const c of corpus<NoticeCase>("notice")) {
+    it(`${c.case_id} (${c.source_test})`, () => {
+      expect(
+        noticeText(
+          c.input.event,
+          c.input.trust as Parameters<typeof noticeText>[1],
+        ),
+      ).toEqual(c.expected);
+    });
+  }
 });

@@ -1,0 +1,433 @@
+{
+  "corpus": "notice",
+  "sources": ["tests/inject.test.ts"],
+  "coverage": [
+    "hit, near hit, no-fix and miss kinds",
+    "trusted and doubted trust levels",
+    "cause and fix wording, one-line join",
+    "the 400-character and 120-token caps"
+  ],
+  "not_covered": [
+    "estimateTokens(), fitNotice() and clip() stay in tests/inject.test.ts",
+    "noticeSource() and Injector wiring stay in tests/inject.test.ts"
+  ],
+  "cases": [
+    {
+      "case_id": "notice-001",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "hit with cause and fix",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "node_modules locked by an editor during pnpm install",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted.",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "exact",
+            "approximate": false,
+            "similarity": 1,
+            "injectable": true
+          }
+        }
+      },
+      "expected": {
+        "kind": "hit",
+        "text": "[errkb] E-0007 known (5 hits) | cause: node_modules locked by an editor during pnpm install | fix: close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted. Known fix: try this first, before re-diagnosing or researching."
+      }
+    },
+    {
+      "case_id": "notice-002",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "singular hit count",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0001",
+            "entry": {
+              "id": "E-0001",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 1,
+              "trigger": "node_modules locked by an editor during pnpm install",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted.",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "exact",
+            "approximate": false,
+            "similarity": 1,
+            "injectable": true
+          }
+        }
+      },
+      "expected": {
+        "kind": "hit",
+        "text": "[errkb] E-0001 known (1 hit) | cause: node_modules locked by an editor during pnpm install | fix: close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted. Known fix: try this first, before re-diagnosing or researching."
+      }
+    },
+    {
+      "case_id": "notice-003",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "no cause line",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "  ",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted.",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "exact",
+            "approximate": false,
+            "similarity": 1,
+            "injectable": true
+          }
+        }
+      },
+      "expected": {
+        "kind": "hit",
+        "text": "[errkb] E-0007 known (5 hits) | fix: close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted. Known fix: try this first, before re-diagnosing or researching."
+      }
+    },
+    {
+      "case_id": "notice-004",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "multi-line fix joined to one line",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "node_modules locked by an editor during pnpm install",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "step one\n\nstep two",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "exact",
+            "approximate": false,
+            "similarity": 1,
+            "injectable": true
+          }
+        }
+      },
+      "expected": {
+        "kind": "hit",
+        "text": "[errkb] E-0007 known (5 hits) | cause: node_modules locked by an editor during pnpm install | fix: step one step two Known fix: try this first, before re-diagnosing or researching."
+      }
+    },
+    {
+      "case_id": "notice-005",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "near hit: approximate wording",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "node_modules locked by an editor during pnpm install",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted.",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "fuzzy",
+            "approximate": true,
+            "similarity": 0.8,
+            "injectable": true
+          }
+        }
+      },
+      "expected": {
+        "kind": "near",
+        "text": "[errkb] E-0007 known (5 hits) | cause: node_modules locked by an editor during pnpm install | fix: close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted. Approximate match, verify first."
+      }
+    },
+    {
+      "case_id": "notice-006",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "no fix recorded",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "node_modules locked by an editor during pnpm install",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": " \n ",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "exact",
+            "approximate": false,
+            "similarity": 1,
+            "injectable": true
+          }
+        }
+      },
+      "expected": {
+        "kind": "no-fix",
+        "text": "[errkb] E-0007 seen before (5 hits), no fix recorded yet."
+      }
+    },
+    {
+      "case_id": "notice-007",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "miss",
+      "input": {
+        "event": {
+          "kind": "miss",
+          "id": "E-0011"
+        }
+      },
+      "expected": {
+        "kind": "miss",
+        "text": "[errkb] recorded as E-0011 (no fix yet)."
+      }
+    },
+    {
+      "case_id": "notice-008",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "doubted trust level",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "node_modules locked by an editor during pnpm install",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted.",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "exact",
+            "approximate": false,
+            "similarity": 1,
+            "injectable": true
+          }
+        },
+        "trust": "doubted"
+      },
+      "expected": {
+        "kind": "doubted",
+        "text": "[errkb] E-0007 known (5 hits) | cause: node_modules locked by an editor during pnpm install | fix: close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted. This fix failed here last time; verify before applying."
+      }
+    },
+    {
+      "case_id": "notice-009",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "doubted near hit",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "node_modules locked by an editor during pnpm install",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted.",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "fuzzy",
+            "approximate": true,
+            "similarity": 0.8,
+            "injectable": true
+          }
+        },
+        "trust": "doubted"
+      },
+      "expected": {
+        "kind": "doubted",
+        "text": "[errkb] E-0007 known (5 hits) | cause: node_modules locked by an editor during pnpm install | fix: close the locking process and re-run; if it persists, use pnpm install --config.node-linker=hoisted. Approximate match, verify first. This fix failed here last time; verify before applying."
+      }
+    },
+    {
+      "case_id": "notice-010",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "long fix clipped by the caps",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "node_modules locked by an editor during pnpm install",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor ",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "exact",
+            "approximate": false,
+            "similarity": 1,
+            "injectable": true
+          }
+        }
+      },
+      "expected": {
+        "kind": "hit",
+        "text": "[errkb] E-0007 known (5 hits) | cause: node_modules locked by an editor during… | fix: re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install after closing the editor re-run pnpm install afte… Known fix: try this first, before re-diagnosing or researching."
+      }
+    },
+    {
+      "case_id": "notice-011",
+      "source_test": "tests/inject.test.ts#noticeText",
+      "note": "CJK-heavy fix inside the token cap",
+      "input": {
+        "event": {
+          "kind": "hit",
+          "hit": {
+            "matched": true,
+            "id": "E-0007",
+            "entry": {
+              "id": "E-0007",
+              "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+              "meta": {
+                "sig": "3f2a1c9d0b71",
+                "cat": "tool"
+              },
+              "fingerprint": "3f2a1c9d0b71",
+              "category": "tool / pwsh",
+              "firstSeen": "2026-09-14 09:12",
+              "lastSeen": "2026-09-14 15:40",
+              "hits": 5,
+              "trigger": "关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑",
+              "raw": "EPERM: operation not permitted, rename '<path>'",
+              "fix": "关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑",
+              "status": "open",
+              "notes": ""
+            },
+            "via": "exact",
+            "approximate": false,
+            "similarity": 1,
+            "injectable": true
+          }
+        }
+      },
+      "expected": {
+        "kind": "hit",
+        "text": "[errkb] E-0007 known (5 hits) | cause: 关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器… | fix: 关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑关闭占用该目录的编辑器后重跑… Known fix: try this first, before re-diagnosing or researching."
+      }
+    }
+  ]
+}
