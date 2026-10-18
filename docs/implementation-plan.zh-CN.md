@@ -364,7 +364,7 @@ P1 门槛：TypeScript 与未来 Go 实现可以消费同一份确定性语料�
 | 状态 | ID | 任务 | 前置 | 产出和验收 |
 | --- | --- | --- | --- | --- |
 | ☑ | EKB-012 | 实现标题提取和安全错误文本 | 009 | 已完成：`internal/core/headline.go` 按语料 14 例实现 traceback 末行、错误码优先、末行回退；只 import regexp/strings/unicode，零 I/O；二次调用结果一致；ANSI 剥离与 200 rune 上限（199 字符 + `…`）与语料一致；命令前缀组合在 `capture()` 中，语料无此例，留到 EKB-016/031；`go test ./internal/core/ -run Headline`、`go vet`、`gofmt -l` 全绿，`spec/corpus/headline.json` 未改动 |
-| ☐ | EKB-013 | 实现规范化和指纹 | 009 | Go 与 TypeScript 对全部语料产生相同规范化结果和 12 位指纹 |
+| ☑ | EKB-013 | 实现规范化和指纹 | 009 | 已完成：`internal/core/normalize.go` 与 headline 共用 ANSI 规则，按语料 57 例实现 UUID/哈希/时间/时长/PID/端口/行列/临时目录/绝对路径折叠与首尾标点裁剪；`internal/core/fingerprint.go` 只做 `sha256(category + "\x00" + normalized)[:12]`，与归一化分离；两侧生产代码零 I/O；Go 57 + 19 例与 TS 侧 106 项断言同源于语料；语料未改（normalize.json `3237EF88…`，fingerprint.json `2B8383AA…`）；`gofmt` / `go vet` 干净 |
 | ☐ | EKB-014 | 实现统一脱敏引擎 | 009、011 | Go、TypeScript 和 CI 规则来自同一来源；敏感文本在任何落盘点前消失 |
 | ☐ | EKB-015 | 实现 token 化和 Jaccard | 009 | Latin token、占位符和 CJK 二元组行为一致 |
 | ☐ | EKB-016 | 实现分类和瞬时噪声规则 | 012-015 | 技术错误分类、永久和瞬时策略有确定性测试 |
