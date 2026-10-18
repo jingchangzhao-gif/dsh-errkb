@@ -17,3 +17,24 @@ Thumbs.db
 # complete, so a development install must never commit its errors/ here. The
 # public repository only carries curated, redacted entries under seeds/.
 errors/
+
+# Go build output
+/dist/
+/errkb.exe
+
+# Local PostgreSQL development data and dumps
+/.pgdata/
+*.dump
+
+# Installer output
+*.msi
+
+# CUE module artifacts fetched from the registry; cue.mod/module.cue itself
+# stays versioned
+cue.mod/pkg/
+cue.mod/usr/
+
+# Local development configuration
+.env
+.env.local
+.errkb.local.yml

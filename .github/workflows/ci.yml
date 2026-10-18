@@ -74,3 +74,115 @@ jobs:
       - name: Build
         if: steps.project.outputs.present == 'true'
         run: pnpm run build
+
+  # The Go, CUE, database and Windows jobs appear together with the skeleton
+  # (EKB-005), so every ref that carries this workflow also carries the files
+  # they need. Their steps are not guarded like the TypeScript job above.
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # go-version-file keeps CI on the toolchain the repository records, so
+      # the version measured in the plan (section 7.1) is the version CI uses.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # `gofmt -l` exits 0 even when it lists files, so the output is checked
+      # here instead of trusting the exit status.
+      - name: Format
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt reports unformatted files:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...
+  cue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # CUE is installed from source at the version the plan measured; the
+      # module cache from setup-go keeps this fast after the first run.
+      - name: Install CUE
+        run: |
+          go install cuelang.org/go/cmd/cue@v0.17.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Vet schemas
+        run: cue vet ./spec/...
+
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql
+        run: |
+          command -v psql >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client; }
+
+      # Filename order is the migration order: each file is applied once and a
+      # failure stops the job.
+      - name: Apply migrations
+        run: |
+          for file in $(find db/migrations -name '*.sql' | sort); do
+            echo "applying $file"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
+          done
+
+      # shortcut: with no errkb schema yet, this only proves the container
+      # accepts 50 concurrent sessions and every migration applied cleanly. The
+      # real 50-way insert test on errkb_record_event() arrives with EKB-020 and
+      # replaces this step.
+      - name: 50 concurrent sessions
+        run: |
+          seq 1 50 | xargs -P 50 -I{} psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -Atqc "select {}" > /dev/null
+
+  windows-filesystem:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Section 7 of the implementation plan: the two failures only appear on a
+      # real Windows file system. Running these two files on windows-latest
+      # keeps the fix honest instead of trusting an ubuntu run.
+      - name: Store lock and mtime cases
+        run: pnpm exec vitest run tests/state.test.ts tests/store.test.ts
