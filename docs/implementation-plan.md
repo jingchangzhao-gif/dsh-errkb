@@ -294,7 +294,7 @@ The files each card creates or modifies are listed in card order in section 11.1
 | --- | --- | --- | --- | --- |
 | ☐ | EKB-001 | Establish a real Git workspace | None | Clone upstream `main`, copy this plan, record HEAD; rollback works |
 | ☑ | EKB-002 | Freeze toolchain and dependency facts | 001 | Done: see 7.1 and 7.2; `node -v`, `pnpm -v`, `go version`, `psql --version` and `cue version` all measured; rc.2 vs rc.3 explained in writing; `pnpm install --frozen-lockfile` exits 0 |
-| ☐ | EKB-003 | Repair the Windows test baseline | 001 | Fix `.lock` `EPERM` contention and the `mtimeMs` contract; all 598 tests and coverage pass |
+| ☑ | EKB-003 | Repair the Windows test baseline | 001 | Done: PR #17 merged to `main`; `EPERM`/`EBUSY` count as lock contention and `mtimeMs` returns `undefined` only when the parent is a directory; `pnpm test` 15 files and 598 tests green, `store.ts` 99.32% statements / 97.17% branches; both failures were implementation bugs, tests unchanged |
 | ☐ | EKB-004 | Approve product and DB distribution | 001 | Installer-based v1, external PostgreSQL for development, managed-local release mode; no portable promise |
 | ☐ | EKB-005 | Create repository skeleton and dual-toolchain CI | 002-004 | Go, CUE, SQL and packaging skeleton; TypeScript, Go, CUE, DB and Windows jobs green |
 

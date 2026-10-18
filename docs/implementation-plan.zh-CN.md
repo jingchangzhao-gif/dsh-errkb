@@ -338,7 +338,7 @@ DSH 宿主版本没有可用命令来源：`@deepseek-ai/dsh` 不在依赖里，
 | --- | --- | --- | --- | --- |
 | ☐ | EKB-001 | 建立真实 Git 工作区 | 无 | 从上游 `main` 克隆，复制本计划，记录 HEAD；`git status` 可用且基线可回滚 |
 | ☑ | EKB-002 | 固定工具链和依赖事实 | 001 | 已完成：见 7.1 与 7.2；`node -v`、`pnpm -v`、`go version`、`psql --version`、`cue version` 均已实测；rc.2 与 rc.3 差异已书面说明；`pnpm install --frozen-lockfile` 退出码 0 |
-| ☐ | EKB-003 | 修复现有 Windows 测试基线 | 001 | 修复 `.lock` 的 `EPERM` 竞争语义和 `mtimeMs` 测试契约；`pnpm test` 598 项全绿且覆盖率门槛通过 |
+| ☑ | EKB-003 | 修复现有 Windows 测试基线 | 001 | 已完成：PR #17 合入 `main`；`EPERM`/`EBUSY` 视为锁竞争，`mtimeMs` 仅当父路径是目录才返回 `undefined`；`pnpm test` 15 文件 598 项全绿，`store.ts` 覆盖率 99.32% 语句 / 97.17% 分支；两处均为实现错，测试未改 |
 | ☐ | EKB-004 | 确认产品和数据库分发决定 | 001 | 确认版本一使用安装器、开发期外部 PostgreSQL、发布期本地托管方式；明确不承诺单文件便携版 |
 | ☐ | EKB-005 | 建立新目录和双工具链 CI | 002-004 | 创建 Go、CUE、SQL、packaging 骨架；CI 同时跑 TypeScript、Go、CUE、数据库和 Windows 文件系统测试 |
 
