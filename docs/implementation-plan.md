@@ -317,7 +317,7 @@ P0 gate: rollback works, the old suite is green, the new skeleton is green, and 
 
 | State | ID | Task | Prerequisite | Output and acceptance |
 | --- | --- | --- | --- | --- |
-| ☐ | EKB-012 | Safe error text and headline extraction | 009 | Traceback, code-first, final-line and command-prefix cases match corpus |
+| ☑ | EKB-012 | Safe error text and headline extraction | 009 | Done: `internal/core/headline.go` implements traceback-last-line, code-first and final-line fallback for all 14 corpus cases; imports only regexp/strings/unicode (zero I/O); repeated calls are identical; ANSI stripping and the 200-rune cap (199 chars + `…`) match the corpus; command-prefix composition stays in `capture()`, which has no corpus case, and is deferred to EKB-016/031; `go test ./internal/core/ -run Headline`, `go vet` and `gofmt -l` are clean and `spec/corpus/headline.json` is untouched |
 | ☐ | EKB-013 | Normalization and fingerprinting | 009 | Go and TypeScript produce identical normalized text and fingerprints |
 | ☐ | EKB-014 | Shared redaction engine | 009, 011 | Go, TypeScript and CI generated from one source; redact before all writes |
 | ☐ | EKB-015 | Tokenization and Jaccard | 009 | Latin, placeholders and CJK bigrams match |
