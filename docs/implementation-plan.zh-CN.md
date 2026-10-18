@@ -350,7 +350,7 @@ P0 门槛：仓库可回滚；现有测试全绿；新的空骨架全绿；数�
 
 | 状态 | ID | 任务 | 前置 | 产出和验收 |
 | --- | --- | --- | --- | --- |
-| ☐ | EKB-006 | 定义 `ErrorEvent v1` | 005 | `spec/error-event.cue`；合法事件通过、缺失字段和未脱敏示例被拒绝 |
+| ☑ | EKB-006 | 定义 `ErrorEvent v1` | 005 | 已完成：`spec/error-event.cue` 闭合契约（`channel` 取 §3.1 的 A–E，`category` 复用 `src/capture.ts` 的四个历史取值，`#NoSensitive` 最小脱敏约束），`internal/contract/error_event.go` 校验入口拒绝未知字段与未脱敏文本，测试含 3 条合法事件、17 个必填字段缺失各一例、4 类敏感样本；`cue vet`、`go vet`、`go test` 全绿 |
 | ☐ | EKB-007 | 定义配置和连接器能力契约 | 006 | `config.cue`、connector capability schema；用户仍编辑 YAML 或 JSON |
 | ☐ | EKB-008 | 定义 MCP 和本地 API 契约 | 006 | lookup、search、record、feedback、list、stats 的版本化 schema |
 | ☐ | EKB-009 | 从现有测试生成一致性语料 | 006 | 至少覆盖规范化、标题、脱敏、指纹、CJK token、匹配和通知；重复生成无 diff |

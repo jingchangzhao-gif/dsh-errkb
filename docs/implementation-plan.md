@@ -306,7 +306,7 @@ P0 gate: rollback works, the old suite is green, the new skeleton is green, and 
 
 | State | ID | Task | Prerequisite | Output and acceptance |
 | --- | --- | --- | --- | --- |
-| ☐ | EKB-006 | Define `ErrorEvent v1` | 005 | CUE schema accepts valid events and rejects missing or unredacted examples |
+| ☑ | EKB-006 | Define `ErrorEvent v1` | 005 | Done: closed `spec/error-event.cue` contract (`channel` uses the section 3.1 levels A-E, `category` reuses the four historical values from `src/capture.ts`, `#NoSensitive` carries the minimum redaction rules) and `internal/contract/error_event.go` rejects unknown fields and unredacted text; tests cover three valid events, one missing-required case per field (17), and four sensitive samples; `cue vet`, `go vet` and `go test` are green |
 | ☐ | EKB-007 | Define configuration and connector capabilities | 006 | CUE schemas; users still edit YAML or JSON |
 | ☐ | EKB-008 | Define MCP and local API contracts | 006 | Versioned lookup, search, record, feedback, list and stats contracts |
 | ☐ | EKB-009 | Generate conformance data from current tests | 006 | Deterministic normalize, headline, redact, fingerprint, CJK, match and notice data; idempotent generation |
