@@ -352,7 +352,7 @@ P0 门槛：仓库可回滚；现有测试全绿；新的空骨架全绿；数�
 | --- | --- | --- | --- | --- |
 | ☑ | EKB-006 | 定义 `ErrorEvent v1` | 005 | 已完成：`spec/error-event.cue` 闭合契约（`channel` 取 §3.1 的 A–E，`category` 复用 `src/capture.ts` 的四个历史取值，`#NoSensitive` 最小脱敏约束），`internal/contract/error_event.go` 校验入口拒绝未知字段与未脱敏文本，测试含 3 条合法事件、17 个必填字段缺失各一例、4 类敏感样本；`cue vet`、`go vet`、`go test` 全绿 |
 | ☑ | EKB-007 | 定义配置和连接器能力契约 | 006 | 已完成：`spec/config.cue` 与 `spec/connector-capability.cue` 定义内部校验（用户仍写 YAML/JSON），`internal/contract/config.go` 用 `gopkg.in/yaml.v3` 解析并拒绝未知键；安全默认值（Named Pipe 开、回环 HTTP 关、HTTP 必须有 ≥32 字符 token 且只能绑回环）、采集暂停（按连接器/项目）、三段独立保留期、超时与离线；能力契约用通道 A–E + 缺失字段表达降级，宿主名是开放字符串；6 个新测试全绿，`cue vet`、`go vet`、`gofmt` 全绿。偏差：为解析用户实际编辑的 YAML，`go.mod`/`go.sum` 新增 `gopkg.in/yaml.v3`（超出本卡四文件范围，已在 PR 说明） |
-| ☐ | EKB-008 | 定义 MCP 和本地 API 契约 | 006 | lookup、search、record、feedback、list、stats 的版本化 schema |
+| ☑ | EKB-008 | 定义 MCP 和本地 API 契约 | 006 | 已完成：`spec/mcp-tools.cue` 六个操作（lookup/search/record/feedback/list/stats）各自带 `schema_version`，候选带匹配原因与 `approximate` 标志且上限 3；`spec/local-api.cue` 复用同一批负载定义做 Named Pipe 信封（信封版本、`request_id`、`result`/`error` 二选一、`#ErrorCode` 闭集）；`internal/contract/tools.go` 与 `local_api.go` 提供同一组 `Validate()` 与严格 JSON 解码入口；`record` 复用 `ErrorEvent` 校验，`search` 与 `lookup` 语义分离，`feedback` 只能记 outcome；`cue vet`、`go vet`、`go test`、`gofmt` 全绿，23 例探针通过（探针已删除，因本卡文件清单不含测试文件） |
 | ☐ | EKB-009 | 从现有测试生成一致性语料 | 006 | 至少覆盖规范化、标题、脱敏、指纹、CJK token、匹配和通知；重复生成无 diff |
 | ☐ | EKB-010 | 建立真实标注检索语料 | 009 | same-error、distinct-lookalike 和跨语言集合；所有文本先脱敏；项目所有者确认标签 |
 | ☐ | EKB-011 | 建立 schema 兼容规则 | 006-010 | 明确向后兼容、版本升级、未知字段和拒绝策略；在 CI 中验证 |
