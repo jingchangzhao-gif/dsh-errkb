@@ -1,0 +1,51 @@
+{
+  "corpus": "tokenize",
+  "sources": ["tests/match.test.ts", "tests/gen-corpus.ts (curated CJK cases)"],
+  "coverage": [
+    "<placeholder> tokens",
+    "Han, kana and Hangul runs as character bigrams",
+    "other letter, digit and underscore runs as words",
+    "empty and punctuation-only input yields no tokens"
+  ],
+  "not_covered": [
+    "token sets are compared sorted; iteration order is not part of the contract"
+  ],
+  "cases": [
+    {
+      "case_id": "tokenize-001",
+      "source_test": "tests/match.test.ts#tokenize",
+      "input": "",
+      "expected": []
+    },
+    {
+      "case_id": "tokenize-002",
+      "source_test": "tests/match.test.ts#tokenize",
+      "input": " ,.:;!? ",
+      "expected": []
+    },
+    {
+      "case_id": "tokenize-003",
+      "source_test": "tests/match.test.ts#tokenize",
+      "input": "拒绝访问",
+      "expected": ["拒绝", "绝访", "访问"]
+    },
+    {
+      "case_id": "tokenize-004",
+      "source_test": "tests/match.test.ts#tokenize",
+      "input": "ファイル 파일",
+      "expected": ["ァイ", "イル", "ファ", "파일"]
+    },
+    {
+      "case_id": "tokenize-005",
+      "source_test": "tests/match.test.ts#tokenize",
+      "input": "EPERM 拒绝访问",
+      "expected": ["EPERM", "拒绝", "绝访", "访问"]
+    },
+    {
+      "case_id": "tokenize-006",
+      "source_test": "tests/match.test.ts#tokenize",
+      "input": "打开 <path> 失败",
+      "expected": ["<path>", "失败", "打开"]
+    }
+  ]
+}

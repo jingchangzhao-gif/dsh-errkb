@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   PLACEHOLDER,
@@ -278,4 +281,47 @@ describe("signature", () => {
       SIGNATURE_LENGTH,
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+// Conformance corpus (EKB-009): the same cases the Go port must reproduce.
+
+function corpus<T>(name: string): T[] {
+  const file = resolve(
+    fileURLToPath(new URL("..", import.meta.url)),
+    "spec",
+    "corpus",
+    `${name}.json`,
+  );
+  return (JSON.parse(readFileSync(file, "utf8")) as { cases: T[] }).cases;
+}
+
+interface NormalizeCase {
+  case_id: string;
+  source_test: string;
+  input: string;
+  expected: string;
+}
+
+describe("conformance corpus: normalize", () => {
+  for (const c of corpus<NormalizeCase>("normalize")) {
+    it(`${c.case_id} (${c.source_test})`, () => {
+      expect(normalize(c.input)).toBe(c.expected);
+    });
+  }
+});
+
+interface FingerprintCase {
+  case_id: string;
+  source_test: string;
+  input: { category: string; message: string };
+  expected: string;
+}
+
+describe("conformance corpus: fingerprint", () => {
+  for (const c of corpus<FingerprintCase>("fingerprint")) {
+    it(`${c.case_id} (${c.source_test})`, () => {
+      expect(signature(c.input.category, c.input.message)).toBe(c.expected);
+    });
+  }
 });

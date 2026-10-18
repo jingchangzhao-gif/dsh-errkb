@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CAPTURE_SOURCES,
@@ -797,4 +800,32 @@ describe("records feed match() and the store", () => {
     });
     expect(record.signature).toBe("bcf6cca60510");
   });
+});
+
+// ---------------------------------------------------------------------------
+// Conformance corpus (EKB-009): the same cases the Go port must reproduce.
+
+function corpus<T>(name: string): T[] {
+  const file = resolve(
+    fileURLToPath(new URL("..", import.meta.url)),
+    "spec",
+    "corpus",
+    `${name}.json`,
+  );
+  return (JSON.parse(readFileSync(file, "utf8")) as { cases: T[] }).cases;
+}
+
+interface HeadlineCase {
+  case_id: string;
+  source_test: string;
+  input: string;
+  expected: { line: string; code?: string };
+}
+
+describe("conformance corpus: headline", () => {
+  for (const c of corpus<HeadlineCase>("headline")) {
+    it(`${c.case_id} (${c.source_test})`, () => {
+      expect(extractHeadline(c.input)).toEqual(c.expected);
+    });
+  }
 });

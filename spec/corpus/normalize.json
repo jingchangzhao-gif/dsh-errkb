@@ -1,0 +1,363 @@
+{
+  "corpus": "normalize",
+  "sources": [
+    "tests/signature.test.ts",
+    "tests/gen-corpus.ts (curated overlong and composite cases)"
+  ],
+  "coverage": [
+    "ANSI CSI and OSC stripping",
+    "whitespace and carriage-return collapse",
+    "UUID, 32+ hex, timestamp, clock, duration, pid, port, host:port, line/column and temp-dir placeholders",
+    "absolute path collapsing, POSIX and Windows",
+    "lowercasing and edge punctuation",
+    "overlong input"
+  ],
+  "not_covered": [
+    "the 200 000-character unit-test input is bounded to 1200 characters",
+    "template-literal and helper-built arguments stay in tests/signature.test.ts"
+  ],
+  "cases": [
+    {
+      "case_id": "normalize-001",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "\u001b[31mError:\u001b[0m boom",
+      "expected": "error: boom"
+    },
+    {
+      "case_id": "normalize-002",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "\u001b]8;;https://example.com\u0007link\u001b]8;;\u001b\\ failed",
+      "expected": "link failed"
+    },
+    {
+      "case_id": "normalize-003",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "a\r\nb\t\t c   d",
+      "expected": "a b c d"
+    },
+    {
+      "case_id": "normalize-004",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "at 2026-09-14T09:12:33.120Z failed",
+      "expected": "at <ts> failed"
+    },
+    {
+      "case_id": "normalize-005",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "on 2026-09-14 09:12 failed",
+      "expected": "on <ts> failed"
+    },
+    {
+      "case_id": "normalize-006",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "on 2026-09-14 failed",
+      "expected": "on <ts> failed"
+    },
+    {
+      "case_id": "normalize-007",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "at 9:12:33 failed",
+      "expected": "at <ts> failed"
+    },
+    {
+      "case_id": "normalize-008",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "at 2026-09-14T09:12:33+08:00 failed",
+      "expected": "at <ts> failed"
+    },
+    {
+      "case_id": "normalize-009",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "timed out after 1234ms",
+      "expected": "timed out after <ts>"
+    },
+    {
+      "case_id": "normalize-010",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "timed out after 1.5s",
+      "expected": "timed out after <ts>"
+    },
+    {
+      "case_id": "normalize-011",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "timed out after 30 ms",
+      "expected": "timed out after <ts>"
+    },
+    {
+      "case_id": "normalize-012",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "耗时 123ms 超时",
+      "expected": "耗时 <ts> 超时"
+    },
+    {
+      "case_id": "normalize-013",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "耗时 123 毫秒",
+      "expected": "耗时 <ts>"
+    },
+    {
+      "case_id": "normalize-014",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "error TS2307: cannot find module",
+      "expected": "error ts2307: cannot find module"
+    },
+    {
+      "case_id": "normalize-015",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "3 sessions open",
+      "expected": "3 sessions open"
+    },
+    {
+      "case_id": "normalize-016",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "killed PID 1234",
+      "expected": "killed <pid>"
+    },
+    {
+      "case_id": "normalize-017",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "killed pid=99",
+      "expected": "killed <pid>"
+    },
+    {
+      "case_id": "normalize-018",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "port 3000 in use",
+      "expected": "<port> in use"
+    },
+    {
+      "case_id": "normalize-019",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "connect ECONNREFUSED 127.0.0.1:5432",
+      "expected": "connect econnrefused 127.0.0.1:<port>"
+    },
+    {
+      "case_id": "normalize-020",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "listen EADDRINUSE: address already in use :::3000",
+      "expected": "listen eaddrinuse: address already in use :::<port>"
+    },
+    {
+      "case_id": "normalize-021",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "fetch localhost:8080 failed",
+      "expected": "fetch localhost:<port> failed"
+    },
+    {
+      "case_id": "normalize-022",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "SyntaxError at line 42:17",
+      "expected": "syntaxerror at <pos>"
+    },
+    {
+      "case_id": "normalize-023",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "at column 9",
+      "expected": "at <pos>"
+    },
+    {
+      "case_id": "normalize-024",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "index.ts:42:17 - error",
+      "expected": "index.ts:<pos> - error"
+    },
+    {
+      "case_id": "normalize-025",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "index.ts:42 - error",
+      "expected": "index.ts:<pos> - error"
+    },
+    {
+      "case_id": "normalize-026",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "index.ts(42,17): error",
+      "expected": "index.ts(<pos>): error"
+    },
+    {
+      "case_id": "normalize-027",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "at <anonymous>:3:9",
+      "expected": "at <anonymous>:<pos>"
+    },
+    {
+      "case_id": "normalize-028",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "request 123e4567-E89B-12d3-a456-426614174000 failed",
+      "expected": "request <uuid> failed"
+    },
+    {
+      "case_id": "normalize-029",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "blob ${\"a1\".repeat(32)} missing",
+      "expected": "blob ${\"a1\".repeat(32)} missing"
+    },
+    {
+      "case_id": "normalize-030",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "commit ${\"f\".repeat(40)} missing",
+      "expected": "commit ${\"f\".repeat(40)} missing"
+    },
+    {
+      "case_id": "normalize-031",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "sig 3f2a1c9d0b71 kept",
+      "expected": "sig 3f2a1c9d0b71 kept"
+    },
+    {
+      "case_id": "normalize-032",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "rmdir /tmp/abc123/cache",
+      "expected": "rmdir <path>/cache"
+    },
+    {
+      "case_id": "normalize-033",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "rmdir /tmp/tmp-4242-xYz",
+      "expected": "rmdir <path>/<tmp>"
+    },
+    {
+      "case_id": "normalize-034",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "mkdtemp tmp_9f8e7d failed",
+      "expected": "mkdtemp <tmp> failed"
+    },
+    {
+      "case_id": "normalize-035",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "EPERM 'C\u003a\\Users\\u\\AppData\\Local\\Temp\\vite-1a2b\\x.js'",
+      "expected": "eperm '<path>\\x.js"
+    },
+    {
+      "case_id": "normalize-036",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "ENOENT: no such file 'D\u003a\\work\\proj\\package.json'",
+      "expected": "enoent: no such file '<path>\\package.json"
+    },
+    {
+      "case_id": "normalize-037",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "open C:/repo/src/a.ts failed",
+      "expected": "open <path>/a.ts failed"
+    },
+    {
+      "case_id": "normalize-038",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "open \\\\?\\C\u003a\\repo\\a.ts failed",
+      "expected": "open <path>\\a.ts failed"
+    },
+    {
+      "case_id": "normalize-039",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "open \\\\server\\share\\a.ts failed",
+      "expected": "open <path>\\a.ts failed"
+    },
+    {
+      "case_id": "normalize-040",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "open ${posix(\"Users\", \"kim\", \"p\", \"a.ts\")} failed",
+      "expected": "open ${posix(\"users\", \"kim\", \"p\", \"a.ts\")} failed"
+    },
+    {
+      "case_id": "normalize-041",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "open ${posix(\"home\", \"kim\", \"p\", \"b.ts\")} failed",
+      "expected": "open ${posix(\"home\", \"kim\", \"p\", \"b.ts\")} failed"
+    },
+    {
+      "case_id": "normalize-042",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "open ~/p/c.ts failed",
+      "expected": "open <path>/c.ts failed"
+    },
+    {
+      "case_id": "normalize-043",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "spawn /usr/bin/node ENOENT",
+      "expected": "spawn <path>/node enoent"
+    },
+    {
+      "case_id": "normalize-044",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "GET https://registry.example.org/a/b failed",
+      "expected": "get https://registry.example.org/a/b failed"
+    },
+    {
+      "case_id": "normalize-045",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "cannot find src/a/b.ts",
+      "expected": "cannot find src/a/b.ts"
+    },
+    {
+      "case_id": "normalize-046",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "N/A in /etc",
+      "expected": "n/a in /etc"
+    },
+    {
+      "case_id": "normalize-047",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "at ${posix(\"home\", \"kim\", \"p\", \"a.ts\")}:12:3",
+      "expected": "at ${posix(\"home\", \"kim\", \"p\", \"a.ts\")}:<pos>"
+    },
+    {
+      "case_id": "normalize-048",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "ENOENT 'D\u003a\\a\\b\\package.json'",
+      "expected": "enoent '<path>\\package.json"
+    },
+    {
+      "case_id": "normalize-049",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "ENOENT 'D\u003a\\a\\b\\tsconfig.json'",
+      "expected": "enoent '<path>\\tsconfig.json"
+    },
+    {
+      "case_id": "normalize-050",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "  'Error: Boom!'  ",
+      "expected": "error: boom"
+    },
+    {
+      "case_id": "normalize-051",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "failed at line 3.",
+      "expected": "failed at <pos>"
+    },
+    {
+      "case_id": "normalize-052",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "（错误：拒绝访问。）",
+      "expected": "错误：拒绝访问"
+    },
+    {
+      "case_id": "normalize-053",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "",
+      "expected": ""
+    },
+    {
+      "case_id": "normalize-054",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "\u001b[31m\u001b[0m",
+      "expected": ""
+    },
+    {
+      "case_id": "normalize-055",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "Error: ${body} at line 1",
+      "expected": "error: ${body} at <pos>"
+    },
+    {
+      "case_id": "normalize-056",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "Error: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx at line 1",
+      "expected": "error: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx at <pos>"
+    },
+    {
+      "case_id": "normalize-057",
+      "source_test": "tests/signature.test.ts#normalize",
+      "input": "\u001b[31mError\u001b[0m uuid 123e4567-e89b-12d3-a456-426614174000 pid 4321 at 2026-01-02T03:04:05.678Z in line 99 of /srv/app/src/x.ts:12:5",
+      "expected": "error uuid <uuid> <pid> at <ts> in <pos> of <path>/x.ts:<pos>"
+    }
+  ]
+}
