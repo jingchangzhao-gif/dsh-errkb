@@ -1,0 +1,51 @@
+{
+  "schema_version": "v1",
+  "source": "seeds/ERRORS.seed.md",
+  "entries": [
+    {
+      "id": "E-0001",
+      "fingerprint": "3a12e3627689",
+      "category": "tool",
+      "error_code": "EPERM",
+      "title": "[tool:pwsh] EPERM: operation not permitted, rename",
+      "trigger": "`pnpm install` on Windows while another process holds a file under `node_modules`",
+      "raw_message": "EPERM: operation not permitted, rename '\u003cpath\u003e\\node_modules\\.pnpm\\\u003chash\u003e'",
+      "fix": "Close whatever holds the directory (an editor, a running dev server, real-time antivirus scanning), then re-run `pnpm install`.\nIf it keeps failing, use `pnpm install --config.node-linker=hoisted`.",
+      "notes": "Seed entry. Seen most often under paths with non-ASCII characters.",
+      "status": "fixed",
+      "first_seen": "2026-10-01T00:00:00Z",
+      "last_seen": "2026-10-01 00:00",
+      "hits": 0
+    },
+    {
+      "id": "E-0002",
+      "fingerprint": "88fe8fb1a189",
+      "category": "llm",
+      "error_code": "CONTEXT_OVERFLOW",
+      "title": "[llm] CONTEXT_OVERFLOW: the request does not fit the context window",
+      "trigger": "A long session, or a tool result that pasted a large file into the conversation",
+      "raw_message": "CONTEXT_OVERFLOW: the request exceeds the model's context window",
+      "fix": "Shrink what is sent instead of retrying it unchanged\u003a\u000a- compact the conversation, or start a new session from a short summary;\n- read large files by line range instead of whole;\n- only if the model really supports more, raise its `contextWindow` in the provider configuration.",
+      "notes": "Seed entry. The message text is illustrative; providers word this error differently.",
+      "status": "fixed",
+      "first_seen": "2026-10-01T00:00:00Z",
+      "last_seen": "2026-10-01 00:00",
+      "hits": 0
+    },
+    {
+      "id": "E-0003",
+      "fingerprint": "bcf6cca60510",
+      "category": "llm",
+      "error_code": "NO_ADAPTER",
+      "title": "[llm] NO_ADAPTER: no adapter for the configured provider",
+      "trigger": "Starting a session right after editing the provider in a profile",
+      "raw_message": "NO_ADAPTER: no adapter is registered for the configured provider",
+      "fix": "The provider name in the profile matches no installed adapter, almost always because of a typo.\nCompare it with the names of the adapters that are actually installed, correct the spelling, and restart.",
+      "notes": "Seed entry. The message text is illustrative.",
+      "status": "fixed",
+      "first_seen": "2026-10-01T00:00:00Z",
+      "last_seen": "2026-10-01 00:00",
+      "hits": 0
+    }
+  ]
+}
