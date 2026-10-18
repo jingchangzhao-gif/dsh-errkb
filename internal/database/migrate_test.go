@@ -138,9 +138,18 @@ func TestMigrateCreatesSchemaV1(t *testing.T) {
 	conn := connect(t)
 	freshSchema(t, conn)
 
+	expected, err := database.LoadMigrations(migrationsDir())
+	if err != nil {
+		t.Fatalf("load the migration files: %v", err)
+	}
 	applied := migrate(t, conn, migrationsDir())
-	if len(applied) != 1 || applied[0] != "0001" {
-		t.Fatalf("first run applied %v, want [0001]", applied)
+	if len(applied) != len(expected) {
+		t.Fatalf("first run applied %v, want the %d files %v", applied, len(expected), expected)
+	}
+	for i, migration := range expected {
+		if applied[i] != migration.Version {
+			t.Fatalf("first run applied %v, want the file order", applied)
+		}
 	}
 
 	want := []string{
@@ -167,13 +176,17 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	conn := connect(t)
 	freshSchema(t, conn)
 
+	expected, err := database.LoadMigrations(migrationsDir())
+	if err != nil {
+		t.Fatalf("load the migration files: %v", err)
+	}
 	migrate(t, conn, migrationsDir())
 	second := migrate(t, conn, migrationsDir())
 	if len(second) != 0 {
 		t.Fatalf("second run applied %v, want nothing", second)
 	}
-	if rows := ledgerRows(t, conn); rows != 1 {
-		t.Fatalf("ledger has %d rows after two runs, want 1", rows)
+	if rows := ledgerRows(t, conn); rows != len(expected) {
+		t.Fatalf("ledger has %d rows after two runs, want %d", rows, len(expected))
 	}
 }
 
@@ -260,6 +273,10 @@ func TestMigrateConcurrent(t *testing.T) {
 	wg.Wait()
 	close(results)
 
+	expected, err := database.LoadMigrations(migrationsDir())
+	if err != nil {
+		t.Fatalf("load the migration files: %v", err)
+	}
 	total := 0
 	for outcome := range results {
 		if outcome.err != nil {
@@ -267,11 +284,11 @@ func TestMigrateConcurrent(t *testing.T) {
 		}
 		total += len(outcome.applied)
 	}
-	if total != 1 {
-		t.Fatalf("the two migrators applied %d versions in total, want exactly 1", total)
+	if total != len(expected) {
+		t.Fatalf("the two migrators applied %d versions in total, want exactly %d", total, len(expected))
 	}
-	if rows := ledgerRows(t, first); rows != 1 {
-		t.Fatalf("ledger has %d rows after a concurrent run, want 1", rows)
+	if rows := ledgerRows(t, first); rows != len(expected) {
+		t.Fatalf("ledger has %d rows after a concurrent run, want %d", rows, len(expected))
 	}
 }
 
