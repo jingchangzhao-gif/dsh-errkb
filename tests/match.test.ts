@@ -489,3 +489,68 @@ describe("match: empty inputs", () => {
     expect(expectHit(result).via).toBe("exact");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Conformance corpus (EKB-009): the same cases the Go port must reproduce.
+
+function corpus<T>(name: string): T[] {
+  const file = resolve(
+    fileURLToPath(new URL("..", import.meta.url)),
+    "spec",
+    "corpus",
+    `${name}.json`,
+  );
+  return (JSON.parse(readFileSync(file, "utf8")) as { cases: T[] }).cases;
+}
+
+interface TokenizeCase {
+  case_id: string;
+  source_test: string;
+  input: string;
+  expected: string[];
+}
+
+describe("conformance corpus: tokenize", () => {
+  for (const c of corpus<TokenizeCase>("tokenize")) {
+    it(`${c.case_id} (${c.source_test})`, () => {
+      expect([...tokenize(c.input)].sort()).toEqual(c.expected);
+    });
+  }
+});
+
+interface MatchCase {
+  case_id: string;
+  source_test: string;
+  input: {
+    error: CapturedError;
+    entries: Array<{
+      id: string;
+      message: string;
+      category: string;
+      code?: string;
+    }>;
+  };
+  expected: {
+    matched: boolean;
+    id?: string;
+    via?: string;
+    approximate?: boolean;
+    similarity?: number;
+  };
+}
+
+describe("conformance corpus: match", () => {
+  for (const c of corpus<MatchCase>("match")) {
+    it(`${c.case_id} (${c.source_test})`, () => {
+      const entries = c.input.entries.map((e) =>
+        entry(e.id, e.message, {
+          cat: e.category,
+          ...(e.code === undefined ? {} : { code: e.code }),
+        }),
+      );
+      const result = match(c.input.error, indexEntries(entries));
+      if (c.expected.matched) expect(result).toMatchObject(c.expected);
+      else expect(result).toEqual({ matched: false });
+    });
+  }
+});
