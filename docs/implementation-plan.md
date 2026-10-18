@@ -52,6 +52,8 @@ Host adapters only translate observable failures into `ErrorEvent` and, where th
 
 Because PostgreSQL and PL/pgSQL are explicit requirements, v1 is an installed local application, not a claimed zero-dependency portable executable. Development uses an external PostgreSQL 16 instance. `EKB-051` implements the release-time local-instance lifecycle. A truly single-file portable build requires a database decision change and cannot be promised together with mandatory PostgreSQL.
 
+This decision gates `EKB-051` (local-instance lifecycle) and `EKB-050` (release packaging); changing it requires editing this section first and notifying the dependent cards. `EKB-045` is the omnibox card and does not depend on this decision.
+
 ## 3 Capture and reuse strategy
 
 ### 3.1 Reliability levels
@@ -154,6 +156,33 @@ This review inspected every project file under the root, `.github`, `docs`, `see
 | Toolbox code | `cmd`, `internal`, `db`, `spec` and `packaging` do not exist |
 
 The repository is therefore a heavily tested DSH prototype, not yet a validated multi-host product.
+
+### 7.1 Measured toolchain facts (EKB-002)
+
+The commands below were run on this machine during the review; outputs are kept verbatim and set the version baseline for later cards.
+
+| Tool | Measured command | Output |
+| --- | --- | --- |
+| Node.js | `node -v` | `v24.16.0` |
+| pnpm | `pnpm -v` | `11.7.0` |
+| Go | `go version` | `go version go1.26.4 windows/amd64` |
+| PostgreSQL | `psql --version` | `psql (PostgreSQL) 16.15` |
+| PostgreSQL service | `Get-Service postgresql*` | `postgresql-x64-16` running, start type `Automatic` |
+| CUE | `cue version` | `cue version v0.17.1` (CUE language v0.17.1, Go go1.26.4, CGO_ENABLED 1) |
+| DSH host | `dsh --version` | No such command: the host is a desktop application without a `dsh` CLI |
+| Installed packages | `node_modules/@deepseek-ai/*/package.json` | `dsh-llm 0.1.5-rc.3`, `dsh-tools 0.1.5-rc.3`, `cordis 4.0.2`, `schemastery 3.18.2`; `@deepseek-ai/dsh` is not installed |
+| Frozen install | `pnpm install --frozen-lockfile` | `Already up to date. Done in 287ms using pnpm v11.7.0`, exit code 0 |
+| Lockfile | `Get-FileHash pnpm-lock.yaml -Algorithm SHA256` | `96BBD6FB51412A529F0BD1208EAF59BFC82453ECAB48C1DB74A91BD6B40F54DB` |
+
+The DSH host version has no clean command source: `@deepseek-ai/dsh` is not a dependency and the desktop host exposes no CLI. The only checkable ecosystem evidence is the peer `@deepseek-ai/dsh ^0.2.0-rc.2` in `~/.dsh/profiles/desktop/node_modules/dsh-ops/package.json`, which places the actual host in the 0.2.x generation; the README version table still naming `0.1.5-rc.2` is a historical claim, explained in 7.2.
+
+### 7.2 dsh-llm / dsh-tools rc.2 to rc.3
+
+- Packages: `@deepseek-ai/dsh-llm` and `@deepseek-ai/dsh-tools`. The peer range stays `^0.1.5-rc.2`, which already admits `0.1.5-rc.3`, so neither an upgrade nor a downgrade declaration is needed and the range must not change.
+- Actually installed: `pnpm-lock.yaml` resolves both to `0.1.5-rc.3`, confirmed in `node_modules` (see 7.1).
+- README claim: `README.md:347` and `README.zh-CN.md:336` still name `0.1.5-rc.2`, meaning "the version this design was verified against" — a historical caliber, not the installed one. This card changes only `package.json`, `pnpm-lock.yaml` and this plan, so the READMEs are left alone and this section is the authoritative statement.
+- Impact on the 13 `src/` modules: they use only `createUserMessage`, `UserMessage`, `MessageSourceMap` and `ContentBlock` from `@deepseek-ai/dsh-llm`, and `defineTool`, `ToolDefinition`, `ToolRunContext` from `@deepseek-ai/dsh-tools`; no API removal or rename was found. `pnpm typecheck`, `pnpm build` and `pnpm test` (598 passing) all pass on rc.3, so behavior is unchanged.
+- Implementation caliber: the platform core is written in Go; the DSH connector targets the lockfile's `0.1.5-rc.3` and host 0.2.x generation; no compatibility branch is maintained for either rc.2 or rc.3. The README version table is left for the EKB-055 documentation pass.
 
 ## 8 Existing file disposition
 
@@ -266,9 +295,9 @@ The files each card creates or modifies are listed in card order in section 11.1
 | State | ID | Task | Prerequisite | Output and acceptance |
 | --- | --- | --- | --- | --- |
 | ☐ | EKB-001 | Establish a real Git workspace | None | Clone upstream `main`, copy this plan, record HEAD; rollback works |
-| ☐ | EKB-002 | Freeze toolchain and dependency facts | 001 | Record Node, pnpm, Go, PostgreSQL and CUE; explain rc.2 versus rc.3; reproducible install |
-| ☐ | EKB-003 | Repair the Windows test baseline | 001 | Fix `.lock` `EPERM` contention and the `mtimeMs` contract; all 598 tests and coverage pass |
-| ☐ | EKB-004 | Approve product and DB distribution | 001 | Installer-based v1, external PostgreSQL for development, managed-local release mode; no portable promise |
+| ☑ | EKB-002 | Freeze toolchain and dependency facts | 001 | Done: see 7.1 and 7.2; `node -v`, `pnpm -v`, `go version`, `psql --version` and `cue version` all measured; rc.2 vs rc.3 explained in writing; `pnpm install --frozen-lockfile` exits 0 |
+| ☑ | EKB-003 | Repair the Windows test baseline | 001 | Done: PR #17 merged to `main`; `EPERM`/`EBUSY` count as lock contention and `mtimeMs` returns `undefined` only when the parent is a directory; `pnpm test` 15 files and 598 tests green, `store.ts` 99.32% statements / 97.17% branches; both failures were implementation bugs, tests unchanged |
+| ☑ | EKB-004 | Approve product and DB distribution | 001 | Done: section 2 is final - the release does not promise zero dependencies (single answer: no); external PostgreSQL 16 in development, `EKB-051` manages the local instance at release; mandatory PostgreSQL and a single-file portable EXE cannot both be promised; downstream cards are `EKB-051` and `EKB-050` |
 | ☐ | EKB-005 | Create repository skeleton and dual-toolchain CI | 002-004 | Go, CUE, SQL and packaging skeleton; TypeScript, Go, CUE, DB and Windows jobs green |
 
 P0 gate: rollback works, the old suite is green, the new skeleton is green, and database distribution is documented.

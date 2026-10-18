@@ -58,7 +58,9 @@ errkb.exe doctor             环境和连接器诊断
 
 各宿主连接器只负责两件事：把可观察的失败转换成 `ErrorEvent`，以及在宿主允许时查询并回传历史解法。分类、脱敏、存储、搜索、解法可信度和审计全部属于核心平台，不能在不同插件里重复实现。
 
-由于 PostgreSQL 和 PL/pgSQL 是明确技术要求，版本一默认交付为安装器管理的本地应用，而不是宣称为真正的单文件便携程序。开发阶段先连接外部 PostgreSQL 16；发布前通过 `EKB-045` 决定并实现本地实例安装和生命周期管理。如果必须改成单文件便携版本，应先重新决定数据库技术，不能同时承诺强制 PostgreSQL和零依赖便携 EXE。
+由于 PostgreSQL 和 PL/pgSQL 是明确技术要求，版本一默认交付为安装器管理的本地应用，而不是宣称为真正的单文件便携程序。开发阶段先连接外部 PostgreSQL 16；发布前通过 `EKB-051` 决定并实现本地实例安装和生命周期管理。如果必须改成单文件便携版本，应先重新决定数据库技术，不能同时承诺强制 PostgreSQL 和零依赖便携 EXE。
+
+本结论是 `EKB-051`（本地实例安装与生命周期）和 `EKB-050`（发布打包）的前提；改变本结论必须先修改本节，并通知相关卡。`EKB-045` 是搜索界面卡，不依赖本决定。
 
 ## 3 采集和复用策略
 
@@ -162,6 +164,33 @@ CUE 负责定义和验证事件、配置以及 MCP 工具契约；Go 负责运�
 | 外部工具箱 | `cmd`、`internal`、`db`、`spec`、`packaging` 均不存在，尚未开始 |
 
 因此当前项目可以被视为“经过大量单元测试的 DSH 原型”，不能被标记为“已验证可用的多宿主产品”。
+
+### 7.1 工具链实测事实（EKB-002）
+
+以下命令在本次核查中于本机实测，输出原文保留；后续卡片以本表为版本口径。
+
+| 工具 | 实测命令 | 输出 |
+| --- | --- | --- |
+| Node.js | `node -v` | `v24.16.0` |
+| pnpm | `pnpm -v` | `11.7.0` |
+| Go | `go version` | `go version go1.26.4 windows/amd64` |
+| PostgreSQL | `psql --version` | `psql (PostgreSQL) 16.15` |
+| PostgreSQL 服务 | `Get-Service postgresql*` | `postgresql-x64-16` 已运行，启动类型 `Automatic` |
+| CUE | `cue version` | `cue version v0.17.1`（CUE language v0.17.1，Go go1.26.4，CGO_ENABLED 1） |
+| DSH 宿主 | `dsh --version` | 命令不存在：宿主是桌面应用，不提供 `dsh` CLI |
+| 依赖实际安装 | `node_modules/@deepseek-ai/*/package.json` | `dsh-llm 0.1.5-rc.3`、`dsh-tools 0.1.5-rc.3`、`cordis 4.0.2`、`schemastery 3.18.2`；`@deepseek-ai/dsh` 未安装 |
+| 冻结安装 | `pnpm install --frozen-lockfile` | `Already up to date. Done in 287ms using pnpm v11.7.0`，退出码 0 |
+| 锁文件 | `Get-FileHash pnpm-lock.yaml -Algorithm SHA256` | `96BBD6FB51412A529F0BD1208EAF59BFC82453ECAB48C1DB74A91BD6B40F54DB` |
+
+DSH 宿主版本没有可用命令来源：`@deepseek-ai/dsh` 不在依赖里，宿主应用也不暴露 CLI。唯一可核对的生态证据是 `~/.dsh/profiles/desktop/node_modules/dsh-ops/package.json` 的 peer `@deepseek-ai/dsh ^0.2.0-rc.2`，说明实际宿主是 0.2.x 世代；README 版本表写的 `0.1.5-rc.2` 是历史口径，见 7.2。
+
+### 7.2 dsh-llm / dsh-tools rc.2 → rc.3 口径说明
+
+- 涉及包：`@deepseek-ai/dsh-llm`、`@deepseek-ai/dsh-tools`。peer 声明仍是 `^0.1.5-rc.2`，该区间本身就覆盖 `0.1.5-rc.3`，因此不需要升/降级声明，也不需要改区间。
+- 实际安装：`pnpm-lock.yaml` 解析为两包 `0.1.5-rc.3`，`node_modules` 实测一致（见 7.1）。
+- README 声称：`README.md:347`、`README.zh-CN.md:336` 仍写 `0.1.5-rc.2`，语义是“本设计验证时的版本”，属于历史口径，不是本机安装值；本卡作用域限定为 `package.json`、`pnpm-lock.yaml` 和本计划，不改 README，差异以本节为准。
+- 对 13 个 `src/` 模块的影响：只用到 `@deepseek-ai/dsh-llm` 的 `createUserMessage`、`UserMessage`、`MessageSourceMap`、`ContentBlock`，以及 `@deepseek-ai/dsh-tools` 的 `defineTool`、`ToolDefinition`、`ToolRunContext`，没有发现 API 删除或改名；`pnpm typecheck`、`pnpm build`、`pnpm test`（598 项通过）在 rc.3 上全部通过，判定为行为不变。
+- 后续实现口径：平台核心按 Go 实现；DSH 连接器按锁文件的 `0.1.5-rc.3` 和宿主 0.2.x 实现；不为 rc.2 或 rc.3 任一侧维护兼容分支。README 版本表留到 EKB-055 文档同步时再改。
 
 ## 8 现有文件处置表
 
@@ -310,9 +339,9 @@ CUE 负责定义和验证事件、配置以及 MCP 工具契约；Go 负责运�
 | 状态 | ID | 任务 | 前置 | 产出和验收 |
 | --- | --- | --- | --- | --- |
 | ☐ | EKB-001 | 建立真实 Git 工作区 | 无 | 从上游 `main` 克隆，复制本计划，记录 HEAD；`git status` 可用且基线可回滚 |
-| ☐ | EKB-002 | 固定工具链和依赖事实 | 001 | 记录 Node、pnpm、Go、PostgreSQL、CUE 版本；解释 rc.2 与 rc.3 差异；冻结可重复安装 |
-| ☐ | EKB-003 | 修复现有 Windows 测试基线 | 001 | 修复 `.lock` 的 `EPERM` 竞争语义和 `mtimeMs` 测试契约；`pnpm test` 598 项全绿且覆盖率门槛通过 |
-| ☐ | EKB-004 | 确认产品和数据库分发决定 | 001 | 确认版本一使用安装器、开发期外部 PostgreSQL、发布期本地托管方式；明确不承诺单文件便携版 |
+| ☑ | EKB-002 | 固定工具链和依赖事实 | 001 | 已完成：见 7.1 与 7.2；`node -v`、`pnpm -v`、`go version`、`psql --version`、`cue version` 均已实测；rc.2 与 rc.3 差异已书面说明；`pnpm install --frozen-lockfile` 退出码 0 |
+| ☑ | EKB-003 | 修复现有 Windows 测试基线 | 001 | 已完成：PR #17 合入 `main`；`EPERM`/`EBUSY` 视为锁竞争，`mtimeMs` 仅当父路径是目录才返回 `undefined`；`pnpm test` 15 文件 598 项全绿，`store.ts` 覆盖率 99.32% 语句 / 97.17% 分支；两处均为实现错，测试未改 |
+| ☑ | EKB-004 | 确认产品和数据库分发决定 | 001 | 已完成：§2 书面定稿——发布物不承诺零依赖（单一答案：否）；开发期外部 PostgreSQL 16，发布期由 `EKB-051` 托管本地实例；强制 PostgreSQL 与单文件便携 EXE 不可同时承诺；下游为 `EKB-051` 与 `EKB-050` |
 | ☐ | EKB-005 | 建立新目录和双工具链 CI | 002-004 | 创建 Go、CUE、SQL、packaging 骨架；CI 同时跑 TypeScript、Go、CUE、数据库和 Windows 文件系统测试 |
 
 P0 门槛：仓库可回滚；现有测试全绿；新的空骨架全绿；数据库分发方式已有书面决定。
