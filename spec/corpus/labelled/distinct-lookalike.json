@@ -1,0 +1,333 @@
+{
+  "set": "distinct-lookalike",
+  "cases": [
+    {
+      "case_id": "distinct-lookalike-001",
+      "lookalike_kind": "same-code-different-cause",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EPERM",
+          "message": "EPERM rename: file open in editor"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EPERM",
+          "message": "EPERM chmod: not permitted in container"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Same EPERM code and short messages, but one is a file lock held by an editor and the other a missing container capability; the fixes are unrelated.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.2,
+        "baseline": "code"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-002",
+      "lookalike_kind": "same-code-different-cause",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EACCES",
+          "message": "EACCES: cannot write node_modules, antivirus holding files"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EACCES",
+          "message": "EACCES: cannot bind port 80, privileged port"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Same EACCES code; one is a file permission problem, the other needs a privileged port. Reusing the node_modules fix for the port error wastes the user's time.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.1818,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-003",
+      "lookalike_kind": "same-code-different-cause",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "TS2307",
+          "message": "TS2307: cannot find module 'lodash', package not installed"
+        },
+        "b": {
+          "category": "tool",
+          "code": "TS2307",
+          "message": "TS2307: cannot find module './helpers', case-sensitive path mismatch"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Same TypeScript diagnostic; one needs an install, the other a path-casing fix. Same code is not the same problem.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.3077,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-004",
+      "lookalike_kind": "same-code-different-cause",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ENOSPC",
+          "message": "ENOSPC: no space left on device writing target.bin"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ENOSPC",
+          "message": "ENOSPC: inotify watch limit reached watching src"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Same ENOSPC code; one is a full disk, the other an exhausted inotify limit. The fixes (free space vs raise a sysctl) do not overlap.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.0667,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-005",
+      "lookalike_kind": "similar-message-different-command",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "MODULE_NOT_FOUND",
+          "message": "Cannot find module 'rollup'",
+          "command": "node dist/build.js"
+        },
+        "b": {
+          "category": "tool",
+          "code": "MODULE_NOT_FOUND",
+          "message": "Cannot find module 'rollup'",
+          "command": "tsc --build"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Identical message from two commands. Running the bundle needs the package installed; the type build needs a module resolution fix. Only the triggering command separates them.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-006",
+      "lookalike_kind": "similar-message-different-command",
+      "pair": {
+        "a": {
+          "category": "command-exit",
+          "code": "ETIMEDOUT",
+          "message": "Timeout after 5000ms waiting for response",
+          "command": "pnpm test"
+        },
+        "b": {
+          "category": "command-exit",
+          "code": "ETIMEDOUT",
+          "message": "Timeout after 5000ms waiting for response",
+          "command": "curl https://api.example.net/health"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Identical timeout text; one is a slow test suite, the other an unresponsive endpoint. The fix for a flaky test does not fix the network.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-007",
+      "lookalike_kind": "similar-message-different-command",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EACCES",
+          "message": "permission denied",
+          "command": "git push origin main"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EACCES",
+          "message": "permission denied",
+          "command": "docker run --rm image"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Identical two-word message; one is a remote authorization problem, the other a daemon socket problem. Fixes are unrelated.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-008",
+      "lookalike_kind": "similar-message-different-command",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EADDRINUSE",
+          "message": "address already in use",
+          "command": "node server.js"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EADDRINUSE",
+          "message": "address already in use",
+          "command": "postgres -D data"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Identical message; one needs the stale Node process killed, the other needs the PostgreSQL port changed. Same text, different owner of the port.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-009",
+      "lookalike_kind": "same-cause-different-tool",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "CERT_HAS_EXPIRED",
+          "message": "certificate has expired: registry certificate validity ended",
+          "tool_name": "npm"
+        },
+        "b": {
+          "category": "tool",
+          "code": "CERT_HAS_EXPIRED",
+          "message": "certificate has expired: server certificate validity ended",
+          "tool_name": "psql"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Both are expired-certificate failures, but one is the package registry's CA and the other the database server's certificate; the renewals are independent.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.7143,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-010",
+      "lookalike_kind": "same-cause-different-tool",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ENOSPC",
+          "message": "no space left on device while extracting packages into the store",
+          "tool_name": "pnpm"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ENOSPC",
+          "message": "no space left on device while writing the write-ahead log",
+          "tool_name": "postgres"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Same underlying full disk, but the fixes are on different volumes (package cache vs database data directory); one fix does not clear the other.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.4667,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-011",
+      "lookalike_kind": "same-cause-different-tool",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EBUSY",
+          "message": "file is locked by another process: cannot rename",
+          "tool_name": "editor"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EBUSY",
+          "message": "file is locked by another process: cannot read",
+          "tool_name": "backup-agent"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Same lock phenomenon, but the user must close the editor in one case and stop the backup agent in the other.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.7778,
+        "baseline": "fuzzy"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "distinct-lookalike-012",
+      "lookalike_kind": "same-cause-different-tool",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ENOMEM",
+          "message": "process killed: out of memory during bundle minification",
+          "tool_name": "node"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ENOMEM",
+          "message": "process killed: out of memory while extending shared buffers",
+          "tool_name": "postgres"
+        }
+      },
+      "label": "distinct-lookalike",
+      "why": "Both are out-of-memory kills, but one needs a larger Node heap and the other a PostgreSQL memory setting; exchanging the fixes makes both worse.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.4167,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    }
+  ]
+}
