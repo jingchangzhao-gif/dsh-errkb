@@ -186,3 +186,523 @@ jobs:
       # keeps the fix honest instead of trusting an ubuntu run.
       - name: Store lock and mtime cases
         run: pnpm exec vitest run tests/state.test.ts tests/store.test.ts
+  # EKB-011: schema compatibility gate. The checker lives inline because the
+  # card's scope is spec/compat.cue plus this workflow; if it outgrows this job,
+  # move it into spec/ under an explicit scope change.
+  compat:
+    name: Schema compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install cue
+        run: |
+          go install cuelang.org/go/cmd/cue@v0.17.1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Export the compatibility manifests
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          BASE="$RUNNER_TEMP/compat-base.json"
+          HEAD="$RUNNER_TEMP/compat-head.json"
+          if [ -n "$BASE_SHA" ] && git cat-file -e "${BASE_SHA}:spec/compat.cue" 2>/dev/null; then
+            mkdir -p "$RUNNER_TEMP/base-spec"
+            git show "${BASE_SHA}:spec/compat.cue" > "$RUNNER_TEMP/base-spec/compat.cue"
+            cue export "$RUNNER_TEMP/base-spec/compat.cue" -e compat --out json > "$BASE"
+          else
+            echo "{}" > "$BASE"
+          fi
+          cue export ./spec -e compat --out json > "$HEAD"
+
+      - name: Classify the diff against the rules
+        env:
+          SPEC_DIR: spec
+          REPO_ROOT: ${{ github.workspace }}
+          BASE_MANIFEST: ${{ runner.temp }}/compat-base.json
+          HEAD_MANIFEST: ${{ runner.temp }}/compat-head.json
+        run: |
+          python3 - <<'PY'
+          """Contract compatibility gate for errkb (implementation plan card EKB-011).
+
+          Three jobs, all executable rather than documentation:
+
+          1. self-test every rule declared in spec/compat.cue against a synthetic pair of
+             manifests, so each rule has a negative case that is demonstrated on every run;
+          2. verify that the declared manifest matches the CUE definitions that are on
+             disk and that each unknown-field policy matches the implemented decoder;
+          3. compare the manifest with the baseline exported from the pull request's base
+             commit and refuse a breaking change that did not bump schema_version.
+
+          Exit code 1 on any violation.
+          """
+
+          import json
+          import os
+          import re
+          import sys
+          import tempfile
+
+
+          DEF_RE = re.compile(r"^#([A-Za-z0-9_]+):(.*)$")
+          FIELD_RE = re.compile(r"^\t*([a-z][a-z0-9_]*)(\?)?:")
+
+
+          class SurfaceError(Exception):
+              pass
+
+
+          class SelfTestError(Exception):
+              pass
+
+
+          # --------------------------------------------------------------------------
+          # CUE parsing: field surface and enum values of the declared definitions.
+          # --------------------------------------------------------------------------
+
+
+          def code_part(line):
+              """Strip // comments but keep string contents, including '//' in strings."""
+              out = []
+              in_string = False
+              escaped = False
+              i = 0
+              while i < len(line):
+                  character = line[i]
+                  if in_string:
+                      out.append(character)
+                      if escaped:
+                          escaped = False
+                      elif character == "\\":
+                          escaped = True
+                      elif character == '"':
+                          in_string = False
+                      i += 1
+                      continue
+                  if character == '"':
+                      in_string = True
+                      out.append(character)
+                      i += 1
+                      continue
+                  if character == "/" and i + 1 < len(line) and line[i + 1] == "/":
+                      break
+                  out.append(character)
+                  i += 1
+              return "".join(out)
+
+
+          def parse_definitions(text):
+              """Return {name: {kind, fields: {dotted path: required|optional}, values}}."""
+              lines = text.splitlines()
+              definitions = {}
+              index = 0
+              while index < len(lines):
+                  match = DEF_RE.match(lines[index])
+                  if not match:
+                      index += 1
+                      continue
+                  name = match.group(1)
+                  rest = code_part(lines[index]).split(":", 1)[1]
+                  if rest.lstrip().startswith("{"):
+                      fields = {}
+                      stack = []
+                      depth = 0
+                      end = index
+                      while end < len(lines):
+                          code = code_part(lines[end])
+                          if end > index:
+                              if depth <= 0:
+                                  break
+                              body = code.lstrip("\t")
+                              stripped = body.strip()
+                              if stripped and not stripped.startswith("//"):
+                                  indent = len(code) - len(code.lstrip("\t"))
+                                  field = FIELD_RE.match(body)
+                                  if field and not stripped.startswith("if "):
+                                      field_name = field.group(1)
+                                      optional = field.group(2) == "?"
+                                      while stack and stack[-1][0] >= indent:
+                                          stack.pop()
+                                      path = ".".join([entry[1] for entry in stack] + [field_name])
+                                      if path not in fields:
+                                          fields[path] = "optional" if optional else "required"
+                                      after = body.split(":", 1)[1].strip()
+                                      if after.startswith("{") and "}" not in after:
+                                          stack.append((indent, field_name))
+                          depth += code.count("{") - code.count("}")
+                          if end > index and depth <= 0:
+                              break
+                          end += 1
+                      definitions[name] = {"kind": "struct", "fields": fields, "values": []}
+                      index = end + 1
+                      continue
+                  values = re.findall(r'"([^"\\]*)"', rest)
+                  end = index + 1
+                  while end < len(lines) and not DEF_RE.match(lines[end]):
+                      values += re.findall(r'"([^"\\]*)"', code_part(lines[end]))
+                      end += 1
+                  definitions[name] = {"kind": "union", "fields": {}, "values": values}
+                  index = end
+              return definitions
+
+
+          def load_spec(spec_dir):
+              spec = {}
+              for name in sorted(os.listdir(spec_dir)):
+                  if not name.endswith(".cue"):
+                      continue
+                  path = os.path.join(spec_dir, name)
+                  with open(path, "r", encoding="utf-8") as handle:
+                      text = handle.read()
+                  spec[name] = (parse_definitions(text), text)
+              return spec
+
+
+          def extract_fields(definitions, names):
+              prefixed = len(names) > 1
+              fields = {}
+              for name in names:
+                  definition = definitions.get(name)
+                  if definition is None or definition["kind"] != "struct":
+                      raise SurfaceError(f"definition #{name} is missing or is not a struct")
+                  for path, requiredness in definition["fields"].items():
+                      key = f"{name}.{path}" if prefixed else path
+                      fields[key] = requiredness
+              return fields
+
+
+          def normalized(value):
+              return "".join(character for character in value.lower() if character.isalnum())
+
+
+          def derived_enum_definition(definitions, enum_name):
+              wanted = normalized(enum_name)
+              for name, definition in definitions.items():
+                  if normalized(name) == wanted:
+                      return name
+              return None
+
+
+          # --------------------------------------------------------------------------
+          # Static consistency: manifest vs spec surface vs decoders.
+          # --------------------------------------------------------------------------
+
+
+          def check_surface(compat, spec, repo_root):
+              violations = []
+              contracts = compat.get("contracts") or {}
+              package_definitions = {}
+              for definitions, _ in spec.values():
+                  package_definitions.update(definitions)
+              declared = set()
+              for key, contract in contracts.items():
+                  file_name = os.path.basename(contract.get("file", ""))
+                  declared.add(file_name)
+                  if file_name not in spec:
+                      violations.append(("R14", f"{key}: declared file {file_name} is missing"))
+                      continue
+                  definitions, text = spec[file_name]
+
+                  try:
+                      extracted = extract_fields(definitions, contract.get("definitions", []))
+                  except SurfaceError as error:
+                      violations.append(("R12", f"{key}: {error}"))
+                      continue
+                  manifest = {name: "optional" for name in contract.get("fields", [])}
+                  for name in contract.get("required", []):
+                      manifest[name] = "required"
+                  for name in sorted(set(extracted) - set(manifest)):
+                      violations.append(("R12", f"{key}: {name} is declared in {file_name} but missing from compat.cue"))
+                  for name in sorted(set(manifest) - set(extracted)):
+                      violations.append(("R12", f"{key}: compat.cue lists {name} but {file_name} does not declare it"))
+                  for name in sorted(set(extracted) & set(manifest)):
+                      if extracted[name] != manifest[name]:
+                          violations.append(("R12", f"{key}: {name} is {extracted[name]} in {file_name} but {manifest[name]} in compat.cue"))
+                  undeclared_required = sorted(set(contract.get("required", [])) - set(contract.get("fields", [])))
+                  if undeclared_required:
+                      violations.append(("R12", f"{key}: required names fields absent from fields: {undeclared_required}"))
+
+                  for enum_name, listed in (contract.get("enums") or {}).items():
+                      definition_name = derived_enum_definition(package_definitions, enum_name)
+                      if definition_name is None:
+                          violations.append(("R12", f"{key}: enum {enum_name} has no definition in the spec package"))
+                          continue
+                      declared_values = set(package_definitions[definition_name]["values"])
+                      listed_values = set(listed)
+                      if declared_values != listed_values:
+                          violations.append(
+                              (
+                                  "R12",
+                                  f"{key}: enum {enum_name} differs (spec only: {sorted(declared_values - listed_values)}; compat.cue only: {sorted(listed_values - declared_values)})",
+                              )
+                          )
+
+                  anchor = contract.get("version_anchor")
+                  version = contract.get("schema_version", "")
+                  if anchor:
+                      definition_name = anchor[1:] if anchor.startswith("#") else ""
+                      if definition_name:
+                          definition = definitions.get(definition_name)
+                          if definition is None or version not in definition.get("values", []):
+                              violations.append(("R12", f"{key}: {anchor} does not carry the declared version {version}"))
+                      elif f'"{version}"' not in text:
+                          violations.append(("R12", f"{key}: the declared version {version} does not appear in {file_name}"))
+
+                  policy = contract.get("unknown_fields")
+                  decoder = contract.get("decoder") or {}
+                  marker = decoder.get("marker", "")
+                  decoder_path = os.path.join(repo_root, decoder.get("file", ""))
+                  if policy not in ("reject", "tolerate"):
+                      violations.append(("R13", f"{key}: unknown_fields must be reject or tolerate"))
+                  elif not os.path.isfile(decoder_path):
+                      violations.append(("R13", f"{key}: decoder {decoder.get('file')} is missing"))
+                  else:
+                      with open(decoder_path, "r", encoding="utf-8") as handle:
+                          decoder_text = handle.read()
+                      present = marker in decoder_text
+                      if policy == "reject" and not present:
+                          violations.append(("R13", f"{key}: policy is reject but {decoder.get('file')} does not use {marker}"))
+                      if policy == "tolerate" and present:
+                          violations.append(("R13", f"{key}: policy is tolerate but {decoder.get('file')} uses {marker}"))
+
+              covered = {name for name in spec if name != "compat.cue"}
+              for name in sorted(covered - declared):
+                  violations.append(("R14", f"{name} is not covered by compat.cue"))
+              for name in sorted(declared - covered):
+                  violations.append(("R14", f"{name} is declared but absent from the spec directory"))
+              return violations
+
+
+          # --------------------------------------------------------------------------
+          # Baseline comparison: classify changes and require a version bump.
+          # --------------------------------------------------------------------------
+
+
+          def version_number(value):
+              match = re.fullmatch(r"v([0-9]+)", value or "")
+              return int(match.group(1)) if match else None
+
+
+          def classify(base_contracts, head_contracts):
+              changes = []
+              violations = []
+              for key in sorted(set(base_contracts) | set(head_contracts)):
+                  if key not in base_contracts:
+                      changes.append(("R10", key, "contract added", "compatible"))
+                      continue
+                  if key not in head_contracts:
+                      changes.append(("R11", key, "contract removed", "breaking"))
+                      violations.append(("R11", key, "contracts may be added but never removed"))
+                      continue
+                  base = base_contracts[key]
+                  head = head_contracts[key]
+                  local = []
+                  base_fields = set(base.get("fields") or ())
+                  head_fields = set(head.get("fields") or ())
+                  base_required = set(base.get("required") or ())
+                  head_required = set(head.get("required") or ())
+
+                  for name in sorted(base_fields - head_fields):
+                      local.append(("R3", f"field removed: {name}", "breaking"))
+                  for name in sorted(head_fields - base_fields):
+                      if name in head_required:
+                          local.append(("R2", f"required field added: {name}", "breaking"))
+                      else:
+                          local.append(("R1", f"optional field added: {name}", "compatible"))
+                  for name in sorted(base_fields & head_fields):
+                      if (name in base_required) != (name in head_required):
+                          local.append(("R4", f"field optionality changed: {name}", "breaking"))
+
+                  base_enums = base.get("enums") or {}
+                  head_enums = head.get("enums") or {}
+                  for name in sorted(set(base_enums) | set(head_enums)):
+                      if name not in base_enums or name not in head_enums:
+                          local.append(("R6", f"enum set changed: {name}", "breaking"))
+                          continue
+                      for value in sorted(set(base_enums[name]) - set(head_enums[name])):
+                          local.append(("R6", f"enum value removed: {name}={value}", "breaking"))
+                      for value in sorted(set(head_enums[name]) - set(base_enums[name])):
+                          local.append(("R5", f"enum value added: {name}={value}", "compatible"))
+
+                  if base.get("semantics") != head.get("semantics"):
+                      local.append(("R7", "semantics text changed", "needs-version-bump"))
+                  if base.get("unknown_fields") != head.get("unknown_fields"):
+                      local.append(("R8", "unknown-field policy changed", "breaking"))
+                  if base.get("decoder") != head.get("decoder"):
+                      local.append(("R7", "decoder binding changed", "needs-version-bump"))
+                  if base.get("version_anchor") != head.get("version_anchor"):
+                      local.append(("R7", "version anchor changed", "needs-version-bump"))
+                  if base.get("definitions") != head.get("definitions") or base.get("file") != head.get("file"):
+                      local.append(("R16", "contract file or definitions changed", "breaking"))
+
+                  changes.extend((rule, key, message, klass) for rule, message, klass in local)
+
+                  bump_needed = any(klass != "compatible" for _, _, klass in local)
+                  base_version = version_number(base.get("schema_version"))
+                  head_version = version_number(head.get("schema_version"))
+                  if base_version is None or head_version is None:
+                      violations.append(("R9", key, f"schema_version must look like vN (base {base.get('schema_version')!r}, head {head.get('schema_version')!r})"))
+                  elif head_version < base_version:
+                      violations.append(("R9", key, f"schema_version decreased from {base.get('schema_version')} to {head.get('schema_version')}"))
+                  elif bump_needed and head_version == base_version:
+                      violations.append(("R9", key, f"incompatible change without a schema_version bump (still {head.get('schema_version')})"))
+              return changes, violations
+
+
+          # --------------------------------------------------------------------------
+          # Rule coverage and self-test.
+          # --------------------------------------------------------------------------
+
+
+          def check_rule_coverage(declared_rules, exercised):
+              violations = []
+              declared = {rule.get("id") for rule in declared_rules if isinstance(rule, dict)}
+              for rule in sorted(declared - exercised):
+                  violations.append(("R15", f"rule {rule} is declared in compat.cue but has no self-test case"))
+              for rule in sorted(exercised - declared):
+                  violations.append(("R15", f"self-test case {rule} is not declared in compat.cue"))
+              return violations
+
+
+          def make_contract(**overrides):
+              contract = {
+                  "file": "spec/thing.cue",
+                  "definitions": ["Thing"],
+                  "schema_version": "v1",
+                  "semantics": "the thing",
+                  "unknown_fields": "reject",
+                  "decoder": {"file": "internal/contract/thing.go", "marker": "DisallowUnknownFields"},
+                  "fields": ["a", "b"],
+                  "required": ["a"],
+                  "enums": {},
+                  "version_anchor": None,
+              }
+              version = overrides.pop("version", None)
+              if version is not None:
+                  contract["schema_version"] = version
+              contract.update(overrides)
+              return contract
+
+
+          def run_self_test():
+              exercised = set()
+
+              def expect(rule, base, head, want_violation, want_change=None):
+                  exercised.add(rule)
+                  changes, violations = classify(base, head)
+                  if bool(violations) is not want_violation:
+                      raise SelfTestError(f"{rule}: expected violation={want_violation}, got {violations}")
+                  if want_change is not None and not any(change[0] == want_change for change in changes):
+                      raise SelfTestError(f"{rule}: expected change {want_change}, got {changes}")
+
+              base = {"thing": make_contract()}
+
+              expect("R1", base, {"thing": make_contract(fields=["a", "b", "c"])}, False, "R1")
+              expect("R2", base, {"thing": make_contract(fields=["a", "b", "c"], required=["a", "c"])}, True, "R2")
+              expect("R3", base, {"thing": make_contract(fields=["a"])}, True, "R3")
+              expect("R4", base, {"thing": make_contract(required=["a", "b"])}, True, "R4")
+              expect("R5", {"thing": make_contract(enums={"kind": ["x"]})}, {"thing": make_contract(enums={"kind": ["x", "y"]})}, False, "R5")
+              expect("R6", {"thing": make_contract(enums={"kind": ["x", "y"]})}, {"thing": make_contract(enums={"kind": ["x"]})}, True, "R6")
+              expect("R7", base, {"thing": make_contract(semantics="the thing, revised")}, True, "R7")
+              expect("R8", base, {"thing": make_contract(unknown_fields="tolerate")}, True, "R8")
+              expect("R9", base, {"thing": make_contract(version="v2", fields=["a"])}, False, "R3")
+              expect("R9", {"thing": make_contract(version="v2")}, {"thing": make_contract(version="v1")}, True, None)
+              expect("R10", {}, {"thing": make_contract()}, False, "R10")
+              expect("R11", {"thing": make_contract()}, {}, True, "R11")
+              expect("R16", base, {"thing": make_contract(definitions=["ThingV2"])}, True, "R16")
+
+              # Static rules need throwaway files: the same check that runs on the real
+              # spec directory must fire on a drifting manifest.
+              with tempfile.TemporaryDirectory() as root:
+                  spec_dir = os.path.join(root, "spec")
+                  decoder_dir = os.path.join(root, "internal", "contract")
+                  os.makedirs(spec_dir)
+                  os.makedirs(decoder_dir)
+                  with open(os.path.join(spec_dir, "thing.cue"), "w", encoding="utf-8") as handle:
+                      handle.write('package spec\n\n#Thing: {\n\ta:  string\n\tb?: string\n}\n\n#Kind: "x" | "y"\n')
+                  with open(os.path.join(decoder_dir, "thing.go"), "w", encoding="utf-8") as handle:
+                      handle.write("decoder.DisallowUnknownFields()\n")
+
+                  good = make_contract(enums={"kind": ["x", "y"]})
+                  spec = load_spec(spec_dir)
+                  if check_surface({"contracts": {"thing": good}}, spec, root):
+                      raise SelfTestError("R12: the matching fixture reported violations")
+                  exercised.add("R12")
+                  drifted = make_contract(fields=["a"], enums={"kind": ["x", "y"]})
+                  if not any(rule == "R12" for rule, _ in check_surface({"contracts": {"thing": drifted}}, spec, root)):
+                      raise SelfTestError("R12: a manifest missing a declared field did not fail")
+
+                  exercised.add("R13")
+                  with open(os.path.join(decoder_dir, "thing.go"), "w", encoding="utf-8") as handle:
+                      handle.write("decoder.KnownFields(true)\n")
+                  if not any(rule == "R13" for rule, _ in check_surface({"contracts": {"thing": good}}, spec, root)):
+                      raise SelfTestError("R13: a reject policy without the decoder marker did not fail")
+
+                  exercised.add("R14")
+                  with open(os.path.join(spec_dir, "other.cue"), "w", encoding="utf-8") as handle:
+                      handle.write("package spec\n\n#Other: string\n")
+                  if not any(
+                      rule == "R14"
+                      for rule, _ in check_surface({"contracts": {"thing": good}}, load_spec(spec_dir), root)
+                  ):
+                      raise SelfTestError("R14: an uncovered spec file did not fail")
+
+              exercised.add("R15")
+              if not check_rule_coverage([{"id": "R1"}, {"id": "R99"}], {"R1"}):
+                  raise SelfTestError("R15: a declared rule without a self-test case did not fail")
+
+              print(f"compat self-test: {len(exercised)} rules demonstrated")
+              return exercised
+
+
+          # --------------------------------------------------------------------------
+
+
+          def load_manifest(path):
+              with open(path, "r", encoding="utf-8") as handle:
+                  return json.load(handle)
+
+
+          def main():
+              spec_dir = os.environ.get("SPEC_DIR", "spec")
+              repo_root = os.environ.get("REPO_ROOT", ".")
+              head_path = os.environ.get("HEAD_MANIFEST", "")
+              base_path = os.environ.get("BASE_MANIFEST", "")
+              if not head_path:
+                  print("compat: HEAD_MANIFEST is not set")
+                  return 1
+
+              head = load_manifest(head_path)
+              exercised = run_self_test()
+              violations = check_rule_coverage(head.get("rules") or [], exercised)
+              violations += check_surface(head, load_spec(spec_dir), repo_root)
+
+              if base_path:
+                  base = load_manifest(base_path)
+                  changes, diff_violations = classify(base.get("contracts") or {}, head.get("contracts") or {})
+                  for rule, key, message, klass in changes:
+                      print(f"[{rule}] {key}: {message} ({klass})")
+                  violations += diff_violations
+              else:
+                  print("compat: no baseline on the base commit; first publication of the rules")
+
+              for rule, *rest in violations:
+                  print(f"violation [{rule}] {' - '.join(rest)}")
+              if violations:
+                  print(f"compat: {len(violations)} violation(s)")
+                  return 1
+              print("compat: OK")
+              return 0
+
+
+          if __name__ == "__main__":
+              sys.exit(main())
+
+          PY

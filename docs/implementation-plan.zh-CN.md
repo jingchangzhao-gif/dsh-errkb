@@ -355,7 +355,7 @@ P0 门槛：仓库可回滚；现有测试全绿；新的空骨架全绿；数�
 | ☑ | EKB-008 | 定义 MCP 和本地 API 契约 | 006 | 已完成：`spec/mcp-tools.cue` 六个操作（lookup/search/record/feedback/list/stats）各自带 `schema_version`，候选带匹配原因与 `approximate` 标志且上限 3；`spec/local-api.cue` 复用同一批负载定义做 Named Pipe 信封（信封版本、`request_id`、`result`/`error` 二选一、`#ErrorCode` 闭集）；`internal/contract/tools.go` 与 `local_api.go` 提供同一组 `Validate()` 与严格 JSON 解码入口；`record` 复用 `ErrorEvent` 校验，`search` 与 `lookup` 语义分离，`feedback` 只能记 outcome；`cue vet`、`go vet`、`go test`、`gofmt` 全绿，23 例探针通过（探针已删除，因本卡文件清单不含测试文件） |
 | ☑ | EKB-009 | 从现有测试生成一致性语料 | 006 | 已完成：`tests/gen-corpus.ts` 生成七份语料共 133 例（normalize 57、fingerprint 19、headline 14、redact 20、tokenize 6、match 6、notice 11）；连续生成 SHA-256 一致，`--check` 无改动返回 0、改动语料返回 1；六个测试文件新增 133 条读语料断言（原断言未删），`pnpm test` 732 项全绿；隐私守卫与验收 5 扫描 0 命中 |
 | ☑ | EKB-010 | 建立真实标注检索语料 | 009 | 已完成：`spec/corpus/labelled/` 三集合 29 例（same-error 10、distinct-lookalike 12、cross-language 7，其中 1 例 uncertain），每例含成对输入、判定依据、基线测量、确认人与确认日期（jingchangzhao-gif / 2026-10-19）；三类易混各 4 例；脱敏与验收 5 扫描 0 命中；TS 基线在 12 例易混中 6 例会错误自动合并，在 16 例同错中 12 例命中、4 例漏检 |
-| ☐ | EKB-011 | 建立 schema 兼容规则 | 006-010 | 明确向后兼容、版本升级、未知字段和拒绝策略；在 CI 中验证 |
+| ☑ | EKB-011 | 建立 schema 兼容规则 | 006-010 | 已完成：`spec/compat.cue` 登记五个契约（error_event/config/connector_capability/mcp_tools/local_api）的字段、必填、枚举、未知字段策略、版本锚点和解码器，并定义 R1–R16 规则；新增 `compat` CI job：先自测 16 条规则，再导出 base 与 HEAD 清单并分类差异，破坏性或语义变更必须把 schema_version 从 vN 提升到严格更大的值；实测删除 `command` 字段且不升版本时输出 `violation [R9] ...` 并以 1 退出，同一删除升到 v2 后只记录 `[R3] ... (breaking)` 并以 0 退出；`cue vet ./spec/...` 通过；四份严格解码器对应策略为 reject，ErrorEvent 持久行的宽松读取留给 EKB-053 |
 
 P1 门槛：TypeScript 与未来 Go 实现可以消费同一份确定性语料，所有外部输入都有版本化契约。
 
