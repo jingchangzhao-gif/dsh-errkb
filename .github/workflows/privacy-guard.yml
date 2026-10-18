@@ -36,7 +36,11 @@ jobs:
       # way to write about a machine-specific location in this repository.
       - name: Reject personal data and credentials
         run: |
-          PATTERN='[A-Za-z]:\\[^\\`]+\\|/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/|[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*(edu|edu\.[a-z]{2}|ac\.[a-z]{2}|gmail\.com|outlook\.com|hotmail\.com|qq\.com|163\.com|126\.com)|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|Bearer [A-Za-z0-9._~+/-]{20,}'
+          # BEGIN GENERATED REDACTION RULES - edit spec/redact.cue, then run
+          # tests/gen-redact-rules.ts. Do not edit this block by hand.
+          # redact-source-digest: 6c535f94a1836f9d8db31e05a29133134943b005da958374ddaf76e3d72f5bf6
+          PATTERN='Bearer [A-Za-z0-9._~+/-]{20,}|sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)*(edu|edu\.[a-z]{2}|ac\.[a-z]{2}|gmail\.com|outlook\.com|hotmail\.com|qq\.com|163\.com|126\.com)|[A-Za-z]:\\[^\\`]+\\|/Users/[A-Za-z0-9._-]+/|/home/[A-Za-z0-9._-]+/'
+          # END GENERATED REDACTION RULES
           if grep -rInE "$PATTERN" --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=lib . ; then
             echo "::error::Personal data or credential-shaped text found above. Replace machine-specific locations with <repo-root> and remove the rest."
             exit 1
