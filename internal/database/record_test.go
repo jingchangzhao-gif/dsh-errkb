@@ -191,7 +191,7 @@ func TestRecordEventConcurrentExactFingerprint(t *testing.T) {
 	}
 	config.MaxConns = 60
 	config.AfterConnect = func(ctx context.Context, pooled *pgx.Conn) error {
-		_, err := pooled.Exec(ctx, "set search_path to "+schema)
+		_, err := pooled.Exec(ctx, "set search_path to "+schema+", public")
 		return err
 	}
 	pool, err := pgxpool.NewWithConfig(ctx, config)
