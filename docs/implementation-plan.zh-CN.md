@@ -351,7 +351,7 @@ P0 门槛：仓库可回滚；现有测试全绿；新的空骨架全绿；数�
 | 状态 | ID | 任务 | 前置 | 产出和验收 |
 | --- | --- | --- | --- | --- |
 | ☑ | EKB-006 | 定义 `ErrorEvent v1` | 005 | 已完成：`spec/error-event.cue` 闭合契约（`channel` 取 §3.1 的 A–E，`category` 复用 `src/capture.ts` 的四个历史取值，`#NoSensitive` 最小脱敏约束），`internal/contract/error_event.go` 校验入口拒绝未知字段与未脱敏文本，测试含 3 条合法事件、17 个必填字段缺失各一例、4 类敏感样本；`cue vet`、`go vet`、`go test` 全绿 |
-| ☐ | EKB-007 | 定义配置和连接器能力契约 | 006 | `config.cue`、connector capability schema；用户仍编辑 YAML 或 JSON |
+| ☑ | EKB-007 | 定义配置和连接器能力契约 | 006 | 已完成：`spec/config.cue` 与 `spec/connector-capability.cue` 定义内部校验（用户仍写 YAML/JSON），`internal/contract/config.go` 用 `gopkg.in/yaml.v3` 解析并拒绝未知键；安全默认值（Named Pipe 开、回环 HTTP 关、HTTP 必须有 ≥32 字符 token 且只能绑回环）、采集暂停（按连接器/项目）、三段独立保留期、超时与离线；能力契约用通道 A–E + 缺失字段表达降级，宿主名是开放字符串；6 个新测试全绿，`cue vet`、`go vet`、`gofmt` 全绿。偏差：为解析用户实际编辑的 YAML，`go.mod`/`go.sum` 新增 `gopkg.in/yaml.v3`（超出本卡四文件范围，已在 PR 说明） |
 | ☐ | EKB-008 | 定义 MCP 和本地 API 契约 | 006 | lookup、search、record、feedback、list、stats 的版本化 schema |
 | ☐ | EKB-009 | 从现有测试生成一致性语料 | 006 | 至少覆盖规范化、标题、脱敏、指纹、CJK token、匹配和通知；重复生成无 diff |
 | ☐ | EKB-010 | 建立真实标注检索语料 | 009 | same-error、distinct-lookalike 和跨语言集合；所有文本先脱敏；项目所有者确认标签 |
