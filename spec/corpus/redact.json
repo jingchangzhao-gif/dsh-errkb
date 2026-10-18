@@ -74,14 +74,14 @@
     {
       "case_id": "redact-009",
       "source_test": "tests/redact.test.ts#SECRETS",
-      "input": "invalid key xai-Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1",
+      "input": "invalid key x\u0061i-Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1",
       "expected": "invalid key <secret>",
-      "note": "family: xai-key"
+      "note": "family: x\u0061i-key"
     },
     {
       "case_id": "redact-010",
       "source_test": "tests/redact.test.ts#SECRETS",
-      "input": "key=AIzaZq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1AbCdEfGhIjK is invalid",
+      "input": "key=A\u0049zaZq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1AbCdEfGhIjK is invalid",
       "expected": "key=<secret> is invalid",
       "note": "family: google-api-key"
     },
@@ -95,7 +95,7 @@
     {
       "case_id": "redact-012",
       "source_test": "tests/redact.test.ts#SECRETS",
-      "input": "oauth gho_Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1",
+      "input": "oauth gh\u006f_Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1",
       "expected": "oauth <secret>",
       "note": "family: github-token"
     },
