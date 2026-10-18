@@ -377,7 +377,7 @@ P2 门槛：核心包完全无 I/O；不调用模型、不访问网络；跨语�
 
 | 状态 | ID | 任务 | 前置 | 产出和验收 |
 | --- | --- | --- | --- | --- |
-| ☐ | EKB-019 | 建立迁移框架和 schema v1 | 005、011 | 创建第 4 节全部实体、约束、审计字段和 migration ledger；重复迁移无副作用 |
+| ☑ | EKB-019 | 建立迁移框架和 schema v1 | 005、011 | 已完成：`0001_init.sql` 实装第 4 节全部 11 张表（事件表不含 `issue_id`，`audit_log` 无外键，样本、规范化文本、审计各有独立保留期列，审计字段齐全）；`internal/database/migrate.go` 用 `schema_migrations` 记录版本+sha256 校验和，事务前取 PostgreSQL advisory lock，每个文件一个事务、成功后写 ledger，已应用文件被改动或缺失报错；0001 从未落到持久库（本地实例 0 张表、CI 每次新容器），故就地填充并在 `db/migrations/README.md` 记录证据；本地 PostgreSQL 16.15 六个用例实测全绿（新库 11 表、重复无副作用、篡改报校验和、失败回滚、并发只应用一次、结构断言），`psql -v ON_ERROR_STOP=1` 路径也实测通过；偏差：新增 `github.com/jackc/pgx/v5` 依赖（`go.mod`/`go.sum`），`go` CI job 无数据库服务故迁移测试跳过、由本地实测覆盖 |
 | ☐ | EKB-020 | 实现 PL/pgSQL 幂等记录 | 019 | 同一事件重放不重复；相同精确指纹并发 50 次得到 1 issue 和 50 occurrences |
 | ☐ | EKB-021 | 实现解法版本和 outcome | 019 | candidate、verified、deprecated、blocked 状态以及按环境记录成功和失败 |
 | ☐ | EKB-022 | 实现精确检索 | 019-021 | 编号、指纹、错误码、命令和工具名使用索引命中 |
