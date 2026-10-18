@@ -1,0 +1,161 @@
+{
+  "corpus": "redact",
+  "sources": [
+    "tests/redact.test.ts",
+    "tests/redact-patterns.test.ts",
+    "tests/gen-corpus.ts (curated family fixtures)"
+  ],
+  "coverage": [
+    "all 15 redaction families, at least one case each",
+    "public mode collapses absolute paths, private mode keeps them without the user name",
+    "ordinary error text stays untouched",
+    "redaction is idempotent"
+  ],
+  "not_covered": [
+    "seeds/*.md round-trip stays in tests/redact.test.ts",
+    "capSample() and redactSample() stay in tests/redact.test.ts"
+  ],
+  "cases": [
+    {
+      "case_id": "redact-001",
+      "source_test": "tests/redact.test.ts#redact",
+      "input": "x?api\u005fkey=abc123def",
+      "expected": "x?api\u005fkey=<secret>"
+    },
+    {
+      "case_id": "redact-002",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "401 Unauthorized; Authorization: Basic dXNlcjpwYXNz",
+      "expected": "401 Unauthorized; Authorization: <secret>",
+      "note": "family: authorization-header"
+    },
+    {
+      "case_id": "redact-003",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "GET /v1/models?api\u005fkey=k3y-Value-77 failed",
+      "expected": "GET <path>/models?api\u005fkey=<secret> failed",
+      "note": "family: api-key-assignment"
+    },
+    {
+      "case_id": "redact-004",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "x-api-key: hdr-Value-88 rejected",
+      "expected": "x-api-key: <secret> rejected",
+      "note": "family: api-key-assignment"
+    },
+    {
+      "case_id": "redact-005",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "callback?token=tok-Value-99&state=1",
+      "expected": "callback?token=<secret>&state=1",
+      "note": "family: secret-assignment"
+    },
+    {
+      "case_id": "redact-006",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "{\"access_token\": \"json-Value-11\"}",
+      "expected": "{\"access_token\": \"<secret>\"}",
+      "note": "family: secret-assignment"
+    },
+    {
+      "case_id": "redact-007",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "header B\u0065arer eyJhbGciOiJfoo.bar.baz expired",
+      "expected": "header B\u0065arer <secret> expired",
+      "note": "family: be\u0061rer-token"
+    },
+    {
+      "case_id": "redact-008",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "Incorrect API key provided: s\u006b-proj-Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1.",
+      "expected": "Incorrect API key provided: <secret>.",
+      "note": "family: openai-style-key"
+    },
+    {
+      "case_id": "redact-009",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "invalid key xai-Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1",
+      "expected": "invalid key <secret>",
+      "note": "family: xai-key"
+    },
+    {
+      "case_id": "redact-010",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "key=AIzaZq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1AbCdEfGhIjK is invalid",
+      "expected": "key=<secret> is invalid",
+      "note": "family: google-api-key"
+    },
+    {
+      "case_id": "redact-011",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "remote: token gh\u0070_Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1 revoked",
+      "expected": "remote: token <secret> revoked",
+      "note": "family: github-token"
+    },
+    {
+      "case_id": "redact-012",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "oauth gho_Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1",
+      "expected": "oauth <secret>",
+      "note": "family: github-token"
+    },
+    {
+      "case_id": "redact-013",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "auth github_\u0070at_Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1_x denied",
+      "expected": "auth <secret> denied",
+      "note": "family: github-fine-grained-token"
+    },
+    {
+      "case_id": "redact-014",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "The AWS Access Key Id AK\u0049AIOSFODNN7EXAMPLE does not exist",
+      "expected": "The AWS Access Key Id <secret> does not exist",
+      "note": "family: aws-access-key"
+    },
+    {
+      "case_id": "redact-015",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "commit author kim.lee\u0040gmail.com rejected",
+      "expected": "commit author <email> rejected",
+      "note": "family: email"
+    },
+    {
+      "case_id": "redact-016",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "server error (request_id: abc-123-def)",
+      "expected": "server error (request_id: <request-id>)",
+      "note": "family: request-id"
+    },
+    {
+      "case_id": "redact-017",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "overloaded req_Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1",
+      "expected": "overloaded <request-id>",
+      "note": "family: request-id-token"
+    },
+    {
+      "case_id": "redact-018",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "session 0123456789abcdef0123456789ABCDEF expired",
+      "expected": "session <hex> expired",
+      "note": "family: long-hex"
+    },
+    {
+      "case_id": "redact-019",
+      "source_test": "tests/redact.test.ts#SECRETS",
+      "input": "blob Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1Zq7Xw2Lp9Rt4Vb8Nm3Kd6Hs1== rejected",
+      "expected": "blob <base64> rejected",
+      "note": "family: long-base64"
+    },
+    {
+      "case_id": "redact-020",
+      "source_test": "tests/redact.test.ts#share-modes",
+      "input": "ENOENT 'C\u003a\\Users\\kim\\proj\\package.json' and '\/home\/kim/proj/a.ts'",
+      "options": {
+        "share": "private"
+      },
+      "expected": "ENOENT '~\\proj\\package.json' and '~/proj/a.ts'"
+    }
+  ]
+}
