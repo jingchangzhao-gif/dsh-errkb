@@ -431,5 +431,31 @@ compat: {
 				error_code: ["invalid_request", "not_found", "unavailable", "conflict", "internal"]
 			}
 		}
+		redact: {
+			file: "spec/redact.cue"
+			definitions: ["Redact"]
+			schema_version: "v1"
+			semantics:      "The redaction rules document: every credential and personal-data family, its replacement placeholder, the public and private policies, the home-prefix handling and the privacy-guard alternatives. It is a build-time document: the generated Go and TypeScript artifacts are what run, and the conformance corpus proves they agree."
+			unknown_fields: "tolerate"
+			decoder: {
+				file:   "internal/redact/rules_gen.go"
+				marker: "DisallowUnknownFields"
+			}
+			version_anchor: "#RedactVersion"
+			fields: [
+				"schema_version",
+				"placeholders",
+				"rules",
+				"home_prefix",
+				"path_guards",
+			]
+			required: [
+				"schema_version",
+				"placeholders",
+				"rules",
+				"home_prefix",
+				"path_guards",
+			]
+		}
 	}
 }

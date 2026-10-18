@@ -126,6 +126,13 @@ func isASCIIWord(r rune) bool {
 		(r >= 'A' && r <= 'Z')
 }
 
+// CollapseAbsolutePaths replaces every absolute path with PlaceholderPath. The
+// redaction engine applies it in public mode before the credential rules, which
+// is the order src/redact.ts uses.
+func CollapseAbsolutePaths(text string) string {
+	return collapseAbsolutePaths(text)
+}
+
 // collapseAbsolutePaths replaces every absolute path with its collapsed form,
 // left to right, and rescans one byte after a rejected candidate the way a
 // regular-expression engine without lookbehind would.

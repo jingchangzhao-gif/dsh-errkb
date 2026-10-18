@@ -365,7 +365,7 @@ P1 门槛：TypeScript 与未来 Go 实现可以消费同一份确定性语料�
 | --- | --- | --- | --- | --- |
 | ☑ | EKB-012 | 实现标题提取和安全错误文本 | 009 | 已完成：`internal/core/headline.go` 按语料 14 例实现 traceback 末行、错误码优先、末行回退；只 import regexp/strings/unicode，零 I/O；二次调用结果一致；ANSI 剥离与 200 rune 上限（199 字符 + `…`）与语料一致；命令前缀组合在 `capture()` 中，语料无此例，留到 EKB-016/031；`go test ./internal/core/ -run Headline`、`go vet`、`gofmt -l` 全绿，`spec/corpus/headline.json` 未改动 |
 | ☑ | EKB-013 | 实现规范化和指纹 | 009 | 已完成：`internal/core/normalize.go` 与 headline 共用 ANSI 规则，按语料 57 例实现 UUID/哈希/时间/时长/PID/端口/行列/临时目录/绝对路径折叠与首尾标点裁剪；`internal/core/fingerprint.go` 只做 `sha256(category + "\x00" + normalized)[:12]`，与归一化分离；两侧生产代码零 I/O；Go 57 + 19 例与 TS 侧 106 项断言同源于语料；语料未改（normalize.json `3237EF88…`，fingerprint.json `2B8383AA…`）；`gofmt` / `go vet` 干净 |
-| ☐ | EKB-014 | 实现统一脱敏引擎 | 009、011 | Go、TypeScript 和 CI 规则来自同一来源；敏感文本在任何落盘点前消失 |
+| ☑ | EKB-014 | 实现统一脱敏引擎 | 009、011 | 已完成：`spec/redact.cue` 是唯一来源（15 条文本规则 + 3 条 home 前缀 Go 变体 + 3 条 guard 备选），`tests/gen-redact-rules.ts` 生成 `internal/redact/rules_gen.go`、`src/redact-patterns.ts` 与 `privacy-guard.yml` 的 PATTERN 块；三件产物共享同一 SHA-256 源摘要，`--check` 零差异、篡改后非零；`internal/redact/redact.go` 纯函数零 I/O，public 先折叠绝对路径、private 先折叠 home 前缀，再按序应用规则；Go 20 例语料与 TS 一致，每条规则用自己的 example 命中；`redact-patterns.test.ts` 改为校验生成结果；偏差：导出 `core.CollapseAbsolutePaths` 包装、`spec/compat.cue` 增加 `redact` 契约（tolerate）；写盘点尚未接入（EKB-019/031 在写入前调用） |
 | ☐ | EKB-015 | 实现 token 化和 Jaccard | 009 | Latin token、占位符和 CJK 二元组行为一致 |
 | ☐ | EKB-016 | 实现分类和瞬时噪声规则 | 012-015 | 技术错误分类、永久和瞬时策略有确定性测试 |
 | ☐ | EKB-017 | 实现候选重排和匹配解释 | 015-016 | 返回分数、匹配字段、环境差异和近似标识；近似结果不自动合并 |
