@@ -342,7 +342,7 @@ DSH 宿主版本没有可用命令来源：`@deepseek-ai/dsh` 不在依赖里，
 | ☑ | EKB-002 | 固定工具链和依赖事实 | 001 | 已完成：见 7.1 与 7.2；`node -v`、`pnpm -v`、`go version`、`psql --version`、`cue version` 均已实测；rc.2 与 rc.3 差异已书面说明；`pnpm install --frozen-lockfile` 退出码 0 |
 | ☑ | EKB-003 | 修复现有 Windows 测试基线 | 001 | 已完成：PR #17 合入 `main`；`EPERM`/`EBUSY` 视为锁竞争，`mtimeMs` 仅当父路径是目录才返回 `undefined`；`pnpm test` 15 文件 598 项全绿，`store.ts` 覆盖率 99.32% 语句 / 97.17% 分支；两处均为实现错，测试未改 |
 | ☑ | EKB-004 | 确认产品和数据库分发决定 | 001 | 已完成：§2 书面定稿——发布物不承诺零依赖（单一答案：否）；开发期外部 PostgreSQL 16，发布期由 `EKB-051` 托管本地实例；强制 PostgreSQL 与单文件便携 EXE 不可同时承诺；下游为 `EKB-051` 与 `EKB-050` |
-| ☐ | EKB-005 | 建立新目录和双工具链 CI | 002-004 | 创建 Go、CUE、SQL、packaging 骨架；CI 同时跑 TypeScript、Go、CUE、数据库和 Windows 文件系统测试 |
+| ☑ | EKB-005 | 建立新目录和双工具链 CI | 002-004 | 已完成：Go 1.26.4 空骨架（`cmd/errkb`、8 个 `internal/*/doc.go`、3 个 `spec/*.cue`、`db/migrations/0001_init.sql`、`packaging/windows/build.ps1`）；CI 新增 go / cue / database / windows-filesystem 四个 job，PR #21 六个检查全绿；本地 `gofmt -l` 无输出，`go vet`、`go test`、`cue vet` 均退出 0，`build.ps1` 产出 `errkb 0.1.0-skeleton windows/amd64`；数据库 job 在 PostgreSQL 16 容器内按文件名顺序执行迁移并跑 50 个并发会话 |
 
 P0 门槛：仓库可回滚；现有测试全绿；新的空骨架全绿；数据库分发方式已有书面决定。
 
