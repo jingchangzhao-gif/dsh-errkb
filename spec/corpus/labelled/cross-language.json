@@ -1,0 +1,194 @@
+{
+  "set": "cross-language",
+  "cases": [
+    {
+      "case_id": "cross-language-001",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EACCES",
+          "language": "zh-CN",
+          "message": "无法删除文件：访问被拒绝。"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EACCES",
+          "language": "en",
+          "message": "Cannot delete file: Access is denied."
+        }
+      },
+      "label": "same-error",
+      "why": "The same Windows permission failure reported in Chinese and in English; the localized wording is the only difference.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0,
+        "baseline": "code"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "cross-language-002",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ERR_PNPM_FETCH_404",
+          "language": "zh-CN + en",
+          "message": " ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/left-pad: 未找到 "
+        },
+        "b": {
+          "category": "tool",
+          "code": "ERR_PNPM_FETCH_404",
+          "language": "en",
+          "message": " ERR_PNPM_FETCH_404  GET https://registry.npmjs.org/left-pad: Not Found "
+        }
+      },
+      "label": "same-error",
+      "why": "Same pnpm fetch failure for the same package; only the localized status text differs.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.6667,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "cross-language-003",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EACCES",
+          "language": "zh-CN + en",
+          "message": "npm ERR! code EACCES\nnpm ERR! syscall open\nnpm ERR! path /opt/app/.npmrc\nnpm ERR! errno -13\nnpm ERR! 权限不足"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EACCES",
+          "language": "en",
+          "message": "npm ERR! code EACCES\nnpm ERR! syscall open\nnpm ERR! path /opt/app/.npmrc\nnpm ERR! errno -13\nnpm ERR! permission denied"
+        }
+      },
+      "label": "same-error",
+      "why": "Identical npm error block except the trailing localized reason; the machine-readable fields already agree.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.6875,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "cross-language-004",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ENOENT",
+          "language": "zh-CN",
+          "message": "'psql' 不是内部或外部命令，也不是可运行的程序或批处理文件。"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ENOENT",
+          "language": "en",
+          "message": "psql: command not found"
+        }
+      },
+      "label": "same-error",
+      "why": "Same missing executable reported by cmd.exe and by a POSIX shell.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.04,
+        "baseline": "code"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "cross-language-005",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EPERM",
+          "language": "zh-CN",
+          "message": "EPERM 拒绝访问：无法重命名文件"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EPERM",
+          "language": "zh-CN",
+          "message": "EPERM拒绝访问：无法重命名文件"
+        }
+      },
+      "label": "same-error",
+      "why": "Same error; only a Latin/CJK token boundary lost its space. This is the tokenization trap the cross-language set must keep.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 1,
+        "baseline": "fuzzy"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "cross-language-006",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ENOSPC",
+          "language": "zh-CN",
+          "message": "警告：磁盘空间不足，安装已中止"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ENOSPC",
+          "language": "en",
+          "message": "Warning: not enough disk space, installation aborted"
+        }
+      },
+      "label": "same-error",
+      "why": "Same full-disk abort in two languages.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "cross-language-007",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EACCES",
+          "language": "zh-CN (mis-decoded)",
+          "message": "�ļ����������ܾ���"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EACCES",
+          "language": "zh-CN",
+          "message": "文件访问被拒绝"
+        }
+      },
+      "label": "uncertain",
+      "why": "A GBK-encoded message decoded as UTF-8 next to its correct form. It looks like the same denial, but the garbled bytes cannot be verified, so it is kept out of the scored sets.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0,
+        "baseline": "code"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    }
+  ]
+}

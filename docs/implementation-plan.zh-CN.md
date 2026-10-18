@@ -354,7 +354,7 @@ P0 门槛：仓库可回滚；现有测试全绿；新的空骨架全绿；数�
 | ☑ | EKB-007 | 定义配置和连接器能力契约 | 006 | 已完成：`spec/config.cue` 与 `spec/connector-capability.cue` 定义内部校验（用户仍写 YAML/JSON），`internal/contract/config.go` 用 `gopkg.in/yaml.v3` 解析并拒绝未知键；安全默认值（Named Pipe 开、回环 HTTP 关、HTTP 必须有 ≥32 字符 token 且只能绑回环）、采集暂停（按连接器/项目）、三段独立保留期、超时与离线；能力契约用通道 A–E + 缺失字段表达降级，宿主名是开放字符串；6 个新测试全绿，`cue vet`、`go vet`、`gofmt` 全绿。偏差：为解析用户实际编辑的 YAML，`go.mod`/`go.sum` 新增 `gopkg.in/yaml.v3`（超出本卡四文件范围，已在 PR 说明） |
 | ☑ | EKB-008 | 定义 MCP 和本地 API 契约 | 006 | 已完成：`spec/mcp-tools.cue` 六个操作（lookup/search/record/feedback/list/stats）各自带 `schema_version`，候选带匹配原因与 `approximate` 标志且上限 3；`spec/local-api.cue` 复用同一批负载定义做 Named Pipe 信封（信封版本、`request_id`、`result`/`error` 二选一、`#ErrorCode` 闭集）；`internal/contract/tools.go` 与 `local_api.go` 提供同一组 `Validate()` 与严格 JSON 解码入口；`record` 复用 `ErrorEvent` 校验，`search` 与 `lookup` 语义分离，`feedback` 只能记 outcome；`cue vet`、`go vet`、`go test`、`gofmt` 全绿，23 例探针通过（探针已删除，因本卡文件清单不含测试文件） |
 | ☑ | EKB-009 | 从现有测试生成一致性语料 | 006 | 已完成：`tests/gen-corpus.ts` 生成七份语料共 133 例（normalize 57、fingerprint 19、headline 14、redact 20、tokenize 6、match 6、notice 11）；连续生成 SHA-256 一致，`--check` 无改动返回 0、改动语料返回 1；六个测试文件新增 133 条读语料断言（原断言未删），`pnpm test` 732 项全绿；隐私守卫与验收 5 扫描 0 命中 |
-| ☐ | EKB-010 | 建立真实标注检索语料 | 009 | same-error、distinct-lookalike 和跨语言集合；所有文本先脱敏；项目所有者确认标签 |
+| ☑ | EKB-010 | 建立真实标注检索语料 | 009 | 已完成：`spec/corpus/labelled/` 三集合 29 例（same-error 10、distinct-lookalike 12、cross-language 7，其中 1 例 uncertain），每例含成对输入、判定依据、基线测量、确认人与确认日期（jingchangzhao-gif / 2026-10-19）；三类易混各 4 例；脱敏与验收 5 扫描 0 命中；TS 基线在 12 例易混中 6 例会错误自动合并，在 16 例同错中 12 例命中、4 例漏检 |
 | ☐ | EKB-011 | 建立 schema 兼容规则 | 006-010 | 明确向后兼容、版本升级、未知字段和拒绝策略；在 CI 中验证 |
 
 P1 门槛：TypeScript 与未来 Go 实现可以消费同一份确定性语料，所有外部输入都有版本化契约。

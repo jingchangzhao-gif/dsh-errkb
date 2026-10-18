@@ -1,0 +1,255 @@
+{
+  "set": "same-error",
+  "cases": [
+    {
+      "case_id": "same-error-001",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ENOENT",
+          "message": "ENOENT: no such file or directory, open '/opt/build/app/package.json'"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ENOENT",
+          "message": "ENOENT: no such file or directory, open '/srv/ci/app/package.json'"
+        }
+      },
+      "label": "same-error",
+      "why": "Same missing manifest at two absolute paths; nothing else differs.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-002",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "TS2307",
+          "message": "error TS2307: Cannot find module 'foo' at src/index.ts:12:5"
+        },
+        "b": {
+          "category": "tool",
+          "code": "TS2307",
+          "message": "error TS2307: Cannot find module 'foo' at src/index.ts:87:3"
+        }
+      },
+      "label": "same-error",
+      "why": "Same unresolved import in the same file; only the reported line and column differ.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-003",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EPERM",
+          "message": "EPERM: operation not permitted, open '/opt/app/node_modules/.lock' (pid 4821)"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EPERM",
+          "message": "EPERM: operation not permitted, open '/opt/app/node_modules/.lock' (pid 91374)"
+        }
+      },
+      "label": "same-error",
+      "why": "Same locked path; only the process id differs.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-004",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ENOENT",
+          "message": "2026-10-01T12:00:00Z ERROR failed to start postgres: connect ENOENT /tmp/.s.PGSQL.5432"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ENOENT",
+          "message": "2026-10-17T08:31:59.123Z ERROR failed to start postgres: connect ENOENT /tmp/.s.PGSQL.5432"
+        }
+      },
+      "label": "same-error",
+      "why": "Same missing local PostgreSQL socket; only the log timestamp differs.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-005",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ETIMEDOUT",
+          "message": "operation timed out after 123ms while fetching https://registry.npmjs.org/foo"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ETIMEDOUT",
+          "message": "operation timed out after 4500ms while fetching https://registry.npmjs.org/foo"
+        }
+      },
+      "label": "same-error",
+      "why": "Same registry fetch timing out; only the measured duration differs.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-006",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "ECONNREFUSED",
+          "message": "connect ECONNREFUSED 127.0.0.1:5432"
+        },
+        "b": {
+          "category": "tool",
+          "code": "ECONNREFUSED",
+          "message": "connect ECONNREFUSED 127.0.0.1:6543"
+        }
+      },
+      "label": "same-error",
+      "why": "Same loopback connection refused; only the port differs.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-007",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "HTTP502",
+          "message": "upstream request 550e8400-e29b-41d4-a716-446655440000 failed with status 502"
+        },
+        "b": {
+          "category": "tool",
+          "code": "HTTP502",
+          "message": "upstream request 6ba7b810-9dad-11d1-80b4-00c04fd430c8 failed with status 502"
+        }
+      },
+      "label": "same-error",
+      "why": "Same upstream 502; only the synthetic request UUID differs.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-008",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EINTEGRITY",
+          "message": "integrity check failed for sha512:9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EINTEGRITY",
+          "message": "integrity check failed for sha512:1a2b3c4d5e6f708192a3b4c5d6e7f809"
+        }
+      },
+      "label": "same-error",
+      "why": "Same corrupt download reported by digest; only the digest value differs.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-009",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "MODULE_NOT_FOUND",
+          "message": "Error: Cannot find module 'left-pad'"
+        },
+        "b": {
+          "category": "tool",
+          "code": "MODULE_NOT_FOUND",
+          "message": "npm ERR! code MODULE_NOT_FOUND: Cannot find module 'left-pad'"
+        }
+      },
+      "label": "same-error",
+      "why": "Same missing dependency; the package-manager wrapper adds a prefix, so this pair is about recall rather than an exact match.",
+      "measured": {
+        "normalized_equal": false,
+        "fingerprint_equal": false,
+        "token_jaccard": 0.5,
+        "baseline": "miss"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    },
+    {
+      "case_id": "same-error-010",
+      "pair": {
+        "a": {
+          "category": "tool",
+          "code": "EACCES",
+          "message": "Error: EACCES: permission denied, open '/opt/app/.env'"
+        },
+        "b": {
+          "category": "tool",
+          "code": "EACCES",
+          "message": "ERROR: EACCES: permission denied, open '/opt/app/.env'"
+        }
+      },
+      "label": "same-error",
+      "why": "Same permission failure; only the prefix casing differs.",
+      "measured": {
+        "normalized_equal": true,
+        "fingerprint_equal": true,
+        "token_jaccard": 1,
+        "baseline": "exact"
+      },
+      "confirmed_by": "jingchangzhao-gif",
+      "confirmed_at": "2026-10-19"
+    }
+  ]
+}
