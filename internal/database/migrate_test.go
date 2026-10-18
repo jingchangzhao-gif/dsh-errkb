@@ -49,7 +49,7 @@ func freshSchema(t *testing.T, conn *pgx.Conn) string {
 	if _, err := conn.Exec(ctx, "create schema "+schema); err != nil {
 		t.Fatalf("create schema %s: %v", schema, err)
 	}
-	if _, err := conn.Exec(ctx, "set search_path to "+schema); err != nil {
+	if _, err := conn.Exec(ctx, "set search_path to "+schema+", public"); err != nil {
 		t.Fatalf("set search_path to %s: %v", schema, err)
 	}
 	t.Cleanup(func() {
@@ -249,7 +249,7 @@ func TestMigrateConcurrent(t *testing.T) {
 	schema := freshSchema(t, first)
 
 	second := connect(t)
-	if _, err := second.Exec(context.Background(), "set search_path to "+schema); err != nil {
+	if _, err := second.Exec(context.Background(), "set search_path to "+schema+", public"); err != nil {
 		t.Fatalf("set search_path on the second connection: %v", err)
 	}
 
