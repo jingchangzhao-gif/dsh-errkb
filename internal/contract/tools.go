@@ -1,0 +1,426 @@
+// The Go side of spec/mcp-tools.cue: one payload set, two channels (EKB-008).
+// MCP stdio and the local Named Pipe API both decode into these structs and
+// call the same Validate methods, so the field names and rules cannot drift.
+package contract
+
+import (
+	"errors"
+	"fmt"
+	"time"
+)
+
+// ToolSchemaVersion is what every operation declares today. Each operation
+// keeps its own schema_version field so one can move without the others
+// (EKB-011 owns the compatibility rule).
+const ToolSchemaVersion = "v1"
+
+// MaxCandidates is the plan section 5 ceiling: a response with four candidates
+// is invalid, and only a candidate with approximate=false may auto-apply.
+const MaxCandidates = 3
+
+// Operation names shared by the MCP tool names (err_<operation>) and the local
+// envelope. They are the six operations the card fixes; nothing else exists.
+const (
+	OperationLookup   = "lookup"
+	OperationSearch   = "search"
+	OperationRecord   = "record"
+	OperationFeedback = "feedback"
+	OperationList     = "list"
+	OperationStats    = "stats"
+)
+
+// matchReasons is the plan section 5 order. The first three prove "same
+// error"; the rest only produce candidates that need confirmation.
+var (
+	validMatchReasons = map[string]bool{
+		"issue_id": true, "error_code": true, "exact_fingerprint": true,
+		"deterministic_filter": true, "trigram_candidate": true, "jaccard_rerank": true,
+	}
+	exactMatchReasons = map[string]bool{
+		"issue_id": true, "error_code": true, "exact_fingerprint": true,
+	}
+	validOutcomes  = map[string]bool{"success": true, "failure": true, "unknown": true}
+	validListKinds = map[string]bool{"issue": true, "solution": true}
+)
+
+// Candidate is one reason-carrying hit.
+type Candidate struct {
+	IssueID     string   `json:"issue_id"`
+	Fingerprint string   `json:"fingerprint"`
+	Title       string   `json:"title"`
+	MatchReason string   `json:"match_reason"`
+	MatchDetail string   `json:"match_detail"`
+	Approximate bool     `json:"approximate"`
+	Confidence  *float64 `json:"confidence"`
+}
+
+// Validate enforces the reason fields and the exact/fuzzy split: an exact
+// reason with approximate=true is a contract violation, not a style choice.
+func (c Candidate) Validate() error {
+	if c.IssueID == "" {
+		return errors.New("candidate.issue_id: required")
+	}
+	if !fingerprintPattern.MatchString(c.Fingerprint) {
+		return fmt.Errorf("candidate.fingerprint: want %d lowercase hex characters, got %q", FingerprintLength, c.Fingerprint)
+	}
+	if c.Title == "" {
+		return errors.New("candidate.title: required")
+	}
+	if !validMatchReasons[c.MatchReason] {
+		return fmt.Errorf("candidate.match_reason: unknown reason %q", c.MatchReason)
+	}
+	if c.MatchDetail == "" {
+		return errors.New("candidate.match_detail: required")
+	}
+	if c.Confidence == nil {
+		return errors.New("candidate.confidence: required")
+	}
+	if *c.Confidence < 0 || *c.Confidence > 1 {
+		return fmt.Errorf("candidate.confidence: want 0..1, got %v", *c.Confidence)
+	}
+	if exactMatchReasons[c.MatchReason] && c.Approximate {
+		return fmt.Errorf("candidate.approximate: %q is exact, want false", c.MatchReason)
+	}
+	if !exactMatchReasons[c.MatchReason] && !c.Approximate {
+		return fmt.Errorf("candidate.approximate: %q only produces candidates, want true", c.MatchReason)
+	}
+	return checkRedacted("candidate.title", c.Title)
+}
+
+// LookupRequest asks the question "I know what this error is". It is not the
+// same operation as SearchRequest: the plan forbids one fuzzy query behind
+// both.
+type LookupRequest struct {
+	SchemaVersion     string `json:"schema_version"`
+	Issue             string `json:"issue,omitempty"`
+	ErrorCode         string `json:"error_code,omitempty"`
+	Fingerprint       string `json:"fingerprint,omitempty"`
+	NormalizedMessage string `json:"normalized_message,omitempty"`
+	ProjectKey        string `json:"project_key,omitempty"`
+}
+
+// Validate requires at least one discriminator; a lookup with none would be a
+// search in disguise.
+func (r LookupRequest) Validate() error {
+	if err := requireVersion(OperationLookup, r.SchemaVersion); err != nil {
+		return err
+	}
+	if r.Issue == "" && r.ErrorCode == "" && r.Fingerprint == "" && r.NormalizedMessage == "" {
+		return errors.New("lookup: one of issue, error_code, fingerprint or normalized_message is required")
+	}
+	if r.Fingerprint != "" && !fingerprintPattern.MatchString(r.Fingerprint) {
+		return fmt.Errorf("lookup.fingerprint: want %d lowercase hex characters, got %q", FingerprintLength, r.Fingerprint)
+	}
+	return checkRedacted("lookup.normalized_message", r.NormalizedMessage)
+}
+
+// LookupResponse carries at most MaxCandidates hits with their reasons.
+type LookupResponse struct {
+	SchemaVersion string      `json:"schema_version"`
+	Candidates    []Candidate `json:"candidates"`
+}
+
+// Validate applies the candidate ceiling and the per-candidate rules.
+func (r LookupResponse) Validate() error {
+	return validateCandidates(OperationLookup, r.SchemaVersion, r.Candidates)
+}
+
+// SearchRequest asks the free-text question.
+type SearchRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	Query         string `json:"query"`
+	ProjectKey    string `json:"project_key,omitempty"`
+	Limit         *int   `json:"limit,omitempty"`
+}
+
+// Validate keeps the search limit inside the contract ceiling and scans the
+// query for unredacted secrets before it ever reaches the database.
+func (r SearchRequest) Validate() error {
+	if err := requireVersion(OperationSearch, r.SchemaVersion); err != nil {
+		return err
+	}
+	if r.Query == "" {
+		return errors.New("search.query: required")
+	}
+	if r.Limit != nil && (*r.Limit < 1 || *r.Limit > MaxCandidates) {
+		return fmt.Errorf("search.limit: want 1..%d, got %d", MaxCandidates, *r.Limit)
+	}
+	return checkRedacted("search.query", r.Query)
+}
+
+// SearchResponse is the same candidate shape as lookup: one reason per hit.
+type SearchResponse struct {
+	SchemaVersion string      `json:"schema_version"`
+	Candidates    []Candidate `json:"candidates"`
+}
+
+// Validate applies the candidate ceiling and the per-candidate rules.
+func (r SearchResponse) Validate() error {
+	return validateCandidates(OperationSearch, r.SchemaVersion, r.Candidates)
+}
+
+// RecordRequest submits one redacted observation.
+type RecordRequest struct {
+	SchemaVersion string     `json:"schema_version"`
+	Event         ErrorEvent `json:"event"`
+}
+
+// Validate reuses ErrorEvent.Validate, so a record cannot smuggle in an event
+// the capture path would have rejected.
+func (r RecordRequest) Validate() error {
+	if err := requireVersion(OperationRecord, r.SchemaVersion); err != nil {
+		return err
+	}
+	if err := r.Event.Validate(); err != nil {
+		return fmt.Errorf("record.event: %w", err)
+	}
+	return nil
+}
+
+// RecordResponse reports what the write created or reused.
+type RecordResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	EventID       string `json:"event_id"`
+	OccurrenceID  string `json:"occurrence_id"`
+	IssueID       string `json:"issue_id"`
+	Fingerprint   string `json:"fingerprint"`
+	Created       bool   `json:"created"`
+}
+
+// Validate checks the identifiers and the fingerprint shape.
+func (r RecordResponse) Validate() error {
+	if err := requireVersion(OperationRecord, r.SchemaVersion); err != nil {
+		return err
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{{"event_id", r.EventID}, {"occurrence_id", r.OccurrenceID}, {"issue_id", r.IssueID}} {
+		if field.value == "" {
+			return fmt.Errorf("record.%s: required", field.name)
+		}
+	}
+	if !fingerprintPattern.MatchString(r.Fingerprint) {
+		return fmt.Errorf("record.fingerprint: want %d lowercase hex characters, got %q", FingerprintLength, r.Fingerprint)
+	}
+	return nil
+}
+
+// FeedbackRequest submits an outcome. It has no trust field on purpose:
+// errkb_trust() computes trust from outcomes (EKB-021).
+type FeedbackRequest struct {
+	SchemaVersion     string `json:"schema_version"`
+	IssueID           string `json:"issue_id"`
+	SolutionVersionID string `json:"solution_version_id"`
+	Outcome           string `json:"outcome"`
+	Note              string `json:"note,omitempty"`
+}
+
+// Validate locks the outcome enum and keeps the note redacted.
+func (r FeedbackRequest) Validate() error {
+	if err := requireVersion(OperationFeedback, r.SchemaVersion); err != nil {
+		return err
+	}
+	if r.IssueID == "" {
+		return errors.New("feedback.issue_id: required")
+	}
+	if r.SolutionVersionID == "" {
+		return errors.New("feedback.solution_version_id: required")
+	}
+	if !validOutcomes[r.Outcome] {
+		return fmt.Errorf("feedback.outcome: unknown outcome %q", r.Outcome)
+	}
+	return checkRedacted("feedback.note", r.Note)
+}
+
+// FeedbackResponse is the stored outcome identity.
+type FeedbackResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	OutcomeID     string `json:"outcome_id"`
+	Recorded      bool   `json:"recorded"`
+}
+
+// Validate checks the recorded outcome id.
+func (r FeedbackResponse) Validate() error {
+	if err := requireVersion(OperationFeedback, r.SchemaVersion); err != nil {
+		return err
+	}
+	if r.OutcomeID == "" {
+		return errors.New("feedback.outcome_id: required")
+	}
+	return nil
+}
+
+// ListRequest pages through issues or solutions.
+type ListRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	Kind          string `json:"kind"`
+	ProjectKey    string `json:"project_key,omitempty"`
+	Limit         *int   `json:"limit,omitempty"`
+	Cursor        string `json:"cursor,omitempty"`
+}
+
+// Validate locks the kind enum and a page size of 1..100.
+func (r ListRequest) Validate() error {
+	if err := requireVersion(OperationList, r.SchemaVersion); err != nil {
+		return err
+	}
+	if !validListKinds[r.Kind] {
+		return fmt.Errorf("list.kind: unknown kind %q", r.Kind)
+	}
+	if r.Limit != nil && (*r.Limit < 1 || *r.Limit > 100) {
+		return fmt.Errorf("list.limit: want 1..100, got %d", *r.Limit)
+	}
+	return nil
+}
+
+// ListItem is one page entry.
+type ListItem struct {
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+// Validate checks the entry and its timestamp.
+func (i ListItem) Validate() error {
+	if i.ID == "" {
+		return errors.New("list.item.id: required")
+	}
+	if i.Title == "" {
+		return errors.New("list.item.title: required")
+	}
+	if i.UpdatedAt == "" {
+		return errors.New("list.item.updated_at: required")
+	}
+	if _, err := time.Parse(time.RFC3339, i.UpdatedAt); err != nil {
+		return fmt.Errorf("list.item.updated_at: %w", err)
+	}
+	return checkRedacted("list.item.title", i.Title)
+}
+
+// ListResponse is one page plus a cursor when more pages exist.
+type ListResponse struct {
+	SchemaVersion string     `json:"schema_version"`
+	Items         []ListItem `json:"items"`
+	NextCursor    string     `json:"next_cursor,omitempty"`
+}
+
+// Validate checks every entry.
+func (r ListResponse) Validate() error {
+	if err := requireVersion(OperationList, r.SchemaVersion); err != nil {
+		return err
+	}
+	for i, item := range r.Items {
+		if err := item.Validate(); err != nil {
+			return fmt.Errorf("item %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// StatsRequest is the optional project filter.
+type StatsRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	ProjectKey    string `json:"project_key,omitempty"`
+}
+
+// Validate checks the version.
+func (r StatsRequest) Validate() error {
+	return requireVersion(OperationStats, r.SchemaVersion)
+}
+
+// StatsTotals counts the four entities from plan section 4.
+type StatsTotals struct {
+	Events    int `json:"events"`
+	Issues    int `json:"issues"`
+	Solutions int `json:"solutions"`
+	Outcomes  int `json:"outcomes"`
+}
+
+// StatsRetrieval is the retrieval latency summary from plan section 13.
+type StatsRetrieval struct {
+	P50MS int `json:"p50_ms"`
+	P95MS int `json:"p95_ms"`
+}
+
+// StatsTokens keeps estimated and measured savings apart: merging them would
+// overstate the product.
+type StatsTokens struct {
+	EstimatedSaved int `json:"estimated_saved"`
+	MeasuredSaved  int `json:"measured_saved"`
+	MeasuredEvents int `json:"measured_events"`
+}
+
+// StatsResponse is the knowledge-base summary.
+type StatsResponse struct {
+	SchemaVersion string         `json:"schema_version"`
+	Totals        StatsTotals    `json:"totals"`
+	Retrieval     StatsRetrieval `json:"retrieval"`
+	Tokens        StatsTokens    `json:"tokens"`
+}
+
+// Validate rejects negative counters and an impossible p95 < p50.
+func (r StatsResponse) Validate() error {
+	if err := requireVersion(OperationStats, r.SchemaVersion); err != nil {
+		return err
+	}
+	counters := []struct {
+		name  string
+		value int
+	}{
+		{"totals.events", r.Totals.Events}, {"totals.issues", r.Totals.Issues},
+		{"totals.solutions", r.Totals.Solutions}, {"totals.outcomes", r.Totals.Outcomes},
+		{"retrieval.p50_ms", r.Retrieval.P50MS}, {"retrieval.p95_ms", r.Retrieval.P95MS},
+		{"tokens.estimated_saved", r.Tokens.EstimatedSaved},
+		{"tokens.measured_saved", r.Tokens.MeasuredSaved},
+		{"tokens.measured_events", r.Tokens.MeasuredEvents},
+	}
+	for _, counter := range counters {
+		if counter.value < 0 {
+			return fmt.Errorf("stats.%s: must be zero or positive", counter.name)
+		}
+	}
+	if r.Retrieval.P95MS < r.Retrieval.P50MS {
+		return fmt.Errorf("stats.retrieval: p95_ms %d is below p50_ms %d", r.Retrieval.P95MS, r.Retrieval.P50MS)
+	}
+	return nil
+}
+
+// requireVersion names the operation so a wrong version is easy to locate.
+func requireVersion(operation, version string) error {
+	if version != ToolSchemaVersion {
+		return fmt.Errorf("%s.schema_version: want %q, got %q", operation, ToolSchemaVersion, version)
+	}
+	return nil
+}
+
+// validateCandidates applies the ceiling and the per-candidate rules for the
+// two read operations.
+func validateCandidates(operation, version string, candidates []Candidate) error {
+	if err := requireVersion(operation, version); err != nil {
+		return err
+	}
+	if len(candidates) > MaxCandidates {
+		return fmt.Errorf("%s: want at most %d candidates, got %d", operation, MaxCandidates, len(candidates))
+	}
+	for i, candidate := range candidates {
+		if err := candidate.Validate(); err != nil {
+			return fmt.Errorf("candidate %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+// checkRedacted reuses the ErrorEvent redaction minimum on every user-supplied
+// text field, so a query or a note cannot carry a secret into the database.
+func checkRedacted(field, text string) error {
+	if text == "" {
+		return nil
+	}
+	for _, pattern := range sensitivePatterns {
+		if pattern.re.MatchString(text) {
+			return fmt.Errorf("%s: still contains %s, redact before the write point", field, pattern.what)
+		}
+	}
+	return nil
+}
