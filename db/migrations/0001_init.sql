@@ -1,0 +1,6 @@
+-- Migration 0001: the initial schema shell.
+--
+-- The migration runner applies every file in filename order, once, and records
+-- the applied name in schema_migrations. The real entities from section 4 of
+-- the implementation plan replace this shell in EKB-019; it exists here so the
+-- database job in CI applies a real migration chain from the first commit.
