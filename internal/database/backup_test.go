@@ -116,8 +116,12 @@ func TestBackupRestoreIntoEmptyDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("back up: %v", err)
 	}
-	if manifest.LedgerRows != 6 {
-		t.Fatalf("ledger rows = %d, want 6", manifest.LedgerRows)
+	committed, err := database.LoadMigrations(migrationsDir())
+	if err != nil {
+		t.Fatalf("load the committed migrations: %v", err)
+	}
+	if manifest.LedgerRows != int64(len(committed)) {
+		t.Fatalf("ledger rows = %d, want %d", manifest.LedgerRows, len(committed))
 	}
 	if manifest.LedgerVersion == "" {
 		t.Fatal("the backup manifest carries no ledger version")

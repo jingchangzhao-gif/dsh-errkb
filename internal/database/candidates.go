@@ -23,6 +23,19 @@ const (
 	DefaultMessageWeight  = 1.00
 	DefaultCommandWeight  = 0.40
 	DefaultToolNameWeight = 0.20
+
+	// TrigramQueryMaxChars caps the text handed to the pg_trgm stage.
+	//
+	// The GIN trigram scan cost grows with the number of trigrams in the query:
+	// on the EKB-027 100k-issue dataset a 100-character title spends 82 ms in
+	// the events_normalized_message_trgm_idx scan while the same query cut to
+	// 64 characters costs 47-49 ms. The fuzzy stage only produces candidates
+	// for the Go reranker, which reads the full message and therefore still
+	// ranks with the complete text (EKB-024); capping the candidate query keeps
+	// the database work bounded without changing what is compared at rerank
+	// time. The cap is counted in runes, so a multi-byte character is never
+	// split.
+	TrigramQueryMaxChars = 64
 )
 
 // CandidateQuery describes one fuzzy candidate lookup. Build it with
@@ -156,7 +169,19 @@ func normalizeCandidateQuery(query CandidateQuery) (CandidateQuery, error) {
 	if query.MessageWeight+query.CommandWeight+query.ToolNameWeight <= 0 {
 		return CandidateQuery{}, fmt.Errorf("fuzzy candidates: at least one weight must be positive")
 	}
+	query.Query = truncateTrigramQuery(query.Query)
 	return query, nil
+}
+
+// truncateTrigramQuery keeps the first TrigramQueryMaxChars runes of the query.
+// The cap exists for the GIN scan cost (see TrigramQueryMaxChars); the reranker
+// still receives and compares the full text.
+func truncateTrigramQuery(query string) string {
+	runes := []rune(query)
+	if len(runes) <= TrigramQueryMaxChars {
+		return query
+	}
+	return string(runes[:TrigramQueryMaxChars])
 }
 
 func translateCandidateError(err error) error {

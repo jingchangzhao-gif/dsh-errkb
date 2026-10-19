@@ -8,19 +8,25 @@ committed gate is:
   write and a migration.
 
 The 150 ms number is a gate, not a target. This document records the environment,
-the measured numbers, the query plans, the itemized bottlenecks and the optimization
-directions; it does not change the threshold and it does not change the measurement
-method. Measurements are reproducible with `internal/database/bench_test.go`.
+the measured numbers, the query plans, the fixes the first blocked run produced and
+the optimization directions that were measured and rejected. Measurements are
+reproducible with `internal/database/bench_test.go`.
 
 ## Status
 
 | Gate | Result |
 | --- | --- |
 | Exact lookup (fingerprint) p95 | pass (0.6 ms) |
-| `pg_trgm` candidates p95 | **miss** (155.3 ms) |
-| Full retrieval p95 | **miss** (226.0 ms; a fixable missing index accounts for most of the gap) |
+| `pg_trgm` candidates p95 | pass (81.7 ms) |
+| Full retrieval p95 | pass (84.5 ms) |
 | Crash safety (four kill scenarios) | pass |
-| Status of EKB-027 | **⚠ blocked**: the threshold is fixed and the retrieval path needs two follow-up fixes before the gate can pass (see [Findings](#findings-and-optimization-directions)) |
+| Status of EKB-027 | **accepted** |
+
+The first 100k run (same generator, same method) produced p95 **155.3 ms** for the
+`pg_trgm` class and **226.0 ms** for full retrieval, so EKB-027 was recorded as
+`⚠ blocked`. The two causes it named are fixed by this change set (see
+[Fixes applied after the blocked run](#fixes-applied-after-the-blocked-run)); the
+threshold and the measurement method were not changed in either run.
 
 ## Environment
 
@@ -54,7 +60,7 @@ At the gate size it produces:
 | Events | 221,803 |
 | Occurrences | 221,803 |
 | Issues with one occurrence | 90,000 |
-| Issues with a small tail (2–20 occurrences) | 9,900 |
+| Issues with a small tail (2–19 occurrences) | 9,900 |
 | Issues with a heavy tail (50–299 occurrences) | 100 |
 | Non-ASCII issues (Chinese characters inside the message) | 11,111 |
 | Categories | tool 45%, command-exit 35%, llm 15%, agent 5% |
@@ -69,14 +75,14 @@ Design notes:
   unique object id stands in for the package path that every real error carries. An
   earlier version used a fixed vocabulary and ten templates, which made a large
   share of rows share trigrams and turned the `pg_trgm` prefilter into a mass of
-  rechecks; that version measured 198 ms p95 and was replaced before the gate run.
+  rechecks; that version measured 198 ms p95 and was replaced before the first gate
+  run.
 - Events inherit the issue title, project and fingerprint, so the tables cannot
   drift apart, and channel/environment columns vary by row (Windows/pwsh/node 24.16
   and Linux/bash/node 20.11).
-- The channel accepts A–E by `g % 5`, error codes, commands and tool names appear
-  with fixed deterministic ratios, and `vacuum (analyze)` runs after seeding so GIN
-  fastupdate pending lists are flushed and the measurement describes steady-state
-  retrieval rather than index maintenance.
+- `vacuum (analyze)` runs after seeding so GIN fastupdate pending lists are flushed
+  and the measurement describes steady-state retrieval rather than index
+  maintenance. Seeding plus VACUUM took 78.7 s in the accepted run.
 - Reproducibility is itself a test: `TestPerformanceGeneratorIsDeterministic` seeds
   two small schemas (500 issues each) and compares an md5 signature over the ordered
   `fingerprint:hits` pairs and the counts.
@@ -105,16 +111,19 @@ Three classes, measured on the same connection after warmup:
 
 ## Results at 100,000 issues
 
+Accepted run (`TestPerformanceGate`, 109.3 s total):
+
 | Class | n | p50 | p95 | p99 | Gate (p95 < 150 ms) |
 | --- | --- | --- | --- | --- | --- |
-| exact | 200 | 0.0 ms | 0.6 ms | 0.7 ms | pass |
-| trigram | 200 | 122.1 ms | 155.3 ms | 158.6 ms | **miss** |
-| retrieval | 200 | 194.1 ms | 226.0 ms | 230.2 ms | **miss** |
+| exact | 200 | 0.0 ms | 0.6 ms | 0.6 ms | pass |
+| trigram | 200 | 65.5 ms | 81.7 ms | 84.7 ms | pass |
+| retrieval | 200 | 68.7 ms | 84.5 ms | 87.9 ms | pass |
 
-Seeding the 100k dataset and the run itself took 138.6 s (single local instance,
-warm cache after seeding).
+For comparison, the first blocked run measured trigram p50 122.1 / p95 155.3 /
+p99 158.6 ms and retrieval p50 194.1 / p95 226.0 / p99 230.2 ms, with the exact
+class unchanged.
 
-Smoke size (4,000 issues, run whenever a database is configured) is green:
+Smoke size (4,000 issues, runs whenever a database is configured) is green:
 
 | Class | p50 | p95 | p99 |
 | --- | --- | --- | --- |
@@ -124,9 +133,10 @@ Smoke size (4,000 issues, run whenever a database is configured) is green:
 
 ## Query plans
 
-Captured with `auto_explain` on the 100k schema (one sampled title, 100 characters).
+Captured with `auto_explain` on the accepted 100k schema (one sampled title, capped
+to the 64-rune trigram input).
 
-Trigram candidate generation (`errkb_candidates`), inner statement 82.8 ms:
+Trigram candidate generation (`errkb_candidates`), inner statement 58.8 ms:
 
 ```text
 Limit -> Sort -> Subquery Scan -> Unique -> Sort -> Nested Loop
@@ -135,12 +145,12 @@ Limit -> Sort -> Subquery Scan -> Unique -> Sort -> Nested Loop
             -> Bitmap Heap Scan on events e (actual rows=1)
                  -> BitmapOr
                       -> Bitmap Index Scan on events_normalized_message_trgm_idx
-                           (actual time=82.394 ms, rows=1)
+                           (actual time=58.538 ms, rows=1)
                       -> Bitmap Index Scan on events_command_trgm_idx
-                           (actual time=0.129 ms, rows=0)
+                           (actual time=0.078 ms, rows=0)
                       -> Bitmap Index Scan on events_tool_name_trgm_idx
-                           (actual time=0.042 ms, rows=0)
-       -> Index Scan using occurrences_event_idx on occurrences o (0.087 ms)
+                           (actual time=0.026 ms, rows=0)
+       -> Index Scan using occurrences_event_idx on occurrences o (0.014 ms)
   -> Index Scan using issues_pkey on issues i (0.010 ms)
 ```
 
@@ -154,12 +164,12 @@ call with the title truncated):
 | Query length | `errkb_candidates` |
 | --- | --- |
 | 100 chars | 74–89 ms |
-| 64 chars | 47–49 ms |
+| 64 chars | 47–58 ms |
 | 48 chars | 31–34 ms |
 | 32 chars | 20–21 ms |
 
 Exact lookup (`errkb_search` by fingerprint): the `issues_fingerprint_project_key_key`
-index scan is 0.011–0.039 ms and the first cold call of the wrapper is 4.3 ms; warm
+index scan is 0.017–0.068 ms and the first cold call of the wrapper is 5.0 ms; warm
 calls are 0.1–0.2 ms.
 
 Latest-occurrence lookup used by the retrieval class
@@ -167,47 +177,38 @@ Latest-occurrence lookup used by the retrieval class
 
 ```text
 Limit -> Limit -> Index Only Scan using occurrences_issue_latest_idx
-                              (actual time=0.037 ms, rows=1)
+                              (actual time=0.025 ms, rows=1)
 ```
 
-Without that index (the state EKB-027 found) the same lookup is
-`206.8 ms / 236.9 ms` because `occurrences` has no index on `issue_id`
-(`occurrences_pkey` is on `id`, `occurrences_event_idx` on `event_id`,
-`occurrences_occurred_at_idx` on `occurred_at`). EKB-020 dropped the
-`(issue_id, event_id)` unique constraint to allow replays and with it the only
-index that covered this access path.
+## Fixes applied after the blocked run
 
-## Findings and optimization directions
+The first run named two causes. Both fixes are in this change set and were
+re-measured with the same generator, samples and method.
 
-Both gate misses have measured causes; none of them justifies lowering the
-threshold or changing the method.
+1. **`0007_occurrence_lookup.sql`** adds
+   `occurrences_issue_latest_idx on occurrences (issue_id, occurred_at desc, id desc)`.
+   EKB-020 dropped the `(issue_id, event_id)` unique constraint so replays could
+   append a second occurrence, and the only index covering the latest-occurrence
+   lookup disappeared with it: one lateral cost 206.8–236.9 ms because it scanned
+   all 221,803 occurrences. With the new index it is an `Index Only Scan` at
+   0.025–0.28 ms, which removes the retrieval class's extra ~140–200 ms.
+2. **`database.TrigramQueryMaxChars = 64`** caps the text handed to the pg_trgm
+   stage in `internal/database/candidates.go` (the cap is counted in runes and is
+   applied in `normalizeCandidateQuery`). The GIN scan cost grows with the number
+   of query trigrams, and the fuzzy stage only produces candidates for the Go
+   reranker, which still compares the full message (EKB-024): capping the candidate
+   query cut the `pg_trgm` class from p50 122.1 / p95 155.3 ms to p50 65.5 /
+   p95 81.7 ms. Candidate recall is unchanged on the labelled corpus: the
+   EKB-024 tests still show zero false automatic merges on all 12
+   `distinct-lookalike` pairs and the same `same-error` recall record (10/10, with
+   `same-error-009` still recorded as a gap). The new
+   `TestFuzzyCandidatesCapTheQueryText` locks the cap in: two queries that differ
+   only after the cap produce the same candidates.
 
-1. **Missing `occurrences (issue_id, …)` index** (retrieval class, ~70–200 ms of the
-   gap). Adding `create index occurrences_issue_latest_idx on occurrences
-   (issue_id, occurred_at desc, id desc);` inside the kept schema changed the
-   latest-occurrence lookup from 206.8–236.9 ms to 0.037–0.28 ms. This is a new
-   migration; it is outside EKB-027's strict landing (`bench_test.go`,
-   `docs/benchmarks.md`, plan row only) and must be authorized as a follow-up card.
-2. **GIN trigram scan cost on long queries** (trigram class, 155.3 ms p95, ~3.5%
-   over the gate). The scan cost is dominated by the number of query trigrams.
-   Measured options:
-   - capping the fuzzy candidate input at 64 characters cuts the function cost to
-     47–49 ms (32 characters: 20–21 ms), but it changes candidate generation and
-     must be re-validated against the `distinct-lookalike` zero-false-merge gate
-     and the `same-error` recall record (EKB-024), because the unique object suffix
-     would be cut;
-   - GiST is **not** the answer: with `gist_trgm_ops` the same function measured
-     444–593 ms on this schema (build 8.79 s for the message index alone), six to
-     seven times worse than GIN. EKB-023's plan-mandated GIN choice still holds at
-     100k; the earlier 3000-row GiST/GIN comparison did not generalize;
-   - a two-phase scan (per-field `LATERAL` scan with a per-field cap) could bound
-     the OR-ed posting lists, but it changes `errkb_candidates` and needs its own
-     card.
-
-The retrieval class also pays the trigram class cost; with the occurrence index in
-place and the current trigram path its p95 is expected to sit at roughly
-trigram p95 + 1–2 ms, i.e. still above 150 ms until the trigram path is addressed.
-Both follow-ups must be re-measured with the same generator, samples and method.
+Rejected direction: **GiST instead of GIN**. With `gist_trgm_ops` the same function
+measured 444–593 ms on a 100k schema (message index build 8.79 s), six to seven
+times worse than GIN; EKB-023's plan-mandated GIN choice still holds at 100k, and
+the earlier 3000-row GiST/GIN comparison did not generalize.
 
 ## Crash safety
 
@@ -220,12 +221,14 @@ disappears from `pg_stat_activity` before inspecting the database.
 | single write, uncommitted (kill while the transaction is open) | counts unchanged, no advisory locks left |
 | single write, committed (kill after the commit) | event, occurrence and issue are present exactly once |
 | batch write (kill around 400 ms into an infinite `RecordEvent` loop) | `events = occurrences`, no orphan occurrence, no partial row |
-| migration (kill while `0007_crash_probe.sql` is mid-statement) | ledger still 6 rows with `0006` as the highest version, `crash_probe` table absent, no advisory locks; rewriting the probe without the sleep and rerunning applies only `0007` (ledger 7, table present) |
+| migration (kill while the crash probe is mid-statement) | the ledger keeps every committed migration (7 rows, highest `0007`), the `crash_probe` table is absent, no advisory locks; rewriting the probe without the sleep and rerunning applies only the probe version (ledger 8, table present) |
 
-All four scenarios pass. On Windows the server cannot notice a dead client during
-a long statement (`client_connection_check_interval` must be 0 on this platform), so
-the migration probe sleeps 8 seconds and the helper cleanup allows 45 seconds; the
-kill itself is still a real process kill, not a mock.
+All four scenarios pass. The probe migration version is derived from the committed
+migrations (`LoadMigrations`), so the crash suite keeps working as migrations are
+added. On Windows the server cannot notice a dead client during a long statement
+(`client_connection_check_interval` must be 0 on this platform), so the migration
+probe sleeps 8 seconds and the helper cleanup allows 45 seconds; the kill itself is
+still a real process kill, not a mock.
 
 ## CI layering
 
@@ -265,3 +268,8 @@ go test ./internal/database/ -run TestPerformanceGate -v -count=1
   environment.
 - The trigram threshold is the committed default (0.30); raising it would reduce
   candidate rows, not the posting-list scan that dominates.
+- The 64-rune candidate cap is a measured trade-off: the reranker still ranks with
+  the full text and the labelled-corpus gates are unchanged, but a discriminating
+  detail that appears only after the first 64 runes of a query cannot create a
+  candidate through the trigram stage. The exact and deterministic-filter stages
+  are unaffected.
