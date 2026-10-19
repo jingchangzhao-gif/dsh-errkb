@@ -247,7 +247,7 @@ compat: {
 		}
 		mcp_tools: {
 			file: "spec/mcp-tools.cue"
-			definitions: ["LookupRequest", "LookupResponse", "SearchRequest", "SearchResponse", "RecordRequest", "RecordResponse", "FeedbackRequest", "FeedbackResponse", "ListRequest", "ListResponse", "StatsRequest", "StatsResponse", "Candidate", "ListItem", "Tool"]
+			definitions: ["LookupRequest", "LookupResponse", "SearchRequest", "SearchResponse", "RecordRequest", "RecordResponse", "FeedbackRequest", "FeedbackResponse", "ListRequest", "ListResponse", "StatsRequest", "StatsResponse", "Candidate", "Solution", "ListItem", "Tool"]
 			schema_version: "v1"
 			semantics:      "The six MCP operations (lookup, search, record, feedback, list, stats) with their request and response payloads, the reason-carrying candidate shape and the three-candidate ceiling. Each payload carries its own schema_version."
 			unknown_fields: "reject"
@@ -317,6 +317,12 @@ compat: {
 				"Candidate.match_detail",
 				"Candidate.approximate",
 				"Candidate.confidence",
+				"Candidate.solution",
+				"Candidate.solution.solution_version_id",
+				"Candidate.solution.body",
+				"Candidate.solution.source",
+				"Candidate.solution.applies_to",
+				"Candidate.solution.trust",
 				"ListItem.id",
 				"ListItem.title",
 				"ListItem.updated_at",

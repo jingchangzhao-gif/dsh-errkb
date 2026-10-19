@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -52,8 +53,13 @@ func newClient(name string, conn net.Conn) *Client {
 	return &Client{name: name, conn: conn, reader: bufio.NewReaderSize(conn, pipeReadBuffer)}
 }
 
-// Dial connects to the daemon on the default pipe using the caller's context.
+// Dial connects to the daemon on the pipe from ERRKB_PIPE, or the default when
+// the variable is unset. The override lets a machine run an isolated daemon
+// (tests, a second profile) without recompiling.
 func Dial(ctx context.Context) (*Client, error) {
+	if name := strings.TrimSpace(os.Getenv("ERRKB_PIPE")); name != "" {
+		return DialPipe(ctx, name)
+	}
 	return DialPipe(ctx, DefaultPipeName)
 }
 

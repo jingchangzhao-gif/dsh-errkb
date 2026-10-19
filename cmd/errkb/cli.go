@@ -138,6 +138,14 @@ func (env *cliEnv) renderCandidates(candidates []contract.Candidate, jsonValue a
 		// The contract has no separate environment field (EKB-008): environment
 		// differences travel inside match_detail.
 		fmt.Fprintf(env.stdout, "   detail %s\n", candidate.MatchDetail)
+		if candidate.Solution != nil {
+			fmt.Fprintf(env.stdout, "   fix %s\n", candidate.Solution.Body)
+			fmt.Fprintf(env.stdout, "   source %s  trust %.2f\n", candidate.Solution.Source, candidate.Solution.Trust)
+			if candidate.Solution.AppliesTo != "" {
+				fmt.Fprintf(env.stdout, "   applies to %s\n", candidate.Solution.AppliesTo)
+			}
+			fmt.Fprintf(env.stdout, "   version %s\n", candidate.Solution.SolutionVersionID)
+		}
 	}
 	return exitOK
 }

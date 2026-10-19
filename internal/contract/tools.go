@@ -43,15 +43,46 @@ var (
 	validListKinds = map[string]bool{"issue": true, "solution": true}
 )
 
+// CandidateSolution is the verified fix a hit carries (EKB-035). It is
+// optional: a brand-new issue has none, and the caller must see that absence
+// instead of an empty body. Only verified versions are attached - an
+// unverified candidate is not advice.
+type CandidateSolution struct {
+	SolutionVersionID string  `json:"solution_version_id"`
+	Body              string  `json:"body"`
+	Source            string  `json:"source"`
+	AppliesTo         string  `json:"applies_to"`
+	Trust             float64 `json:"trust"`
+}
+
+// Validate mirrors the CUE definition so a malformed solution cannot cross
+// the pipe.
+func (s CandidateSolution) Validate() error {
+	if s.SolutionVersionID == "" {
+		return errors.New("candidate.solution.solution_version_id: required")
+	}
+	if s.Body == "" {
+		return errors.New("candidate.solution.body: required")
+	}
+	if s.Source == "" {
+		return errors.New("candidate.solution.source: required")
+	}
+	if s.Trust < 0 || s.Trust > 1 {
+		return fmt.Errorf("candidate.solution.trust: want 0..1, got %v", s.Trust)
+	}
+	return checkRedacted("candidate.solution.body", s.Body)
+}
+
 // Candidate is one reason-carrying hit.
 type Candidate struct {
-	IssueID     string   `json:"issue_id"`
-	Fingerprint string   `json:"fingerprint"`
-	Title       string   `json:"title"`
-	MatchReason string   `json:"match_reason"`
-	MatchDetail string   `json:"match_detail"`
-	Approximate bool     `json:"approximate"`
-	Confidence  *float64 `json:"confidence"`
+	IssueID     string             `json:"issue_id"`
+	Fingerprint string             `json:"fingerprint"`
+	Title       string             `json:"title"`
+	MatchReason string             `json:"match_reason"`
+	MatchDetail string             `json:"match_detail"`
+	Approximate bool               `json:"approximate"`
+	Confidence  *float64           `json:"confidence"`
+	Solution    *CandidateSolution `json:"solution,omitempty"`
 }
 
 // Validate enforces the reason fields and the exact/fuzzy split: an exact
@@ -83,6 +114,11 @@ func (c Candidate) Validate() error {
 	}
 	if !exactMatchReasons[c.MatchReason] && !c.Approximate {
 		return fmt.Errorf("candidate.approximate: %q only produces candidates, want true", c.MatchReason)
+	}
+	if c.Solution != nil {
+		if err := c.Solution.Validate(); err != nil {
+			return err
+		}
 	}
 	return checkRedacted("candidate.title", c.Title)
 }

@@ -24,6 +24,7 @@ func runDaemon(args []string) int {
 	dsn := flags.String("dsn", os.Getenv("ERRKB_DSN"), "PostgreSQL connection string (default $ERRKB_DSN)")
 	migrations := flags.String("migrations", "db/migrations", "directory that holds the db/migrations files")
 	lockName := flags.String("lock-name", service.DefaultLockName, "Windows named mutex that enforces a single instance")
+	pipeName := flags.String("pipe", service.DefaultPipeName, "local Named Pipe the API listens on")
 	healthPath := flags.String("health-file", daemonDataPath("health.json"), "machine-readable health document")
 	logPath := flags.String("log-file", daemonDataPath("logs", "daemon.log"), "redacted, size-capped log file (never stdout)")
 	logMax := flags.Int64("log-max-bytes", service.DefaultLogMaxBytes, "rotate the log after this many bytes")
@@ -36,6 +37,7 @@ func runDaemon(args []string) int {
 		DSN:            *dsn,
 		MigrationsDir:  *migrations,
 		LockName:       *lockName,
+		PipeName:       *pipeName,
 		HealthPath:     *healthPath,
 		LogPath:        *logPath,
 		LogMaxBytes:    *logMax,
