@@ -200,6 +200,122 @@ compat: {
 				"offline.replay_interval_ms",
 			]
 		}
+		connector: {
+			file: "spec/connector.cue"
+			definitions: ["Observation", "ConnectorCaptureRequest", "ConnectorCaptureResponse", "ConnectorLookupRequest", "ConnectorLookupResponse", "ConnectorNoticeRequest", "ConnectorNoticeResponse", "ConnectorFeedbackRequest", "ConnectorFeedbackResponse"]
+			schema_version: "v1"
+			semantics:      "The four connector SDK actions (capture, lookup, notice, feedback) a host adapter may take against the core: versioned envelopes, a raw observation before the core classifies and redacts it, at most three reason-carrying candidates, explicit degraded flags and an outcome that never computes trust. The capability declaration and its probe result stay #ConnectorCapability in connector-capability.cue and are not repeated here."
+			unknown_fields: "tolerate"
+			decoder: {
+				file:   "internal/capture/connector.go"
+				marker: "DisallowUnknownFields"
+			}
+			version_anchor: "#ConnectorSDKVersion"
+			fields: [
+				"ConnectorCaptureRequest.connector_id",
+				"ConnectorCaptureRequest.observation",
+				"ConnectorCaptureRequest.schema_version",
+				"ConnectorCaptureRequest.session_id",
+				"ConnectorCaptureResponse.created",
+				"ConnectorCaptureResponse.event_id",
+				"ConnectorCaptureResponse.fingerprint",
+				"ConnectorCaptureResponse.issue_id",
+				"ConnectorCaptureResponse.occurrence_id",
+				"ConnectorCaptureResponse.schema_version",
+				"ConnectorFeedbackRequest.connector_id",
+				"ConnectorFeedbackRequest.environment",
+				"ConnectorFeedbackRequest.environment.connector",
+				"ConnectorFeedbackRequest.environment.os",
+				"ConnectorFeedbackRequest.environment.runtime_versions",
+				"ConnectorFeedbackRequest.environment.shell",
+				"ConnectorFeedbackRequest.issue_id",
+				"ConnectorFeedbackRequest.note",
+				"ConnectorFeedbackRequest.outcome",
+				"ConnectorFeedbackRequest.schema_version",
+				"ConnectorFeedbackRequest.session_id",
+				"ConnectorFeedbackRequest.solution_version_id",
+				"ConnectorFeedbackResponse.outcome_id",
+				"ConnectorFeedbackResponse.recorded",
+				"ConnectorFeedbackResponse.schema_version",
+				"ConnectorLookupRequest.connector_id",
+				"ConnectorLookupRequest.error_code",
+				"ConnectorLookupRequest.fingerprint",
+				"ConnectorLookupRequest.issue_id",
+				"ConnectorLookupRequest.normalized_message",
+				"ConnectorLookupRequest.project_key",
+				"ConnectorLookupRequest.schema_version",
+				"ConnectorLookupRequest.session_id",
+				"ConnectorLookupResponse.candidates",
+				"ConnectorLookupResponse.degraded",
+				"ConnectorLookupResponse.schema_version",
+				"ConnectorNoticeRequest.candidate",
+				"ConnectorNoticeRequest.connector_id",
+				"ConnectorNoticeRequest.issue_id",
+				"ConnectorNoticeRequest.kind",
+				"ConnectorNoticeRequest.schema_version",
+				"ConnectorNoticeRequest.session_id",
+				"ConnectorNoticeRequest.trust",
+				"ConnectorNoticeResponse.chars",
+				"ConnectorNoticeResponse.kind",
+				"ConnectorNoticeResponse.schema_version",
+				"ConnectorNoticeResponse.text",
+				"ConnectorNoticeResponse.tokens",
+				"Observation.command",
+				"Observation.confidence",
+				"Observation.error_code",
+				"Observation.evidence",
+				"Observation.exit_code",
+				"Observation.message",
+				"Observation.observed_at",
+				"Observation.os",
+				"Observation.project_key",
+				"Observation.runtime_versions",
+				"Observation.shell",
+				"Observation.source",
+				"Observation.tool_name",
+			]
+			required: [
+				"ConnectorCaptureRequest.connector_id",
+				"ConnectorCaptureRequest.observation",
+				"ConnectorCaptureRequest.schema_version",
+				"ConnectorCaptureRequest.session_id",
+				"ConnectorCaptureResponse.created",
+				"ConnectorCaptureResponse.event_id",
+				"ConnectorCaptureResponse.fingerprint",
+				"ConnectorCaptureResponse.issue_id",
+				"ConnectorCaptureResponse.occurrence_id",
+				"ConnectorCaptureResponse.schema_version",
+				"ConnectorFeedbackRequest.connector_id",
+				"ConnectorFeedbackRequest.issue_id",
+				"ConnectorFeedbackRequest.outcome",
+				"ConnectorFeedbackRequest.schema_version",
+				"ConnectorFeedbackRequest.solution_version_id",
+				"ConnectorFeedbackResponse.outcome_id",
+				"ConnectorFeedbackResponse.recorded",
+				"ConnectorFeedbackResponse.schema_version",
+				"ConnectorLookupRequest.connector_id",
+				"ConnectorLookupRequest.schema_version",
+				"ConnectorLookupResponse.candidates",
+				"ConnectorLookupResponse.degraded",
+				"ConnectorLookupResponse.schema_version",
+				"ConnectorNoticeRequest.connector_id",
+				"ConnectorNoticeRequest.kind",
+				"ConnectorNoticeRequest.schema_version",
+				"ConnectorNoticeResponse.chars",
+				"ConnectorNoticeResponse.kind",
+				"ConnectorNoticeResponse.schema_version",
+				"ConnectorNoticeResponse.text",
+				"ConnectorNoticeResponse.tokens",
+				"Observation.message",
+				"Observation.observed_at",
+				"Observation.source",
+			]
+			enums: {
+				notice_kind: ["hit", "miss"]
+				notice_trust: ["trusted", "doubted", "suppressed"]
+				notice_result_kind: ["hit", "near", "no-fix", "miss", "doubted"]
+			}
+		}
 		connector_capability: {
 			file: "spec/connector-capability.cue"
 			definitions: ["ConnectorCapability"]
