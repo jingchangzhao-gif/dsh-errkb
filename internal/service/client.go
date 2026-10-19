@@ -1,0 +1,205 @@
+//go:build windows
+
+// The Named Pipe client (EKB-030). CLI commands never touch PostgreSQL; they
+// send one contract envelope per command to the daemon and render the answer.
+// Keeping the transport here also gives EKB-031 and EKB-037 one client to reuse.
+package service
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/Microsoft/go-winio"
+
+	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
+)
+
+// ErrServiceUnavailable means the daemon could not be reached on its pipe.
+var ErrServiceUnavailable = errors.New("the errkb daemon is not running")
+
+// CallError is a business error the daemon returned in its envelope. Code is
+// one of the closed set from spec/local-api.cue.
+type CallError struct {
+	Code      string
+	Message   string
+	Retryable bool
+}
+
+// Error implements error.
+func (e *CallError) Error() string { return fmt.Sprintf("%s: %s", e.Code, e.Message) }
+
+// Client is one connection to the local API. A CLI command dials, sends what it
+// needs and closes; the mutex keeps one connection's request/response pairing
+// intact if a caller shares it.
+type Client struct {
+	name   string
+	conn   net.Conn
+	reader *bufio.Reader
+	mu     sync.Mutex
+	nextID uint64
+}
+
+// newClient wraps an established connection.
+func newClient(name string, conn net.Conn) *Client {
+	return &Client{name: name, conn: conn, reader: bufio.NewReaderSize(conn, pipeReadBuffer)}
+}
+
+// Dial connects to the daemon on the default pipe using the caller's context.
+func Dial(ctx context.Context) (*Client, error) {
+	return DialPipe(ctx, DefaultPipeName)
+}
+
+// DialPipe connects to a specific local pipe path. An empty name means the
+// default. The dial fails with ErrServiceUnavailable; it never hangs past the
+// context deadline.
+func DialPipe(ctx context.Context, name string) (*Client, error) {
+	if name == "" {
+		name = DefaultPipeName
+	}
+	conn, err := winio.DialPipeContext(ctx, name)
+	if err != nil {
+		return nil, fmt.Errorf("%w (pipe %s): %v", ErrServiceUnavailable, name, err)
+	}
+	return newClient(name, conn), nil
+}
+
+// Call sends one operation and returns the validated raw result payload. The
+// envelope version, the operation, the request id and the result are checked
+// with the same contract validator the server uses, so a drifted daemon cannot
+// feed a command a frame the contract forbids.
+func (c *Client) Call(ctx context.Context, operation string, payload any) (json.RawMessage, error) {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("encode the %s payload: %w", operation, err)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.nextID++
+	request := contract.PipeRequest{
+		SchemaVersion: contract.PipeEnvelopeVersion,
+		RequestID:     fmt.Sprintf("cli-%d-%d", os.Getpid(), c.nextID),
+		Operation:     operation,
+		Payload:       encoded,
+	}
+	frame, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("encode the %s request: %w", operation, err)
+	}
+	if deadline, ok := ctx.Deadline(); ok {
+		_ = c.conn.SetDeadline(deadline)
+	} else {
+		_ = c.conn.SetDeadline(time.Time{})
+	}
+	if err := writePipeFrame(c.conn, frame); err != nil {
+		return nil, fmt.Errorf("%w (write to pipe %s): %v", ErrServiceUnavailable, c.name, err)
+	}
+	responseFrame, err := readPipeFrame(c.reader, DefaultPipeFrameBytes)
+	if err != nil {
+		return nil, fmt.Errorf("%w (read from pipe %s): %v", ErrServiceUnavailable, c.name, err)
+	}
+	response, err := contract.DecodePipeResponse(bytes.TrimSpace(responseFrame))
+	if err != nil {
+		return nil, fmt.Errorf("the daemon answered with a frame that breaks the local API contract: %w", err)
+	}
+	if response.RequestID != request.RequestID {
+		return nil, fmt.Errorf("the daemon answered request %q instead of %q", response.RequestID, request.RequestID)
+	}
+	if response.Error != nil {
+		return nil, &CallError{Code: response.Error.Code, Message: response.Error.Message, Retryable: response.Error.Retryable}
+	}
+	return response.Result, nil
+}
+
+// Close releases the pipe connection.
+func (c *Client) Close() error {
+	if c.conn == nil {
+		return nil
+	}
+	return c.conn.Close()
+}
+
+// Lookup asks "I know what this error is".
+func (c *Client) Lookup(ctx context.Context, request contract.LookupRequest) (contract.LookupResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationLookup, request)
+	if err != nil {
+		return contract.LookupResponse{}, err
+	}
+	var response contract.LookupResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.LookupResponse{}, fmt.Errorf("decode the lookup result: %w", err)
+	}
+	return response, nil
+}
+
+// Search asks the free-text question.
+func (c *Client) Search(ctx context.Context, request contract.SearchRequest) (contract.SearchResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationSearch, request)
+	if err != nil {
+		return contract.SearchResponse{}, err
+	}
+	var response contract.SearchResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.SearchResponse{}, fmt.Errorf("decode the search result: %w", err)
+	}
+	return response, nil
+}
+
+// Record submits one redacted observation.
+func (c *Client) Record(ctx context.Context, request contract.RecordRequest) (contract.RecordResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationRecord, request)
+	if err != nil {
+		return contract.RecordResponse{}, err
+	}
+	var response contract.RecordResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.RecordResponse{}, fmt.Errorf("decode the record result: %w", err)
+	}
+	return response, nil
+}
+
+// Feedback submits one outcome; it cannot set trust.
+func (c *Client) Feedback(ctx context.Context, request contract.FeedbackRequest) (contract.FeedbackResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationFeedback, request)
+	if err != nil {
+		return contract.FeedbackResponse{}, err
+	}
+	var response contract.FeedbackResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.FeedbackResponse{}, fmt.Errorf("decode the feedback result: %w", err)
+	}
+	return response, nil
+}
+
+// List pages through issues or solutions.
+func (c *Client) List(ctx context.Context, request contract.ListRequest) (contract.ListResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationList, request)
+	if err != nil {
+		return contract.ListResponse{}, err
+	}
+	var response contract.ListResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.ListResponse{}, fmt.Errorf("decode the list result: %w", err)
+	}
+	return response, nil
+}
+
+// Stats returns the knowledge-base summary.
+func (c *Client) Stats(ctx context.Context, request contract.StatsRequest) (contract.StatsResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationStats, request)
+	if err != nil {
+		return contract.StatsResponse{}, err
+	}
+	var response contract.StatsResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.StatsResponse{}, fmt.Errorf("decode the stats result: %w", err)
+	}
+	return response, nil
+}
