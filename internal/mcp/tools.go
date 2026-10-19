@@ -20,21 +20,23 @@ import (
 	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
 )
 
-// The six tool names are fixed by spec/mcp-tools.cue.
+// The eight tool names are fixed by spec/mcp-tools.cue.
 const (
-	ToolLookup   = "err_lookup"
-	ToolSearch   = "err_search"
-	ToolRecord   = "err_record"
-	ToolFeedback = "err_feedback"
-	ToolList     = "err_list"
-	ToolStats    = "err_stats"
+	ToolLookup         = "err_lookup"
+	ToolSearch         = "err_search"
+	ToolRecord         = "err_record"
+	ToolFeedback       = "err_feedback"
+	ToolList           = "err_list"
+	ToolStats          = "err_stats"
+	ToolRecordSolution = "err_record_solution"
+	ToolSetStatus      = "err_set_status"
 )
 
 // CorrectionNotice is published in initialize.instructions and appended to
 // every tool description. The plan requires the server to say out loud that
 // MCP is not passive capture, so a host cannot mistake installing it for
 // installing a recorder.
-const CorrectionNotice = "MCP provides active lookup, search, record, feedback, list and stats only. " +
+const CorrectionNotice = "MCP provides active lookup, search, record, feedback, list, stats, solution recording and status correction only. " +
 	"It is not passive capture: no tool watches a host, subscribes to events or reports failures by itself. " +
 	"Passive capture belongs to hooks, plugins, CLI wrappers and log channels."
 
@@ -44,7 +46,7 @@ const CorrectionNotice = "MCP provides active lookup, search, record, feedback, 
 // "the daemon is down".
 var ErrInvalidArguments = errors.New("invalid tool arguments")
 
-// Backend is the six-operation surface tools reuse. The daemon's SQL backend
+// Backend is the nine-operation surface tools reuse. The daemon's SQL backend
 // and the CLI's pipe client both speak it; a tool never talks to PostgreSQL.
 type Backend interface {
 	Lookup(context.Context, contract.LookupRequest) (contract.LookupResponse, error)
@@ -53,6 +55,8 @@ type Backend interface {
 	Feedback(context.Context, contract.FeedbackRequest) (contract.FeedbackResponse, error)
 	List(context.Context, contract.ListRequest) (contract.ListResponse, error)
 	Stats(context.Context, contract.StatsRequest) (contract.StatsResponse, error)
+	RecordSolution(context.Context, contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error)
+	SetStatus(context.Context, contract.SetStatusRequest) (contract.SetStatusResponse, error)
 }
 
 // Tool is one published descriptor plus its typed call.
@@ -73,9 +77,9 @@ func (t Tool) Call(ctx context.Context, arguments json.RawMessage) (any, error) 
 	return t.call(ctx, arguments)
 }
 
-// NewTools builds the six tools over one backend. The order is the order the
-// plan lists them, and there are exactly six: there is no seventh "capture"
-// tool to accidentally advertise.
+// NewTools builds the eight tools over one backend. The write-back pair
+// (record solution / set status) lets a host close the loop by itself; there is
+// still no capture tool to accidentally advertise.
 func NewTools(backend Backend) []Tool {
 	return []Tool{
 		lookupTool(backend),
@@ -84,6 +88,8 @@ func NewTools(backend Backend) []Tool {
 		feedbackTool(backend),
 		listTool(backend),
 		statsTool(backend),
+		recordSolutionTool(backend),
+		setStatusTool(backend),
 	}
 }
 
@@ -304,6 +310,81 @@ func statsTool(backend Backend) Tool {
 			}
 			if err := response.Validate(); err != nil {
 				return nil, responseDrift("stats", err)
+			}
+			return response, nil
+		},
+	}
+}
+
+func recordSolutionTool(backend Backend) Tool {
+	return Tool{
+		Name: ToolRecordSolution,
+		Description: "Record a verified fix against a known issue: appends the next solution version, " +
+			"verifies the solution and resolves the issue. Trust still comes from recorded outcomes. " + CorrectionNotice,
+		InputSchema: objectSchema(map[string]any{
+			"schema_version": schemaVersion(),
+			"issue_id":       map[string]any{"type": "string", "description": "Issue id the fix belongs to."},
+			"body":           map[string]any{"type": "string", "description": "The fix text, already redacted."},
+			"preconditions":  map[string]any{"type": "string", "description": "When the fix applies, already redacted."},
+			"environment": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"os":               map[string]any{"type": "string"},
+					"shell":            map[string]any{"type": "string"},
+					"connector":        map[string]any{"type": "string"},
+					"runtime_versions": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+				},
+				"additionalProperties": false,
+			},
+			"source": map[string]any{"type": "string"},
+			"actor":  map[string]any{"type": "string"},
+		}, []string{"issue_id", "body"}),
+		call: func(ctx context.Context, arguments json.RawMessage) (any, error) {
+			var request contract.RecordSolutionRequest
+			if err := decodeArguments(arguments, &request); err != nil {
+				return nil, err
+			}
+			fillVersion(&request.SchemaVersion)
+			if err := request.Validate(); err != nil {
+				return nil, invalidArguments("record_solution", err)
+			}
+			response, err := backend.RecordSolution(ctx, request)
+			if err != nil {
+				return nil, err
+			}
+			if err := response.Validate(); err != nil {
+				return nil, responseDrift("record_solution", err)
+			}
+			return response, nil
+		},
+	}
+}
+
+func setStatusTool(backend Backend) Tool {
+	return Tool{
+		Name: ToolSetStatus,
+		Description: "Correct an issue status (open, resolved, wontfix or misjudged), for example when a " +
+			"recorded failure was not the problem after all. " + CorrectionNotice,
+		InputSchema: objectSchema(map[string]any{
+			"schema_version": schemaVersion(),
+			"issue_id":       map[string]any{"type": "string"},
+			"status":         map[string]any{"type": "string", "enum": []string{"open", "resolved", "wontfix", "misjudged"}},
+		}, []string{"issue_id", "status"}),
+		call: func(ctx context.Context, arguments json.RawMessage) (any, error) {
+			var request contract.SetStatusRequest
+			if err := decodeArguments(arguments, &request); err != nil {
+				return nil, err
+			}
+			fillVersion(&request.SchemaVersion)
+			if err := request.Validate(); err != nil {
+				return nil, invalidArguments("set_status", err)
+			}
+			response, err := backend.SetStatus(ctx, request)
+			if err != nil {
+				return nil, err
+			}
+			if err := response.Validate(); err != nil {
+				return nil, responseDrift("set_status", err)
 			}
 			return response, nil
 		},

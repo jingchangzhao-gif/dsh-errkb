@@ -42,6 +42,8 @@ type apiClient interface {
 	Feedback(context.Context, contract.FeedbackRequest) (contract.FeedbackResponse, error)
 	List(context.Context, contract.ListRequest) (contract.ListResponse, error)
 	Stats(context.Context, contract.StatsRequest) (contract.StatsResponse, error)
+	RecordSolution(context.Context, contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error)
+	SetStatus(context.Context, contract.SetStatusRequest) (contract.SetStatusResponse, error)
 	Close() error
 }
 

@@ -272,6 +272,73 @@ func (b *SQLBackend) Capture(ctx context.Context, request contract.CaptureReques
 	return response, nil
 }
 
+// RecordSolution appends a verified solution version and resolves the issue.
+// It is the write-back the CLI/MCP/DSH hosts use to close the loop.
+func (b *SQLBackend) RecordSolution(ctx context.Context, request contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error) {
+	if err := request.Validate(); err != nil {
+		return contract.RecordSolutionResponse{}, APIErrorf(CodeInvalidRequest, "%v", err)
+	}
+	source := request.Source
+	if source == "" {
+		source = "cli"
+	}
+	actor := request.Actor
+	if actor == "" {
+		actor = "cli"
+	}
+	var stored database.SolutionRecord
+	err := b.withConn(ctx, func(ctx context.Context, conn *pgx.Conn) error {
+		result, err := database.RecordSolution(ctx, conn, request.IssueID, request.Body,
+			request.Preconditions, environmentFromContract(request.Environment), source, actor)
+		if err != nil {
+			return err
+		}
+		stored = result
+		return nil
+	})
+	if err != nil {
+		return contract.RecordSolutionResponse{}, translateBackendError("record_solution", err)
+	}
+	return contract.RecordSolutionResponse{
+		SchemaVersion:     contract.ToolSchemaVersion,
+		SolutionID:        stored.SolutionID,
+		SolutionVersionID: stored.SolutionVersionID,
+		Version:           stored.Version,
+		Recorded:          true,
+	}, nil
+}
+
+// SetStatus corrects an issue status.
+func (b *SQLBackend) SetStatus(ctx context.Context, request contract.SetStatusRequest) (contract.SetStatusResponse, error) {
+	if err := request.Validate(); err != nil {
+		return contract.SetStatusResponse{}, APIErrorf(CodeInvalidRequest, "%v", err)
+	}
+	err := b.withConn(ctx, func(ctx context.Context, conn *pgx.Conn) error {
+		return database.SetIssueStatus(ctx, conn, request.IssueID, request.Status)
+	})
+	if err != nil {
+		return contract.SetStatusResponse{}, translateBackendError("set_status", err)
+	}
+	return contract.SetStatusResponse{
+		SchemaVersion: contract.ToolSchemaVersion,
+		IssueID:       request.IssueID,
+		Status:        request.Status,
+	}, nil
+}
+
+// environmentFromContract maps the wire environment onto the storage shape.
+func environmentFromContract(environment *contract.SolutionEnvironment) database.Environment {
+	if environment == nil {
+		return database.Environment{}
+	}
+	return database.Environment{
+		OS:              environment.OS,
+		Shell:           environment.Shell,
+		Connector:       environment.Connector,
+		RuntimeVersions: environment.RuntimeVersions,
+	}
+}
+
 func matchReason(candidate database.RetrievalCandidate) string {
 	for _, field := range candidate.MatchedFields {
 		switch field {
@@ -312,6 +379,9 @@ func translateBackendError(operation string, err error) error {
 	var apiError *APIError
 	if errors.As(err, &apiError) {
 		return err
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return APIErrorf(CodeNotFound, "%s: %v", operation, err)
 	}
 	var pgError *pgconn.PgError
 	if errors.As(err, &pgError) {

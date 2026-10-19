@@ -24,7 +24,7 @@ const ConnectorSDKVersion = "v1"
 const MaxCandidates = 3
 
 // Operation names shared by the MCP tool names (err_<operation>) and the local
-// envelope. They are the six operations the card fixes; nothing else exists.
+// envelope. They are the nine operations the plan fixes; nothing else exists.
 const (
 	OperationLookup   = "lookup"
 	OperationSearch   = "search"
@@ -35,6 +35,11 @@ const (
 	// OperationCapture is the connector SDK capture call (spec/connector.cue).
 	// It is a local API operation only: MCP must never become passive capture.
 	OperationCapture = "capture"
+	// OperationRecordSolution and OperationSetStatus are the two write-back
+	// tools: without them a host cannot record a fix or correct an issue status,
+	// so the knowledge base could only grow by importing Markdown.
+	OperationRecordSolution = "record_solution"
+	OperationSetStatus      = "set_status"
 )
 
 // matchReasons is the plan section 5 order. The first three prove "same
@@ -566,6 +571,137 @@ func (r CaptureResponse) Validate() error {
 	}
 	if !fingerprintPattern.MatchString(r.Fingerprint) {
 		return fmt.Errorf("capture.fingerprint: want 12 lowercase hex characters, got %q", r.Fingerprint)
+	}
+	return nil
+}
+
+// validIssueStatuses is the closed issue-status set (db/migrations/0001).
+var validIssueStatuses = map[string]bool{
+	"open": true, "resolved": true, "wontfix": true, "misjudged": true,
+}
+
+// SolutionEnvironment narrows the hosts a solution applies to. An empty object
+// means "no restriction", never "unknown".
+type SolutionEnvironment struct {
+	OS              string            `json:"os,omitempty"`
+	Shell           string            `json:"shell,omitempty"`
+	Connector       string            `json:"connector,omitempty"`
+	RuntimeVersions map[string]string `json:"runtime_versions,omitempty"`
+}
+
+// Validate rejects empty entries such as a runtime version without a value.
+func (e SolutionEnvironment) Validate() error {
+	for key, value := range e.RuntimeVersions {
+		if key == "" || value == "" {
+			return errors.New("environment.runtime_versions: keys and values must be non-empty")
+		}
+	}
+	return nil
+}
+
+// RecordSolutionRequest records a fix against an issue. Trust is not part of
+// the request: errkb_trust() derives it from outcomes, so a caller cannot
+// promote its own solution.
+type RecordSolutionRequest struct {
+	SchemaVersion string               `json:"schema_version"`
+	IssueID       string               `json:"issue_id"`
+	Body          string               `json:"body"`
+	Preconditions string               `json:"preconditions,omitempty"`
+	Environment   *SolutionEnvironment `json:"environment,omitempty"`
+	Source        string               `json:"source,omitempty"`
+	Actor         string               `json:"actor,omitempty"`
+}
+
+// Validate enforces the write boundary: a body must be present and no
+// request text may still contain a secret.
+func (r RecordSolutionRequest) Validate() error {
+	if err := requireVersion(OperationRecordSolution, r.SchemaVersion); err != nil {
+		return err
+	}
+	if r.IssueID == "" {
+		return errors.New("record_solution.issue_id: required")
+	}
+	if r.Body == "" {
+		return errors.New("record_solution.body: required")
+	}
+	if err := checkRedacted("record_solution.body", r.Body); err != nil {
+		return err
+	}
+	if err := checkRedacted("record_solution.preconditions", r.Preconditions); err != nil {
+		return err
+	}
+	if r.Environment != nil {
+		if err := r.Environment.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// RecordSolutionResponse names the solution and the revision just appended.
+type RecordSolutionResponse struct {
+	SchemaVersion     string `json:"schema_version"`
+	SolutionID        string `json:"solution_id"`
+	SolutionVersionID string `json:"solution_version_id"`
+	Version           int    `json:"version"`
+	Recorded          bool   `json:"recorded"`
+}
+
+// Validate rejects an empty identity or a version below one.
+func (r RecordSolutionResponse) Validate() error {
+	if err := requireVersion(OperationRecordSolution, r.SchemaVersion); err != nil {
+		return err
+	}
+	if r.SolutionID == "" {
+		return errors.New("record_solution.solution_id: required")
+	}
+	if r.SolutionVersionID == "" {
+		return errors.New("record_solution.solution_version_id: required")
+	}
+	if r.Version < 1 {
+		return fmt.Errorf("record_solution.version: want at least 1, got %d", r.Version)
+	}
+	return nil
+}
+
+// SetStatusRequest changes an issue's status.
+type SetStatusRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	IssueID       string `json:"issue_id"`
+	Status        string `json:"status"`
+}
+
+// Validate checks the closed status set.
+func (r SetStatusRequest) Validate() error {
+	if err := requireVersion(OperationSetStatus, r.SchemaVersion); err != nil {
+		return err
+	}
+	if r.IssueID == "" {
+		return errors.New("set_status.issue_id: required")
+	}
+	if !validIssueStatuses[r.Status] {
+		return fmt.Errorf("set_status.status: unknown status %q", r.Status)
+	}
+	return nil
+}
+
+// SetStatusResponse echoes the stored status.
+type SetStatusResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	IssueID       string `json:"issue_id"`
+	Status        string `json:"status"`
+}
+
+// Validate rejects an empty identity or a status outside the closed set.
+func (r SetStatusResponse) Validate() error {
+	if err := requireVersion(OperationSetStatus, r.SchemaVersion); err != nil {
+		return err
+	}
+	if r.IssueID == "" {
+		return errors.New("set_status.issue_id: required")
+	}
+	if !validIssueStatuses[r.Status] {
+		return fmt.Errorf("set_status.status: unknown status %q", r.Status)
 	}
 	return nil
 }

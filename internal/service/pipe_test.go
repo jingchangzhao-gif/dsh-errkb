@@ -115,6 +115,32 @@ func (f *fakeBackend) Stats(context.Context, contract.StatsRequest) (contract.St
 	return contract.StatsResponse{SchemaVersion: contract.ToolSchemaVersion}, nil
 }
 
+func (f *fakeBackend) RecordSolution(_ context.Context, request contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error) {
+	f.note("record_solution")
+	if f.err != nil {
+		return contract.RecordSolutionResponse{}, f.err
+	}
+	return contract.RecordSolutionResponse{
+		SchemaVersion:     contract.ToolSchemaVersion,
+		SolutionID:        "solution-1",
+		SolutionVersionID: "solution-version-1",
+		Version:           1,
+		Recorded:          true,
+	}, nil
+}
+
+func (f *fakeBackend) SetStatus(_ context.Context, request contract.SetStatusRequest) (contract.SetStatusResponse, error) {
+	f.note("set_status")
+	if f.err != nil {
+		return contract.SetStatusResponse{}, f.err
+	}
+	return contract.SetStatusResponse{
+		SchemaVersion: contract.ToolSchemaVersion,
+		IssueID:       request.IssueID,
+		Status:        request.Status,
+	}, nil
+}
+
 func (f *fakeBackend) Capture(_ context.Context, request contract.CaptureRequest) (contract.CaptureResponse, error) {
 	f.note("capture")
 	if f.err != nil {
@@ -335,6 +361,16 @@ func TestPipeRoutesEveryOperation(t *testing.T) {
 				Message:    "eperm rename failed",
 			},
 		}},
+		{"record_solution", contract.RecordSolutionRequest{
+			SchemaVersion: contract.ToolSchemaVersion,
+			IssueID:       "11111111-1111-4111-8111-111111111111",
+			Body:          "chmod the directory, then retry",
+		}},
+		{"set_status", contract.SetStatusRequest{
+			SchemaVersion: contract.ToolSchemaVersion,
+			IssueID:       "11111111-1111-4111-8111-111111111111",
+			Status:        "resolved",
+		}},
 	}
 	for _, test := range cases {
 		requestID := "route-" + test.operation
@@ -346,7 +382,7 @@ func TestPipeRoutesEveryOperation(t *testing.T) {
 			t.Fatalf("the %s response did not carry a result: %+v", test.operation, response)
 		}
 	}
-	want := []string{"lookup", "search", "record", "feedback", "list", "stats", "capture"}
+	want := []string{"lookup", "search", "record", "feedback", "list", "stats", "capture", "record_solution", "set_status"}
 	got := backend.calls()
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("routed operations = %v, want %v", got, want)

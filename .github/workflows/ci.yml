@@ -529,7 +529,12 @@ jobs:
                   base_enums = base.get("enums") or {}
                   head_enums = head.get("enums") or {}
                   for name in sorted(set(base_enums) | set(head_enums)):
-                      if name not in base_enums or name not in head_enums:
+                      if name not in base_enums:
+                          # An enum set introduced by a new definition cannot
+                          # invalidate an existing producer; R18 records it.
+                          local.append(("R18", f"enum set added: {name}", "compatible"))
+                          continue
+                      if name not in head_enums:
                           local.append(("R6", f"enum set changed: {name}", "breaking"))
                           continue
                       for value in sorted(set(base_enums[name]) - set(head_enums[name])):
@@ -621,6 +626,7 @@ jobs:
               expect("R4", base, {"thing": make_contract(required=["a", "b"])}, True, "R4")
               expect("R5", {"thing": make_contract(enums={"kind": ["x"]})}, {"thing": make_contract(enums={"kind": ["x", "y"]})}, False, "R5")
               expect("R6", {"thing": make_contract(enums={"kind": ["x", "y"]})}, {"thing": make_contract(enums={"kind": ["x"]})}, True, "R6")
+              expect("R18", {"thing": make_contract(enums={})}, {"thing": make_contract(enums={"kind": ["x"]})}, False, "R18")
               expect("R7", base, {"thing": make_contract(semantics="the thing, revised")}, True, "R7")
               expect("R8", base, {"thing": make_contract(unknown_fields="tolerate")}, True, "R8")
               expect("R9", base, {"thing": make_contract(version="v2", fields=["a"])}, False, "R3")
