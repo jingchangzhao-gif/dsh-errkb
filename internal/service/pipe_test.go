@@ -115,6 +115,21 @@ func (f *fakeBackend) Stats(context.Context, contract.StatsRequest) (contract.St
 	return contract.StatsResponse{SchemaVersion: contract.ToolSchemaVersion}, nil
 }
 
+func (f *fakeBackend) Capture(_ context.Context, request contract.CaptureRequest) (contract.CaptureResponse, error) {
+	f.note("capture")
+	if f.err != nil {
+		return contract.CaptureResponse{}, f.err
+	}
+	return contract.CaptureResponse{
+		SchemaVersion: contract.ConnectorSDKVersion,
+		EventID:       "event-1",
+		OccurrenceID:  "occurrence-1",
+		IssueID:       "issue-1",
+		Fingerprint:   "0123456789ab",
+		Created:       true,
+	}, nil
+}
+
 func newTestPipeName() string {
 	return `\\.\pipe\errkb-test-` + strconv.FormatInt(time.Now().UnixNano(), 10)
 }
@@ -310,6 +325,16 @@ func TestPipeRoutesEveryOperation(t *testing.T) {
 		{"feedback", feedbackPayload("note-1")},
 		{"list", listPayload("page-2")},
 		{"stats", statsPayload()},
+		{"capture", contract.CaptureRequest{
+			SchemaVersion: contract.ConnectorSDKVersion,
+			ConnectorID:   "adapter",
+			SessionID:     "session-1",
+			Observation: contract.ConnectorObservation{
+				ObservedAt: "2026-10-19T10:00:00Z",
+				Source:     "tool",
+				Message:    "eperm rename failed",
+			},
+		}},
 	}
 	for _, test := range cases {
 		requestID := "route-" + test.operation
@@ -321,7 +346,7 @@ func TestPipeRoutesEveryOperation(t *testing.T) {
 			t.Fatalf("the %s response did not carry a result: %+v", test.operation, response)
 		}
 	}
-	want := []string{"lookup", "search", "record", "feedback", "list", "stats"}
+	want := []string{"lookup", "search", "record", "feedback", "list", "stats", "capture"}
 	got := backend.calls()
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Fatalf("routed operations = %v, want %v", got, want)

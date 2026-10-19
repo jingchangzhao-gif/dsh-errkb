@@ -20,8 +20,11 @@ import "list"
 #Observation: {
 	observed_at: string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
 	// Which capture source produced this observation (the contract's axis).
-	source:  #Category
-	message: #NoSensitive | ""
+	source: #Category
+	// Raw text is accepted on the wire: the adapter must not redact (§3.2), and
+	// the daemon redacts before any write. A #NoSensitive constraint here would
+	// force every adapter to reimplement redaction.
+	message: string
 	// Optional hints a host may already know.
 	error_code?: #NoSensitive
 	command?:    string
@@ -41,7 +44,14 @@ import "list"
 	schema_version: #ConnectorSDKVersion
 	connector_id:   string & !=""
 	session_id:     string & !=""
-	observation:    #Observation
+	// Which capture channel the connector reports through (A–E); empty defaults
+	// to "A", the hook/plugin structured-event channel.
+	channel?: #Channel
+	// Client-generated idempotency key. A replay after a lost acknowledgement
+	// reuses it, so the core answers with the already stored identity instead
+	// of counting the observation twice.
+	observation_id?: string & !=""
+	observation:     #Observation
 }
 
 // #ConnectorCaptureResponse mirrors the record result of the core API

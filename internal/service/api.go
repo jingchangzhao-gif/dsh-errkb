@@ -1,11 +1,12 @@
 // The local API envelope dispatcher (EKB-029). pipe.go owns the Named Pipe
 // transport; this file only validates the versioned envelope, routes one of the
-// six operations to the Backend and encodes the answer.
+// seven operations to the Backend and encodes the answer.
 //
 // It deliberately imports no storage package. The card forbids business logic
 // in the pipe layer: a request is decoded, checked against the contract and
 // handed to a Backend implementation. EKB-030 and EKB-037 wire the real backend;
-// tests wire fakes.
+// tests wire fakes. The capture operation (EKB-038) is a local-API-only
+// connector SDK call, never an MCP tool.
 package service
 
 import (
@@ -28,6 +29,9 @@ type Backend interface {
 	Feedback(context.Context, contract.FeedbackRequest) (contract.FeedbackResponse, error)
 	List(context.Context, contract.ListRequest) (contract.ListResponse, error)
 	Stats(context.Context, contract.StatsRequest) (contract.StatsResponse, error)
+	// Capture is the connector SDK call: it accepts a raw observation and the
+	// core does classification, redaction, fingerprinting and storage.
+	Capture(context.Context, contract.CaptureRequest) (contract.CaptureResponse, error)
 }
 
 // The error codes are the closed set from spec/local-api.cue. A caller must be
@@ -134,6 +138,14 @@ func (a *API) Handle(ctx context.Context, frame []byte) []byte {
 				APIErrorf(CodeInvalidRequest, "decode the stats payload: %v", err))
 		}
 		response, err := a.backend.Stats(ctx, payload)
+		return a.encodeResult(request, response, err)
+	case contract.OperationCapture:
+		var payload contract.CaptureRequest
+		if err := json.Unmarshal(request.Payload, &payload); err != nil {
+			return a.rejectFrame(request.RequestID, request.Operation,
+				APIErrorf(CodeInvalidRequest, "decode the capture payload: %v", err))
+		}
+		response, err := a.backend.Capture(ctx, payload)
 		return a.encodeResult(request, response, err)
 	default:
 		// DecodePipeRequest already rejects unknown operations; this branch is

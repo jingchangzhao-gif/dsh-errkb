@@ -8,16 +8,20 @@ package spec
 // operation versions carried inside every payload.
 #EnvelopeVersion: "v1"
 
-#Operation: "lookup" | "search" | "record" | "feedback" | "list" | "stats"
+#Operation: "lookup" | "search" | "record" | "feedback" | "list" | "stats" | "capture"
 
 // #ToolRequest and #ToolResponse are unions of the MCP payload definitions.
+// "capture" is the connector SDK envelope from spec/connector.cue: it is not an
+// MCP tool (MCP must never be passive capture), only a local API operation.
 #ToolRequest:
 	#LookupRequest | #SearchRequest | #RecordRequest |
-		#FeedbackRequest | #ListRequest | #StatsRequest
+	#FeedbackRequest | #ListRequest | #StatsRequest |
+	#ConnectorCaptureRequest
 
 #ToolResponse:
 	#LookupResponse | #SearchResponse | #RecordResponse |
-		#FeedbackResponse | #ListResponse | #StatsResponse
+	#FeedbackResponse | #ListResponse | #StatsResponse |
+	#ConnectorCaptureResponse
 
 #ErrorCode:
 	"invalid_request" | "not_found" | "unavailable" | "conflict" | "internal"
