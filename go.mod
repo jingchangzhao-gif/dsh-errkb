@@ -3,7 +3,9 @@ module github.com/jingchangzhao-gif/dsh-errkb
 go 1.26.4
 
 require (
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/jackc/pgx/v5 v5.7.5
+	golang.org/x/sys v0.32.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
