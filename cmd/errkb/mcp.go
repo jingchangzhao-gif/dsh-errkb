@@ -14,9 +14,9 @@ import (
 	"github.com/jingchangzhao-gif/dsh-errkb/internal/mcp"
 )
 
-// pipeBackend answers the six MCP tools over the local daemon pipe. It dials
-// per call: a long-lived MCP session must survive a daemon restart, and the
-// pipe client closes with each call, which is also how the CLI talks.
+// pipeBackend answers the MCP tools over the local daemon pipe. It dials per
+// call: a long-lived MCP session must survive a daemon restart, and the pipe
+// client closes with each call, which is also how the CLI talks.
 type pipeBackend struct {
 	dial func(context.Context) (apiClient, error)
 }
@@ -101,6 +101,32 @@ func (b pipeBackend) Stats(ctx context.Context, request contract.StatsRequest) (
 	var response contract.StatsResponse
 	err := b.with(ctx, func(ctx context.Context, client apiClient) error {
 		answer, callErr := client.Stats(ctx, request)
+		if callErr != nil {
+			return callErr
+		}
+		response = answer
+		return nil
+	})
+	return response, err
+}
+
+func (b pipeBackend) RecordSolution(ctx context.Context, request contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error) {
+	var response contract.RecordSolutionResponse
+	err := b.with(ctx, func(ctx context.Context, client apiClient) error {
+		answer, callErr := client.RecordSolution(ctx, request)
+		if callErr != nil {
+			return callErr
+		}
+		response = answer
+		return nil
+	})
+	return response, err
+}
+
+func (b pipeBackend) SetStatus(ctx context.Context, request contract.SetStatusRequest) (contract.SetStatusResponse, error) {
+	var response contract.SetStatusResponse
+	err := b.with(ctx, func(ctx context.Context, client apiClient) error {
+		answer, callErr := client.SetStatus(ctx, request)
 		if callErr != nil {
 			return callErr
 		}

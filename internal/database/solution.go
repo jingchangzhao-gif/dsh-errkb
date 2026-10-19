@@ -17,6 +17,14 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+// solutionWriter is the subset of *pgx.Conn and pgx.Tx the solution writers
+// need, so RecordSolution can run them inside one transaction. Every caller
+// that passes a *pgx.Conn keeps working unchanged.
+type solutionWriter interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // SolutionStatus is the closed state machine enforced by the database:
 // candidate -> verified | deprecated | blocked, verified -> deprecated |
 // blocked, blocked -> deprecated, deprecated -> terminal.
@@ -94,9 +102,9 @@ type Trust struct {
 }
 
 // CreateSolution opens a candidate solution for an issue.
-func CreateSolution(ctx context.Context, conn *pgx.Conn, issueID, source, actor string) (string, error) {
+func CreateSolution(ctx context.Context, writer solutionWriter, issueID, source, actor string) (string, error) {
 	var id string
-	err := conn.QueryRow(ctx, `
+	err := writer.QueryRow(ctx, `
 		insert into solutions (issue_id, source, actor)
 		values ($1, $2, $3)
 		returning id
@@ -112,7 +120,7 @@ func CreateSolution(ctx context.Context, conn *pgx.Conn, issueID, source, actor 
 // loses to the unique constraint instead of silently reusing a number.
 func AddSolutionVersion(
 	ctx context.Context,
-	conn *pgx.Conn,
+	writer solutionWriter,
 	solutionID, body, preconditions, risks string,
 	appliesTo Environment,
 	source, actor string,
@@ -127,7 +135,7 @@ func AddSolutionVersion(
 
 	var version SolutionVersion
 	var storedAppliesTo []byte
-	err = conn.QueryRow(ctx, `
+	err = writer.QueryRow(ctx, `
 		insert into solution_versions (
 			solution_id, version, body, preconditions, risks, applies_to,
 			source, actor
@@ -158,11 +166,11 @@ func AddSolutionVersion(
 
 // TransitionSolution moves a solution along the state machine. The database
 // trigger rejects anything the machine does not define.
-func TransitionSolution(ctx context.Context, conn *pgx.Conn, solutionID string, to SolutionStatus) error {
+func TransitionSolution(ctx context.Context, writer solutionWriter, solutionID string, to SolutionStatus) error {
 	if !to.valid() {
 		return fmt.Errorf("transition solution: %q is not a solution status", to)
 	}
-	tag, err := conn.Exec(ctx, `
+	tag, err := writer.Exec(ctx, `
 		update solutions set status = $2 where id = $1
 	`, solutionID, string(to))
 	if err != nil {

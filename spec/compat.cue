@@ -65,6 +65,7 @@ compat: {
 		{id: "R15", change_class: "static", verdict: "fail", why: "An unexercised rule is a rule that can rot; every declared rule must have a self-test case that fires."},
 		{id: "R16", change_class: "breaking", verdict: "fail", why: "Moving or renaming a contract changes where clients find it, so it is a breaking change."},
 		{id: "R17", change_class: "compatible", verdict: "allow", why: "Adding a definition that only optional fields reference (for example a nested solution object) accepts more payloads and invalidates no existing writer."},
+		{id: "R18", change_class: "compatible", verdict: "allow", why: "An enum set introduced by a new definition is reachable only through that definition, so it adds accepted payloads without invalidating an existing writer."},
 	]
 	contracts: {
 		error_event: {
@@ -366,7 +367,7 @@ compat: {
 		}
 		mcp_tools: {
 			file: "spec/mcp-tools.cue"
-			definitions: ["LookupRequest", "LookupResponse", "SearchRequest", "SearchResponse", "RecordRequest", "RecordResponse", "FeedbackRequest", "FeedbackResponse", "ListRequest", "ListResponse", "StatsRequest", "StatsResponse", "Candidate", "Solution", "ListItem", "Tool"]
+			definitions: ["LookupRequest", "LookupResponse", "SearchRequest", "SearchResponse", "RecordRequest", "RecordResponse", "FeedbackRequest", "FeedbackResponse", "ListRequest", "ListResponse", "StatsRequest", "StatsResponse", "Candidate", "Solution", "ListItem", "Tool", "SolutionEnvironment", "RecordSolutionRequest", "RecordSolutionResponse", "SetStatusRequest", "SetStatusResponse"]
 			schema_version: "v1"
 			semantics:      "The six MCP operations (lookup, search, record, feedback, list, stats) with their request and response payloads, the reason-carrying candidate shape and the three-candidate ceiling. Each payload carries its own schema_version."
 			unknown_fields: "reject"
@@ -449,6 +450,28 @@ compat: {
 				"Tool.description",
 				"Tool.read_only",
 				"Tool.input",
+				"RecordSolutionRequest.actor",
+				"RecordSolutionRequest.body",
+				"RecordSolutionRequest.environment",
+				"RecordSolutionRequest.issue_id",
+				"RecordSolutionRequest.preconditions",
+				"RecordSolutionRequest.schema_version",
+				"RecordSolutionRequest.source",
+				"RecordSolutionResponse.recorded",
+				"RecordSolutionResponse.schema_version",
+				"RecordSolutionResponse.solution_id",
+				"RecordSolutionResponse.solution_version_id",
+				"RecordSolutionResponse.version",
+				"SetStatusRequest.issue_id",
+				"SetStatusRequest.schema_version",
+				"SetStatusRequest.status",
+				"SetStatusResponse.issue_id",
+				"SetStatusResponse.schema_version",
+				"SetStatusResponse.status",
+				"SolutionEnvironment.connector",
+				"SolutionEnvironment.os",
+				"SolutionEnvironment.runtime_versions",
+				"SolutionEnvironment.shell",
 				"Tool.output",
 			]
 			required: [
@@ -511,12 +534,27 @@ compat: {
 				"Tool.description",
 				"Tool.read_only",
 				"Tool.input",
+				"RecordSolutionRequest.schema_version",
+				"RecordSolutionRequest.issue_id",
+				"RecordSolutionRequest.body",
+				"RecordSolutionResponse.schema_version",
+				"RecordSolutionResponse.solution_id",
+				"RecordSolutionResponse.solution_version_id",
+				"RecordSolutionResponse.version",
+				"RecordSolutionResponse.recorded",
+				"SetStatusRequest.schema_version",
+				"SetStatusRequest.issue_id",
+				"SetStatusRequest.status",
+				"SetStatusResponse.schema_version",
+				"SetStatusResponse.issue_id",
+				"SetStatusResponse.status",
 				"Tool.output",
 			]
 			enums: {
 				match_reason: ["issue_id", "error_code", "exact_fingerprint", "deterministic_filter", "trigram_candidate", "jaccard_rerank"]
 				outcome: ["success", "failure", "unknown"]
 				list_kind: ["issue", "solution"]
+				issue_status: ["open", "resolved", "wontfix", "misjudged"]
 			}
 		}
 		local_api: {
@@ -557,7 +595,7 @@ compat: {
 				"LocalError.retryable",
 			]
 			enums: {
-				operation: ["lookup", "search", "record", "feedback", "list", "stats", "capture"]
+				operation: ["lookup", "search", "record", "feedback", "list", "stats", "capture", "record_solution", "set_status"]
 				error_code: ["invalid_request", "not_found", "unavailable", "conflict", "internal"]
 			}
 		}

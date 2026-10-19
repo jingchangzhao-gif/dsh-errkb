@@ -106,6 +106,32 @@ func (f *fakeClient) Stats(context.Context, contract.StatsRequest) (contract.Sta
 	return contract.StatsResponse{SchemaVersion: contract.ToolSchemaVersion}, nil
 }
 
+func (f *fakeClient) RecordSolution(_ context.Context, request contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error) {
+	f.note("record_solution")
+	if f.err != nil {
+		return contract.RecordSolutionResponse{}, f.err
+	}
+	return contract.RecordSolutionResponse{
+		SchemaVersion:     contract.ToolSchemaVersion,
+		SolutionID:        "00000000-0000-4000-8000-000000000001",
+		SolutionVersionID: "00000000-0000-4000-8000-000000000002",
+		Version:           1,
+		Recorded:          true,
+	}, nil
+}
+
+func (f *fakeClient) SetStatus(_ context.Context, request contract.SetStatusRequest) (contract.SetStatusResponse, error) {
+	f.note("set_status")
+	if f.err != nil {
+		return contract.SetStatusResponse{}, f.err
+	}
+	return contract.SetStatusResponse{
+		SchemaVersion: contract.ToolSchemaVersion,
+		IssueID:       request.IssueID,
+		Status:        request.Status,
+	}, nil
+}
+
 func (f *fakeClient) Close() error { return nil }
 
 func testEnv(fake *fakeClient) (*cliEnv, *bytes.Buffer, *bytes.Buffer) {

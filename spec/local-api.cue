@@ -4,11 +4,11 @@
 // only one copy of each payload shape.
 package spec
 
-// #EnvelopeVersion versions the envelope itself, separately from the six
+// #EnvelopeVersion versions the envelope itself, separately from the nine
 // operation versions carried inside every payload.
 #EnvelopeVersion: "v1"
 
-#Operation: "lookup" | "search" | "record" | "feedback" | "list" | "stats" | "capture"
+#Operation: "lookup" | "search" | "record" | "feedback" | "list" | "stats" | "capture" | "record_solution" | "set_status"
 
 // #ToolRequest and #ToolResponse are unions of the MCP payload definitions.
 // "capture" is the connector SDK envelope from spec/connector.cue: it is not an
@@ -16,11 +16,13 @@ package spec
 #ToolRequest:
 	#LookupRequest | #SearchRequest | #RecordRequest |
 	#FeedbackRequest | #ListRequest | #StatsRequest |
+	#RecordSolutionRequest | #SetStatusRequest |
 	#ConnectorCaptureRequest
 
 #ToolResponse:
 	#LookupResponse | #SearchResponse | #RecordResponse |
 	#FeedbackResponse | #ListResponse | #StatsResponse |
+	#RecordSolutionResponse | #SetStatusResponse |
 	#ConnectorCaptureResponse
 
 #ErrorCode:

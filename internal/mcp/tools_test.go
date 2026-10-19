@@ -31,6 +31,9 @@ type fakeBackend struct {
 	lists    []contract.ListRequest
 	stats    []contract.StatsRequest
 
+	solutionRequests []contract.RecordSolutionRequest
+	statusRequests   []contract.SetStatusRequest
+
 	searchDelays []time.Duration
 	searchCalls  int
 	searchErr    error
@@ -122,6 +125,30 @@ func (b *fakeBackend) Stats(ctx context.Context, request contract.StatsRequest) 
 	return contract.StatsResponse{
 		SchemaVersion: request.SchemaVersion,
 		Totals:        contract.StatsTotals{Issues: 2, Events: 3},
+	}, nil
+}
+
+func (b *fakeBackend) RecordSolution(ctx context.Context, request contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error) {
+	b.mu.Lock()
+	b.solutionRequests = append(b.solutionRequests, request)
+	b.mu.Unlock()
+	return contract.RecordSolutionResponse{
+		SchemaVersion:     request.SchemaVersion,
+		SolutionID:        "00000000-0000-4000-8000-00000000000a",
+		SolutionVersionID: "00000000-0000-4000-8000-00000000000b",
+		Version:           1,
+		Recorded:          true,
+	}, nil
+}
+
+func (b *fakeBackend) SetStatus(ctx context.Context, request contract.SetStatusRequest) (contract.SetStatusResponse, error) {
+	b.mu.Lock()
+	b.statusRequests = append(b.statusRequests, request)
+	b.mu.Unlock()
+	return contract.SetStatusResponse{
+		SchemaVersion: request.SchemaVersion,
+		IssueID:       request.IssueID,
+		Status:        request.Status,
 	}, nil
 }
 
@@ -391,9 +418,9 @@ func TestInitializeStatesMCPIsNotPassiveCapture(t *testing.T) {
 	}
 }
 
-// TestToolsListPublishesTheSixCoreTools covers the six-tool list and the ban on
-// a capture/subscription tool.
-func TestToolsListPublishesTheSixCoreTools(t *testing.T) {
+// TestToolsListPublishesTheEightCoreTools covers the eight-tool list and the
+// ban on a capture/subscription tool.
+func TestToolsListPublishesTheEightCoreTools(t *testing.T) {
 	h := startHarness(t, newFakeBackend())
 	h.send(1, "tools/list", nil)
 	frame := h.receive()
@@ -406,6 +433,7 @@ func TestToolsListPublishesTheSixCoreTools(t *testing.T) {
 	wanted := []string{
 		mcp.ToolLookup, mcp.ToolSearch, mcp.ToolRecord,
 		mcp.ToolFeedback, mcp.ToolList, mcp.ToolStats,
+		mcp.ToolRecordSolution, mcp.ToolSetStatus,
 	}
 	if len(tools) != len(wanted) {
 		t.Fatalf("tool count = %d, want %d (%v)", len(tools), len(wanted), tools)
@@ -439,7 +467,7 @@ func TestToolsListPublishesTheSixCoreTools(t *testing.T) {
 	}
 }
 
-// TestEveryToolReturnsContractJSON calls all six tools and re-validates the
+// TestEveryToolReturnsContractJSON calls all eight tools and re-validates the
 // payload against the contract.
 func TestEveryToolReturnsContractJSON(t *testing.T) {
 	backend := newFakeBackend()
@@ -521,6 +549,35 @@ func TestEveryToolReturnsContractJSON(t *testing.T) {
 				return response.Validate()
 			},
 		},
+		{
+			tool: mcp.ToolRecordSolution,
+			arguments: map[string]any{
+				"issue_id":      "00000000-0000-4000-8000-000000000004",
+				"body":          "chmod the directory, then retry",
+				"preconditions": "linux only",
+			},
+			validate: func(raw []byte) error {
+				var response contract.RecordSolutionResponse
+				if err := json.Unmarshal(raw, &response); err != nil {
+					return err
+				}
+				return response.Validate()
+			},
+		},
+		{
+			tool: mcp.ToolSetStatus,
+			arguments: map[string]any{
+				"issue_id": "00000000-0000-4000-8000-000000000004",
+				"status":   "wontfix",
+			},
+			validate: func(raw []byte) error {
+				var response contract.SetStatusResponse
+				if err := json.Unmarshal(raw, &response); err != nil {
+					return err
+				}
+				return response.Validate()
+			},
+		},
 	}
 
 	for index, testCase := range cases {
@@ -549,6 +606,34 @@ func TestEveryToolReturnsContractJSON(t *testing.T) {
 	}
 	if request := backend.feedbackRequests()[0]; request.Outcome != "success" || request.Note != "worked on this host" {
 		t.Fatalf("feedback request = %+v", request)
+	}
+	if got := len(backend.solutionRequests); got != 1 || backend.solutionRequests[0].Body != "chmod the directory, then retry" {
+		t.Fatalf("record_solution requests = %+v, want one with the body", backend.solutionRequests)
+	}
+	if got := len(backend.statusRequests); got != 1 || backend.statusRequests[0].Status != "wontfix" {
+		t.Fatalf("set_status requests = %+v, want one wontfix", backend.statusRequests)
+	}
+}
+
+// TestWriteBackToolsRejectMalformedArguments checks the two new tools fail on
+// the argument boundary before any backend call.
+func TestWriteBackToolsRejectMalformedArguments(t *testing.T) {
+	backend := newFakeBackend()
+	h := startHarness(t, backend)
+
+	cases := []map[string]any{
+		{"name": mcp.ToolRecordSolution, "arguments": map[string]any{"issue_id": "00000000-0000-4000-8000-000000000004"}},
+		{"name": mcp.ToolSetStatus, "arguments": map[string]any{"issue_id": "00000000-0000-4000-8000-000000000004", "status": "fixed"}},
+	}
+	for index, call := range cases {
+		h.send(index+1, "tools/call", call)
+		frame := h.receive()
+		if code := errorCodeOf(t, frame); code != -32602 {
+			t.Fatalf("%v: error code = %v, want -32602", call["name"], code)
+		}
+	}
+	if len(backend.solutionRequests) != 0 || len(backend.statusRequests) != 0 {
+		t.Fatalf("invalid arguments reached the backend: %d solutions, %d statuses", len(backend.solutionRequests), len(backend.statusRequests))
 	}
 }
 

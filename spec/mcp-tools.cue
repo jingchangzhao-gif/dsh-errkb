@@ -68,17 +68,17 @@ import "list"
 
 // #LookupRequest asks the question "I know what this error is".
 #LookupRequest: {
-	schema_version: "v1"
-	issue?: string & !=""
-	error_code?: string & !=""
-	fingerprint?: #Fingerprint
+	schema_version:      "v1"
+	issue?:              string & !=""
+	error_code?:         string & !=""
+	fingerprint?:        #Fingerprint
 	normalized_message?: #NoSensitive & !=""
-	project_key?: string & !=""
+	project_key?:        string & !=""
 }
 
 #LookupResponse: {
 	schema_version: "v1"
-	candidates: #CandidateList
+	candidates:     #CandidateList
 }
 
 #LookupTool: #Tool & {
@@ -100,7 +100,7 @@ import "list"
 
 #SearchResponse: {
 	schema_version: "v1"
-	candidates: #CandidateList
+	candidates:     #CandidateList
 }
 
 #SearchTool: #Tool & {
@@ -115,16 +115,16 @@ import "list"
 // reused from spec/error-event.cue, so both channels accept the same fields.
 #RecordRequest: {
 	schema_version: "v1"
-	event: #ErrorEvent
+	event:          #ErrorEvent
 }
 
 #RecordResponse: {
 	schema_version: "v1"
-	event_id: string & !=""
-	occurrence_id: string & !=""
-	issue_id: string & !=""
-	fingerprint: #Fingerprint
-	created: bool
+	event_id:       string & !=""
+	occurrence_id:  string & !=""
+	issue_id:       string & !=""
+	fingerprint:    #Fingerprint
+	created:        bool
 }
 
 #RecordTool: #Tool & {
@@ -140,7 +140,7 @@ import "list"
 #Outcome: "success" | "failure" | "unknown"
 
 #FeedbackRequest: {
-	schema_version: "v1"
+	schema_version:      "v1"
 	issue_id:            string & !=""
 	solution_version_id: string & !=""
 	outcome:             #Outcome
@@ -149,8 +149,8 @@ import "list"
 
 #FeedbackResponse: {
 	schema_version: "v1"
-	outcome_id: string & !=""
-	recorded:   bool
+	outcome_id:     string & !=""
+	recorded:       bool
 }
 
 #FeedbackTool: #Tool & {
@@ -179,8 +179,8 @@ import "list"
 
 #ListResponse: {
 	schema_version: "v1"
-	items:          [...#ListItem]
-	next_cursor?:   string & !=""
+	items: [...#ListItem]
+	next_cursor?: string & !=""
 }
 
 #ListTool: #Tool & {
@@ -226,5 +226,69 @@ import "list"
 	output:      #StatsResponse
 }
 
-// #Tools lists the six descriptors, so a missing operation fails cue vet.
-#Tools: [#LookupTool, #SearchTool, #RecordTool, #FeedbackTool, #ListTool, #StatsTool]
+// #IssueStatus is the closed issue-status set (db/migrations/0001_init.sql).
+#IssueStatus: "open" | "resolved" | "wontfix" | "misjudged"
+
+// #SolutionEnvironment narrows the hosts a solution applies to. An empty
+// object means "no restriction", never "unknown".
+#SolutionEnvironment: {
+	os?:               string & !=""
+	shell?:            string & !=""
+	connector?:        string & !=""
+	runtime_versions?: [string]: string & !=""
+}
+
+// #RecordSolutionRequest records a fix against an issue. The core opens (or
+// reuses) the solution, appends a new verified version, and marks the issue
+// resolved. Trust stays computed by errkb_trust() from outcomes: nothing in
+// this request can set it.
+#RecordSolutionRequest: {
+	schema_version:  "v1"
+	issue_id:        string & !=""
+	body:            #NoSensitive & !=""
+	preconditions?:  #NoSensitive
+	environment?:    #SolutionEnvironment
+	source?:         string & !=""
+	actor?:          string & !=""
+}
+
+#RecordSolutionResponse: {
+	schema_version:       "v1"
+	solution_id:          string & !=""
+	solution_version_id:  string & !=""
+	version:              int & >=1
+	recorded:             bool
+}
+
+#RecordSolutionTool: #Tool & {
+	name:        "err_record_solution"
+	description: "Record a fix for an issue: appends a solution version, verifies it and marks the issue resolved."
+	read_only:   false
+	input:       #RecordSolutionRequest
+	output:      #RecordSolutionResponse
+}
+
+// #SetStatusRequest changes an issue's status. wontfix keeps an issue out of
+// injection; misjudged marks a recorded failure that was not a real one.
+#SetStatusRequest: {
+	schema_version: "v1"
+	issue_id:       string & !=""
+	status:         #IssueStatus
+}
+
+#SetStatusResponse: {
+	schema_version: "v1"
+	issue_id:       string & !=""
+	status:         #IssueStatus
+}
+
+#SetStatusTool: #Tool & {
+	name:        "err_set_status"
+	description: "Set an issue status: open, resolved, wontfix or misjudged."
+	read_only:   false
+	input:       #SetStatusRequest
+	output:      #SetStatusResponse
+}
+
+// #Tools lists the eight descriptors, so a missing operation fails cue vet.
+#Tools: [#LookupTool, #SearchTool, #RecordTool, #FeedbackTool, #ListTool, #StatsTool, #RecordSolutionTool, #SetStatusTool]

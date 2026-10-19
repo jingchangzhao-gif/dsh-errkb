@@ -209,3 +209,29 @@ func (c *Client) Stats(ctx context.Context, request contract.StatsRequest) (cont
 	}
 	return response, nil
 }
+
+// RecordSolution appends a verified solution version and resolves the issue.
+func (c *Client) RecordSolution(ctx context.Context, request contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationRecordSolution, request)
+	if err != nil {
+		return contract.RecordSolutionResponse{}, err
+	}
+	var response contract.RecordSolutionResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.RecordSolutionResponse{}, fmt.Errorf("decode the record_solution result: %w", err)
+	}
+	return response, nil
+}
+
+// SetStatus corrects an issue status.
+func (c *Client) SetStatus(ctx context.Context, request contract.SetStatusRequest) (contract.SetStatusResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationSetStatus, request)
+	if err != nil {
+		return contract.SetStatusResponse{}, err
+	}
+	var response contract.SetStatusResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.SetStatusResponse{}, fmt.Errorf("decode the set_status result: %w", err)
+	}
+	return response, nil
+}

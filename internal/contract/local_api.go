@@ -16,13 +16,15 @@ import (
 const PipeEnvelopeVersion = "v1"
 
 var validOperations = map[string]bool{
-	OperationLookup:   true,
-	OperationSearch:   true,
-	OperationRecord:   true,
-	OperationFeedback: true,
-	OperationList:     true,
-	OperationStats:    true,
-	OperationCapture:  true,
+	OperationLookup:         true,
+	OperationSearch:         true,
+	OperationRecord:         true,
+	OperationFeedback:       true,
+	OperationList:           true,
+	OperationStats:          true,
+	OperationCapture:        true,
+	OperationRecordSolution: true,
+	OperationSetStatus:      true,
 }
 
 var validErrorCodes = map[string]bool{
@@ -182,6 +184,18 @@ func validatePayload(operation string, payload []byte) error {
 			return fmt.Errorf("capture payload: %w", err)
 		}
 		return decoded.Validate()
+	case OperationRecordSolution:
+		var decoded RecordSolutionRequest
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("record_solution payload: %w", err)
+		}
+		return decoded.Validate()
+	case OperationSetStatus:
+		var decoded SetStatusRequest
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("set_status payload: %w", err)
+		}
+		return decoded.Validate()
 	default:
 		return fmt.Errorf("operation: unknown %q", operation)
 	}
@@ -231,6 +245,18 @@ func validateResult(operation string, payload []byte) error {
 		var decoded CaptureResponse
 		if err := decodeStrict(payload, &decoded); err != nil {
 			return fmt.Errorf("capture result: %w", err)
+		}
+		return decoded.Validate()
+	case OperationRecordSolution:
+		var decoded RecordSolutionResponse
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("record_solution result: %w", err)
+		}
+		return decoded.Validate()
+	case OperationSetStatus:
+		var decoded SetStatusResponse
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("set_status result: %w", err)
 		}
 		return decoded.Validate()
 	default:
