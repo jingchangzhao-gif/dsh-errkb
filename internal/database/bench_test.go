@@ -35,6 +35,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -812,7 +813,7 @@ func assertNoAdvisoryLocks(t *testing.T, conn *pgx.Conn) {
 	}
 }
 
-func crashMigrationDir(t *testing.T) string {
+func crashMigrationDir(t *testing.T) (string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	entries, err := os.ReadDir(migrationsDir())
@@ -836,6 +837,15 @@ func crashMigrationDir(t *testing.T) string {
 	if copied == 0 {
 		t.Fatalf("no migrations copied into %s", dir)
 	}
+	committed, err := database.LoadMigrations(migrationsDir())
+	if err != nil {
+		t.Fatalf("load the committed migrations: %v", err)
+	}
+	last, err := strconv.Atoi(committed[len(committed)-1].Version)
+	if err != nil {
+		t.Fatalf("parse the last migration version %q: %v", committed[len(committed)-1].Version, err)
+	}
+	probeVersion := fmt.Sprintf("%04d", last+1)
 	probe := `-- Crash probe: the sleep keeps this migration transaction open so
 -- TestCrashSafety can kill the process inside it. The table and the ledger row
 -- must both roll back. Windows disables client_connection_check_interval, so
@@ -844,16 +854,16 @@ func crashMigrationDir(t *testing.T) string {
 create table crash_probe (id integer);
 select pg_sleep(8);
 `
-	if err := os.WriteFile(filepath.Join(dir, "0007_crash_probe.sql"), []byte(probe), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, probeVersion+"_crash_probe.sql"), []byte(probe), 0o644); err != nil {
 		t.Fatalf("write the crash probe migration: %v", err)
 	}
-	return dir
+	return dir, probeVersion
 }
 
-func rewriteCrashMigration(t *testing.T, dir string) {
+func rewriteCrashMigration(t *testing.T, dir, probeVersion string) {
 	t.Helper()
 	fixed := "create table crash_probe (id integer);\n"
-	if err := os.WriteFile(filepath.Join(dir, "0007_crash_probe.sql"), []byte(fixed), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, probeVersion+"_crash_probe.sql"), []byte(fixed), 0o644); err != nil {
 		t.Fatalf("rewrite the crash probe migration: %v", err)
 	}
 }
@@ -924,7 +934,13 @@ func TestCrashSafety(t *testing.T) {
 
 	// 4) Kill a migration inside its transaction: the table and the ledger row
 	// must both roll back, and the advisory lock must be released.
-	migrations := crashMigrationDir(t)
+	committed, err := database.LoadMigrations(migrationsDir())
+	if err != nil {
+		t.Fatalf("load the committed migrations: %v", err)
+	}
+	wantLedger := len(committed)
+	wantMax := committed[wantLedger-1].Version
+	migrations, probeVersion := crashMigrationDir(t)
 	helper = startCrashHelper(t, "migration", schema, project, migrations)
 	helper.waitReady(t, 30*time.Second)
 	time.Sleep(2 * time.Second)
@@ -944,8 +960,8 @@ func TestCrashSafety(t *testing.T) {
 	if err := conn.QueryRow(ctx, `select count(*), max(version) from `+database.LedgerTable).Scan(&ledger, &maxVersion); err != nil {
 		t.Fatalf("read the migration ledger: %v", err)
 	}
-	if ledger != 6 || maxVersion == nil || *maxVersion != "0006" {
-		t.Fatalf("the killed migration left the ledger at %d rows (max %v), want the six committed migrations", ledger, maxVersion)
+	if ledger != wantLedger || maxVersion == nil || *maxVersion != wantMax {
+		t.Fatalf("the killed migration left the ledger at %d rows (max %v), want the %d committed migrations (max %s)", ledger, maxVersion, wantLedger, wantMax)
 	}
 	var probe *string
 	if err := conn.QueryRow(ctx, `select to_regclass('crash_probe')::text`).Scan(&probe); err != nil {
@@ -957,16 +973,16 @@ func TestCrashSafety(t *testing.T) {
 	assertNoAdvisoryLocks(t, conn)
 
 	// 5) Restart: the interrupted migration applies exactly once.
-	rewriteCrashMigration(t, migrations)
+	rewriteCrashMigration(t, migrations, probeVersion)
 	applied := migrate(t, conn, migrations)
-	if len(applied) != 1 || applied[0] != "0007" {
-		t.Fatalf("the restart applied %v, want only 0007", applied)
+	if len(applied) != 1 || applied[0] != probeVersion {
+		t.Fatalf("the restart applied %v, want only %s", applied, probeVersion)
 	}
 	if err := conn.QueryRow(ctx, `select count(*) from `+database.LedgerTable).Scan(&ledger); err != nil {
 		t.Fatalf("read the migration ledger after the restart: %v", err)
 	}
-	if ledger != 7 {
-		t.Fatalf("the ledger has %d rows after the restart, want 7", ledger)
+	if ledger != wantLedger+1 {
+		t.Fatalf("the ledger has %d rows after the restart, want %d", ledger, wantLedger+1)
 	}
 	if err := conn.QueryRow(ctx, `select to_regclass('crash_probe')::text`).Scan(&probe); err != nil {
 		t.Fatalf("look for the crash probe table after the restart: %v", err)

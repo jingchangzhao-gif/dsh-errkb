@@ -276,6 +276,39 @@ func TestFuzzyCandidatesRespectTheLimit(t *testing.T) {
 	}
 }
 
+// TestFuzzyCandidatesCapTheQueryText locks in the EKB-027 follow-up: only the
+// first TrigramQueryMaxChars runes reach the pg_trgm stage, so two queries that
+// differ after the cap produce the same candidates. The reranker still reads the
+// full message (EKB-024); only the candidate lookup is capped.
+func TestFuzzyCandidatesCapTheQueryText(t *testing.T) {
+	conn, _, connectorID, sessionID := setupRecordSchema(t)
+	ctx := context.Background()
+
+	message := strings.Repeat("network timeout while resolving the dependency ", 3)
+	insertCandidateSeed(t, conn, connectorID, sessionID, 1, candidateSeed{message: message})
+
+	prefix := string([]rune(message)[:database.TrigramQueryMaxChars])
+	first, err := database.FuzzyCandidates(ctx, conn, database.DefaultCandidateQuery(prefix+" alpha suffix"))
+	if err != nil {
+		t.Fatalf("fuzzy candidates (alpha): %v", err)
+	}
+	second, err := database.FuzzyCandidates(ctx, conn, database.DefaultCandidateQuery(prefix+" beta suffix"))
+	if err != nil {
+		t.Fatalf("fuzzy candidates (beta): %v", err)
+	}
+	if len(first.Candidates) == 0 {
+		t.Fatal("the capped query found no candidates")
+	}
+	if len(first.Candidates) != len(second.Candidates) {
+		t.Fatalf("candidates differ after the cap: %d vs %d", len(first.Candidates), len(second.Candidates))
+	}
+	for index := range first.Candidates {
+		if first.Candidates[index].IssueID != second.Candidates[index].IssueID {
+			t.Fatalf("candidate %d differs after the cap: %s vs %s", index, first.Candidates[index].IssueID, second.Candidates[index].IssueID)
+		}
+	}
+}
+
 func TestFuzzyCandidatesRejectMalformedQueries(t *testing.T) {
 	conn := connect(t)
 	ctx := context.Background()
