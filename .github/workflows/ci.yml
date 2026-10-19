@@ -508,11 +508,17 @@ jobs:
                   head_fields = set(head.get("fields") or ())
                   base_required = set(base.get("required") or ())
                   head_required = set(head.get("required") or ())
+                  added_definitions = set(head.get("definitions") or ()) - set(base.get("definitions") or ())
 
                   for name in sorted(base_fields - head_fields):
                       local.append(("R3", f"field removed: {name}", "breaking"))
                   for name in sorted(head_fields - base_fields):
-                      if name in head_required:
+                      if name.split(".", 1)[0] in added_definitions:
+                          # A required field inside a brand-new shape is reachable only
+                          # through the optional parent that references it, so no existing
+                          # producer can become invalid; the R17 entry records the shape.
+                          local.append(("R17", f"required field added inside a new definition: {name}", "compatible"))
+                      elif name in head_required:
                           local.append(("R2", f"required field added: {name}", "breaking"))
                       else:
                           local.append(("R1", f"optional field added: {name}", "compatible"))
@@ -539,8 +545,13 @@ jobs:
                       local.append(("R7", "decoder binding changed", "needs-version-bump"))
                   if base.get("version_anchor") != head.get("version_anchor"):
                       local.append(("R7", "version anchor changed", "needs-version-bump"))
-                  if base.get("definitions") != head.get("definitions") or base.get("file") != head.get("file"):
-                      local.append(("R16", "contract file or definitions changed", "breaking"))
+                  if base.get("file") != head.get("file"):
+                      local.append(("R16", "contract file changed", "breaking"))
+                  removed_definitions = set(base.get("definitions") or ()) - set(head.get("definitions") or ())
+                  for name in sorted(removed_definitions):
+                      local.append(("R16", f"definition removed: {name}", "breaking"))
+                  for name in sorted(added_definitions):
+                      local.append(("R17", f"definition added: {name}", "compatible"))
 
                   changes.extend((rule, key, message, klass) for rule, message, klass in local)
 
@@ -617,6 +628,7 @@ jobs:
               expect("R10", {}, {"thing": make_contract()}, False, "R10")
               expect("R11", {"thing": make_contract()}, {}, True, "R11")
               expect("R16", base, {"thing": make_contract(definitions=["ThingV2"])}, True, "R16")
+              expect("R17", base, {"thing": make_contract(definitions=["Thing", "Fix"])}, False, "R17")
 
               # Static rules need throwaway files: the same check that runs on the real
               # spec directory must fire on a drifting manifest.

@@ -45,6 +45,7 @@ Commands:
   list                   list issues or solutions
   feedback               record an outcome for a solution version
   stats                  knowledge-base totals and timings
+  run -- <command>       run a command and look up its known fix
   daemon                 run the local daemon
   doctor                 diagnose the runtime and connector state
   version                print the version
@@ -90,6 +91,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runDaemon(rest)
 	case "doctor":
 		return runDoctor(rest, jsonMode, stdout, stderr)
+	case "run":
+		return runRun(rest, jsonMode, stdout, stderr, os.Stdin, &cliEnv{
+			json:   jsonMode,
+			stdout: stdout,
+			stderr: stderr,
+			stdin:  os.Stdin,
+			dial:   dialClient,
+		})
 	}
 	env := &cliEnv{
 		json:   jsonMode,

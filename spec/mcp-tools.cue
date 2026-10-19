@@ -30,6 +30,19 @@ import "list"
 	"trigram_candidate" |
 	"jaccard_rerank"
 
+// #Solution is the verified fix a candidate carries (EKB-035). It is optional:
+// a brand-new issue has none, and the caller must see that absence instead of
+// an empty string. Only verified versions are attached - an unverified
+// candidate is not advice. trust is errkb_trust() for the queried environment,
+// not a value the caller may set.
+#Solution: {
+	solution_version_id: string & !=""
+	body:                #NoSensitive & !=""
+	source:              string & !=""
+	applies_to:          string
+	trust:               >=0 & <=1
+}
+
 // #Candidate is one reason-carrying hit. approximate separates "this is the
 // same error" from "this might be": only the first three reasons are exact,
 // and an approximate candidate may never auto-apply a fix.
@@ -41,6 +54,7 @@ import "list"
 	match_detail: string & !=""
 	approximate:  bool
 	confidence:   >=0 & <=1
+	solution?:    #Solution
 
 	if match_reason == "issue_id" || match_reason == "error_code" || match_reason == "exact_fingerprint" {
 		approximate: false

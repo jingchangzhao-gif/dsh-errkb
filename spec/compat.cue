@@ -64,6 +64,7 @@ compat: {
 		{id: "R14", change_class: "static", verdict: "fail", why: "A spec file outside the manifest could change without any compatibility review."},
 		{id: "R15", change_class: "static", verdict: "fail", why: "An unexercised rule is a rule that can rot; every declared rule must have a self-test case that fires."},
 		{id: "R16", change_class: "breaking", verdict: "fail", why: "Moving or renaming a contract changes where clients find it, so it is a breaking change."},
+		{id: "R17", change_class: "compatible", verdict: "allow", why: "Adding a definition that only optional fields reference (for example a nested solution object) accepts more payloads and invalidates no existing writer."},
 	]
 	contracts: {
 		error_event: {
@@ -247,7 +248,7 @@ compat: {
 		}
 		mcp_tools: {
 			file: "spec/mcp-tools.cue"
-			definitions: ["LookupRequest", "LookupResponse", "SearchRequest", "SearchResponse", "RecordRequest", "RecordResponse", "FeedbackRequest", "FeedbackResponse", "ListRequest", "ListResponse", "StatsRequest", "StatsResponse", "Candidate", "ListItem", "Tool"]
+			definitions: ["LookupRequest", "LookupResponse", "SearchRequest", "SearchResponse", "RecordRequest", "RecordResponse", "FeedbackRequest", "FeedbackResponse", "ListRequest", "ListResponse", "StatsRequest", "StatsResponse", "Candidate", "Solution", "ListItem", "Tool"]
 			schema_version: "v1"
 			semantics:      "The six MCP operations (lookup, search, record, feedback, list, stats) with their request and response payloads, the reason-carrying candidate shape and the three-candidate ceiling. Each payload carries its own schema_version."
 			unknown_fields: "reject"
@@ -317,6 +318,12 @@ compat: {
 				"Candidate.match_detail",
 				"Candidate.approximate",
 				"Candidate.confidence",
+				"Candidate.solution",
+				"Solution.solution_version_id",
+				"Solution.body",
+				"Solution.source",
+				"Solution.applies_to",
+				"Solution.trust",
 				"ListItem.id",
 				"ListItem.title",
 				"ListItem.updated_at",
@@ -374,6 +381,11 @@ compat: {
 				"Candidate.match_detail",
 				"Candidate.approximate",
 				"Candidate.confidence",
+				"Solution.solution_version_id",
+				"Solution.body",
+				"Solution.source",
+				"Solution.applies_to",
+				"Solution.trust",
 				"ListItem.id",
 				"ListItem.title",
 				"ListItem.updated_at",

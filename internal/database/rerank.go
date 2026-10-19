@@ -45,9 +45,21 @@ type RetrievalRequest struct {
 	ErrorCode   string
 	Command     string
 	ToolName    string
+	Fingerprint string
 	ProjectKey  string
 	Environment core.Environment
 	SessionID   string
+}
+
+// RetrievalSolution is the verified fix attached to a candidate (EKB-035).
+// Only verified versions travel: the pipe contract renders its absence as a
+// nil solution, never as an empty body.
+type RetrievalSolution struct {
+	SolutionVersionID string
+	Body              string
+	Source            string
+	AppliesTo         string
+	Trust             float64
 }
 
 // RetrievalCandidate is one explained candidate. It deliberately carries no
@@ -62,6 +74,7 @@ type RetrievalCandidate struct {
 	MatchedFields   []core.MatchField
 	Approximate     bool
 	EnvironmentDiff []core.EnvironmentDifference
+	Solution        *RetrievalSolution
 }
 
 // AutoReusable reports whether this candidate may be reused without asking the
@@ -98,12 +111,14 @@ func Retrieve(ctx context.Context, conn *pgx.Conn, request RetrievalRequest) (Re
 	projectKey := strings.TrimSpace(request.ProjectKey)
 
 	var fingerprint string
-	if category != "" && normalized != "" {
+	if explicit := strings.TrimSpace(request.Fingerprint); explicit != "" {
+		fingerprint = explicit
+	} else if category != "" && normalized != "" {
 		fingerprint = core.Signature(category, normalized)
 	}
 
-	if issueID == "" && normalized == "" && errorCode == "" && command == "" && toolName == "" {
-		return RetrievalResult{}, errors.New("retrieve: at least one of issue id, message, error code, command or tool name is required")
+	if issueID == "" && normalized == "" && errorCode == "" && command == "" && toolName == "" && fingerprint == "" {
+		return RetrievalResult{}, errors.New("retrieve: at least one of issue id, fingerprint, message, error code, command or tool name is required")
 	}
 
 	pool := make(map[string]struct{})
@@ -216,6 +231,7 @@ func Retrieve(ctx context.Context, conn *pgx.Conn, request RetrievalRequest) (Re
 			MatchedFields:   rankedCandidate.MatchedFields,
 			Approximate:     rankedCandidate.Approximate,
 			EnvironmentDiff: rankedCandidate.EnvironmentDiff,
+			Solution:        stored.Solution,
 		})
 	}
 	if err := persistRetrievals(ctx, conn, request.SessionID, retrievalQueryText(normalized, errorCode, command, toolName, issueID), candidates); err != nil {
@@ -247,6 +263,7 @@ type storedRetrievalCandidate struct {
 	core.RerankCandidate
 	Title      string
 	ProjectKey string
+	Solution   *RetrievalSolution
 }
 
 func (d retrievalDetails) rankCandidates() []core.RerankCandidate {
@@ -272,7 +289,12 @@ func loadRetrievalCandidates(ctx context.Context, conn *pgx.Conn, issueIDs []str
 		       coalesce(latest.error_code, ''),
 		       coalesce(latest.command, ''),
 		       coalesce(latest.tool_name, ''),
-		       coalesce(latest.environment, '{}'::jsonb)
+		       coalesce(latest.environment, '{}'::jsonb),
+		       coalesce(fix.version_id, ''),
+		       coalesce(fix.body, ''),
+		       coalesce(fix.source, ''),
+		       coalesce(fix.applies_to, '{}'::jsonb)::text,
+		       coalesce(fix.trust, 0)
 		from issues i
 		left join lateral (
 			select e.normalized_message, e.error_code, e.command, e.tool_name, o.environment
@@ -282,6 +304,18 @@ func loadRetrievalCandidates(ctx context.Context, conn *pgx.Conn, issueIDs []str
 			order by o.occurred_at desc, o.id desc
 			limit 1
 		) latest on true
+		left join lateral (
+			select sv.id::text as version_id,
+			       sv.body,
+			       sv.source,
+			       sv.applies_to,
+			       (select t.trust_score from errkb_trust(s.id, '{}'::jsonb) t) as trust
+			from solutions s
+			join solution_versions sv on sv.solution_id = s.id
+			where s.issue_id = i.id and s.status = 'verified'
+			order by sv.version desc
+			limit 1
+		) fix on true
 		where i.id = any($1::uuid[])`,
 		issueIDs)
 	if err != nil {
@@ -291,17 +325,23 @@ func loadRetrievalCandidates(ctx context.Context, conn *pgx.Conn, issueIDs []str
 
 	for rows.Next() {
 		var (
-			issueID     string
-			fingerprint string
-			title       string
-			projectKey  string
-			message     string
-			code        string
-			command     string
-			toolName    string
-			environment []byte
+			issueID      string
+			fingerprint  string
+			title        string
+			projectKey   string
+			message      string
+			code         string
+			command      string
+			toolName     string
+			environment  []byte
+			fixVersionID string
+			fixBody      string
+			fixSource    string
+			fixAppliesTo string
+			fixTrust     float64
 		)
-		if err := rows.Scan(&issueID, &fingerprint, &title, &projectKey, &message, &code, &command, &toolName, &environment); err != nil {
+		if err := rows.Scan(&issueID, &fingerprint, &title, &projectKey, &message, &code, &command, &toolName, &environment,
+			&fixVersionID, &fixBody, &fixSource, &fixAppliesTo, &fixTrust); err != nil {
 			return retrievalDetails{}, fmt.Errorf("scan candidate: %w", err)
 		}
 		stored := storedRetrievalCandidate{
@@ -316,6 +356,15 @@ func loadRetrievalCandidates(ctx context.Context, conn *pgx.Conn, issueIDs []str
 			},
 			Title:      title,
 			ProjectKey: projectKey,
+		}
+		if fixVersionID != "" {
+			stored.Solution = &RetrievalSolution{
+				SolutionVersionID: fixVersionID,
+				Body:              fixBody,
+				Source:            fixSource,
+				AppliesTo:         formatAppliesTo([]byte(fixAppliesTo)),
+				Trust:             fixTrust,
+			}
 		}
 		detail.byIssue[issueID] = stored
 		detail.order = append(detail.order, issueID)
@@ -349,6 +398,33 @@ func environmentFromJSON(raw []byte) core.Environment {
 		Connector:       stored.Connector,
 		RuntimeVersions: stored.RuntimeVersions,
 	}
+}
+
+// formatAppliesTo renders a stored environment scope as the one line the
+// candidate view shows ("os=windows, shell=cmd, go=1.26.4"). The contract
+// treats it as display text; an empty scope stays empty so the caller can tell
+// "applies everywhere" from "applies in a specific environment".
+func formatAppliesTo(raw []byte) string {
+	environment := environmentFromJSON(raw)
+	parts := make([]string, 0, 3+len(environment.RuntimeVersions))
+	if environment.OS != "" {
+		parts = append(parts, "os="+environment.OS)
+	}
+	if environment.Shell != "" {
+		parts = append(parts, "shell="+environment.Shell)
+	}
+	if environment.Connector != "" {
+		parts = append(parts, "connector="+environment.Connector)
+	}
+	keys := make([]string, 0, len(environment.RuntimeVersions))
+	for key := range environment.RuntimeVersions {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		parts = append(parts, key+"="+environment.RuntimeVersions[key])
+	}
+	return strings.Join(parts, ", ")
 }
 
 // persistRetrievals writes one row per returned candidate (section 4:

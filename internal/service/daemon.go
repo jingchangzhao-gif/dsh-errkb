@@ -72,6 +72,9 @@ type DaemonConfig struct {
 	LogMaxBytes int64
 	// HealthInterval is how often Run refreshes the health document.
 	HealthInterval time.Duration
+	// PipeName is the local Named Pipe the API listens on. Empty means
+	// DefaultPipeName.
+	PipeName string
 	// QueueBacklog reports the offline spool backlog; nil reports zero until
 	// EKB-033 wires the real queue.
 	QueueBacklog func() (int, error)
@@ -101,6 +104,9 @@ func (cfg DaemonConfig) normalize() (DaemonConfig, error) {
 	}
 	if cfg.QueueBacklog == nil {
 		cfg.QueueBacklog = func() (int, error) { return 0, nil }
+	}
+	if cfg.PipeName == "" {
+		cfg.PipeName = DefaultPipeName
 	}
 	return cfg, nil
 }
@@ -157,6 +163,7 @@ type Daemon struct {
 	ownsPool bool
 	lock     *instanceLock
 	log      *daemonLog
+	pipe     *PipeServer
 
 	healthMu sync.Mutex
 
@@ -222,12 +229,35 @@ func StartDaemon(ctx context.Context, cfg DaemonConfig) (*Daemon, error) {
 	if _, err := daemon.RefreshHealth(ctx); err != nil {
 		daemon.Log("warn", fmt.Sprintf("write the initial health document: %v", err))
 	}
-	daemon.Log("info", fmt.Sprintf("daemon started (mutex %s, schema %s)", cfg.LockName, current))
+
+	// The local API (EKB-029) serves the PostgreSQL backend (EKB-035). Until
+	// this file called ListenPipe nothing listened on the default pipe, so the
+	// CLI could never reach the database.
+	pipe, err := ListenPipe(PipeOptions{
+		Name:         cfg.PipeName,
+		API:          NewAPI(NewSQLBackend(pool)),
+		BeginRequest: daemon.BeginRequest,
+	})
+	if err != nil {
+		daemon.releaseResources()
+		return nil, fmt.Errorf("errkb daemon: listen on the local pipe: %w", err)
+	}
+	daemon.pipe = pipe
+	go func() {
+		if serveErr := pipe.Serve(ctx); serveErr != nil {
+			daemon.Log("warn", fmt.Sprintf("local API stopped: %v", serveErr))
+		}
+	}()
+
+	daemon.Log("info", fmt.Sprintf("daemon started (mutex %s, schema %s, pipe %s)", cfg.LockName, current, pipe.Name()))
 	return daemon, nil
 }
 
 // releaseResources unwinds a failed start.
 func (d *Daemon) releaseResources() {
+	if d.pipe != nil {
+		_ = d.pipe.Close()
+	}
 	if d.ownsPool {
 		d.pool.Close()
 	}
@@ -396,6 +426,12 @@ func (d *Daemon) Shutdown(ctx context.Context) error {
 		}
 
 		d.Log("info", fmt.Sprintf("daemon stopping (%d in flight)", d.InFlight()))
+		// Stop serving first: no new connection may slide in between the drain
+		// and the pool close. In-flight requests are already counted by
+		// BeginRequest and finish on the open connections.
+		if d.pipe != nil {
+			_ = d.pipe.Close()
+		}
 		if d.ownsPool {
 			d.pool.Close()
 		}
