@@ -46,6 +46,7 @@ Commands:
   feedback               record an outcome for a solution version
   stats                  knowledge-base totals and timings
   daemon                 run the local daemon
+  doctor                 diagnose the runtime and connector state
   version                print the version
 
 Global:
@@ -87,6 +88,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	case "daemon":
 		return runDaemon(rest)
+	case "doctor":
+		return runDoctor(rest, jsonMode, stdout, stderr)
 	}
 	env := &cliEnv{
 		json:   jsonMode,
