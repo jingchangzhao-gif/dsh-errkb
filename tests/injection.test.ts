@@ -373,17 +373,59 @@ describe("session digest and section", () => {
 });
 
 describe("registration", () => {
-  it("registers the capture listeners without request-error", () => {
+  it("registers the capture listeners and the request-error waterfall", () => {
     const host = fakeCtx();
     const recorder = fakeRecorder();
     registerListeners(host.ctx, recorder);
     expect(host.listeners.get("agent/error")).toHaveLength(1);
     expect(host.listeners.get("tools/result")).toHaveLength(1);
-    expect(host.listeners.has("agent/request-error")).toBe(false);
+    expect(host.listeners.get("agent/request-error")).toHaveLength(1);
     host.emit("agent/error", { agent: { id: "s1" }, error: "x" });
     expect(recorder.calls).toContain("agentError");
     void recorder.toolResult(exec(), failed());
     expect(recorder.calls).toContain("toolResult");
+  });
+
+  it("observes a request failure without taking the waterfall over", async () => {
+    const host = fakeCtx();
+    const recorder = fakeRecorder();
+    registerListeners(host.ctx, recorder);
+    const listener = host.listeners.get("agent/request-error")?.[0] as (
+      payload: unknown,
+      next: () => Promise<unknown>,
+    ) => Promise<unknown>;
+    const downstream = { kind: "retry" };
+    const payload = {
+      agent: { id: "s1" },
+      turn: 1,
+      step: 1,
+      provider: "deepseek",
+      failure: { code: "RATE_LIMIT", message: "rate limited" },
+    };
+    await expect(listener(payload, async () => downstream)).resolves.toBe(
+      downstream,
+    );
+    expect(recorder.calls).toContain("requestError");
+  });
+
+  it("keeps the downstream error of the request waterfall", async () => {
+    const host = fakeCtx();
+    const recorder = fakeRecorder();
+    registerListeners(host.ctx, recorder);
+    const listener = host.listeners.get("agent/request-error")?.[0] as (
+      payload: unknown,
+      next: () => Promise<unknown>,
+    ) => Promise<unknown>;
+    const failure = new Error("provider exploded");
+    await expect(
+      listener(
+        { agent: { id: "s1" }, provider: "x", failure: { code: "AUTH" } },
+        async () => {
+          throw failure;
+        },
+      ),
+    ).rejects.toBe(failure);
+    expect(recorder.calls).toContain("requestError");
   });
 
   it("registers the hooks, the section and the replay", async () => {
@@ -490,7 +532,7 @@ describe("edge paths", () => {
     expect(recorder.stats.failures).toBe(1);
   });
 
-  it("survives a payload whose agent getter throws", async () => {
+  it("ignores a payload whose agent getter throws", async () => {
     const recorder = fakeRecorder();
     const injection = createInjection({ recorder });
     injection.agentError(
@@ -501,7 +543,9 @@ describe("edge paths", () => {
       }) as never,
     );
     await settle();
-    expect(recorder.stats.failures).toBe(1);
+    // The host guards service access behind an inject declaration; a hidden
+    // agent id is not a failure, so the observation keeps the default session.
+    expect(recorder.stats.failures).toBe(0);
   });
 
   it("survives a failing tool-result write", async () => {
@@ -531,7 +575,7 @@ describe("edge paths", () => {
     ) as never;
     const decision = await host.postExecute(bad, failed());
     expect(decision).toEqual({ kind: "accept" });
-    expect(recorder.stats.failures).toBe(1);
+    expect(recorder.stats.failures).toBe(0);
   });
 
   it("survives a decision whose contexts getter throws", async () => {
@@ -562,6 +606,6 @@ describe("edge paths", () => {
     }) as never;
     const decision = await host.preStep(payload);
     expect(decision.kind).toBe("enter");
-    expect(recorder.stats.failures).toBe(1);
+    expect(recorder.stats.failures).toBe(0);
   });
 });

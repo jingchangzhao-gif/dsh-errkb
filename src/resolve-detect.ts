@@ -24,6 +24,11 @@
 // on tool A, then again on tool B, then A succeeded - resolves nothing; a
 // success on B afterwards does.
 //
+// Detection is reported, not judged: src/plugin.ts turns every resolution into
+// one outcome for the core (`feedback`, EKB-039), and the core's errkb_trust()
+// is the only place that decides whether a fix is trusted. Nothing here (or in
+// the rest of the adapter) computes or caches trust.
+//
 // The model's free text is never parsed for a fix: `err_record` (T15), through
 // the recorder's recordFix(), is the only way one is written.
 import { exitCode } from "./capture";

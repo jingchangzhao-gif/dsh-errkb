@@ -170,6 +170,7 @@ export function recorderOptions(config: Config): RecorderOptions {
     captureExitCodes: config.captureExitCodes,
     connectorId: config.connectorId,
     projectKey: config.projectKey,
+    providers: config.providers,
   };
 }
 
@@ -266,6 +267,20 @@ export function apply(ctx: Context, given: Config) {
       idWidth: config.idWidth,
     },
   });
-
-  // TODO(T16): register the agent/request-error listener here.
+  // T16 / EKB-039: observe LLM request failures. This is a waterfall hook
+  // (§13), so it awaits the downstream chain, returns its answer unchanged
+  // and never retries or swallows: the observation is a side effect, the
+  // retry policy still belongs to dsh-llm. The observation itself is awaited
+  // so a fire-and-forget write cannot be lost when the host exits.
+  ctx.on("agent/request-error", async (payload, next) => {
+    try {
+      return await next();
+    } finally {
+      try {
+        await recorder.requestError(payload);
+      } catch {
+        // Recording must never change the waterfall answer.
+      }
+    }
+  });
 }

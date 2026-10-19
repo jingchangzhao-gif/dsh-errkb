@@ -63,7 +63,7 @@ func (b *SQLBackend) Lookup(ctx context.Context, request contract.LookupRequest)
 		result, err := database.Retrieve(ctx, conn, database.RetrievalRequest{
 			IssueID:     request.Issue,
 			Fingerprint: request.Fingerprint,
-			Message:     request.NormalizedMessage,
+			Message:     normalizeQuery(request.NormalizedMessage),
 			ErrorCode:   request.ErrorCode,
 			ProjectKey:  request.ProjectKey,
 		})
@@ -89,7 +89,7 @@ func (b *SQLBackend) Search(ctx context.Context, request contract.SearchRequest)
 	var candidates []contract.Candidate
 	err := b.withConn(ctx, func(ctx context.Context, conn *pgx.Conn) error {
 		result, err := database.Retrieve(ctx, conn, database.RetrievalRequest{
-			Message:    request.Query,
+			Message:    normalizeQuery(request.Query),
 			ProjectKey: request.ProjectKey,
 		})
 		if err != nil {
@@ -399,4 +399,14 @@ func translateBackendError(operation string, err error) error {
 		}
 	}
 	return APIErrorf(CodeInternal, "%s: %v", operation, err)
+}
+
+// normalizeQuery turns raw host text into the matching form. Queries are not
+// stored; the stored side is normalized, so the same pipeline applies before
+// comparing.
+func normalizeQuery(text string) string {
+	if text == "" {
+		return ""
+	}
+	return core.Normalize(text)
 }

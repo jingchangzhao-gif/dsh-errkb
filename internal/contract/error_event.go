@@ -55,7 +55,7 @@ var sensitivePatterns = []sensitivePattern{
 	{"an authorization header", regexp.MustCompile(`(?i)authorization[ \t]*:`)},
 	{"an absolute path", regexp.MustCompile(`[A-Za-z]:\\`)},
 	{"an absolute path", regexp.MustCompile(`/home/|/Users/`)},
-	{"a raw request id", regexp.MustCompile(`(?i)request[_-]?id[ \t]*[:=]`)},
+	{"a raw request id", regexp.MustCompile(`(?i)request[_-]?id[ \t]*[:=][ \t]*["']?[A-Za-z0-9]`)},
 }
 
 // ErrorEvent is one redacted observation. Events, issues, solutions and

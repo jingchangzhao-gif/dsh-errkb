@@ -222,7 +222,7 @@ describe("createRecorder", () => {
       expect(hit.injectable).toBe(true);
     }
     expect(connector.core.calls[0]?.operation).toBe("lookup");
-    expect(connector.core.calls[0]?.payload.session_id).toBe("dsh");
+    expect(connector.core.calls[0]?.payload.project_key).toBe("default");
   });
 
   it("marks an approximate candidate and its reason", async () => {
@@ -296,9 +296,7 @@ describe("createRecorder", () => {
     const byFingerprint = await recorder.lookupFingerprint("0123456789ab");
     expect(byId?.matched).toBe(true);
     expect(byFingerprint?.matched).toBe(true);
-    expect(connector.core.calls[0]?.payload.issue_id).toBe(
-      candidate().issue_id,
-    );
+    expect(connector.core.calls[0]?.payload.issue).toBe(candidate().issue_id);
     expect(connector.core.calls[1]?.payload.fingerprint).toBe("0123456789ab");
   });
 
@@ -610,5 +608,199 @@ describe("core edge paths", () => {
       code: "RATE_LIMIT",
     } as never);
     expect(connector.core.calls.at(-1)?.payload.error_code).toBe("RATE_LIMIT");
+  });
+});
+
+describe("request-error capture", () => {
+  const failure = (code: string, message: string, provider = "deepseek") =>
+    ({
+      agent: { id: "s1" },
+      provider,
+      failure: { code, message },
+    }) as never;
+
+  it("forwards a request failure as one llm observation", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    const outcome = await recorder.requestError(
+      failure("RATE_LIMIT", "429 Too Many Requests"),
+    );
+    expect(connector.captured).toHaveLength(1);
+    expect(connector.captured[0]).toMatchObject({
+      source: "llm",
+      error_code: "RATE_LIMIT",
+    });
+    expect(connector.captured[0]?.message).toContain("429");
+    expect(outcome).toEqual({
+      kind: "appended",
+      id: "00000000-0000-4000-8000-000000000003",
+    });
+  });
+
+  it("skips a provider outside the allowlist", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options({ providers: ["openai"] }),
+      createConnector: () => connector,
+    });
+    expect(
+      await recorder.requestError(failure("AUTH", "bad key", "deepseek")),
+    ).toEqual({ kind: "timeout" });
+    expect(connector.captured).toHaveLength(0);
+  });
+
+  it("does not let the paired agent error bypass a provider filter", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options({ providers: ["openai"] }),
+      createConnector: () => connector,
+    });
+    expect(
+      await recorder.requestError(failure("AUTH", "bad key", "deepseek")),
+    ).toEqual({ kind: "timeout" });
+    const paired = await recorder.agentError({
+      agent: { id: "s1" },
+      error: "bad key",
+    });
+    expect(paired).toEqual({ kind: "counted" });
+    expect(connector.captured).toHaveLength(0);
+  });
+
+  it("captures every provider for the wildcard allowlist", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options({ providers: ["*"] }),
+      createConnector: () => connector,
+    });
+    await recorder.requestError(failure("AUTH", "bad key", "anything"));
+    expect(connector.captured).toHaveLength(1);
+  });
+
+  it("skips request failures when the llm source is not captured", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options({ capture: ["tool"] }),
+      createConnector: () => connector,
+    });
+    expect(await recorder.requestError(failure("AUTH", "bad key"))).toEqual({
+      kind: "timeout",
+    });
+    expect(connector.captured).toHaveLength(0);
+  });
+
+  it("counts a tool result and a request error of the same failure once", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    const first = await recorder.toolResult(
+      { name: "shell", arguments: {}, agent: { id: "s1" } } as never,
+      {
+        isError: true,
+        content: [],
+        error: {
+          message: "EPERM: operation not permitted",
+          info: { name: "shell", code: "EPERM" },
+        },
+      } as never,
+    );
+    const second = await recorder.requestError(
+      failure("EPERM", "EPERM: operation not permitted"),
+    );
+    expect(first?.kind).toBe("appended");
+    expect(second).toEqual({ kind: "counted" });
+    expect(connector.captured).toHaveLength(1);
+    expect(recorder.stats.counted).toBe(1);
+  });
+
+  it("counts two sources of the same message once even when the codes differ", async () => {
+    // Live: agent/request-error reported INVALID_REQUEST while agent/error
+    // reported the same provider text with no code; the message is the key.
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    const first = await recorder.requestError(
+      failure("INVALID_REQUEST", "the model was rejected"),
+    );
+    const second = await recorder.capture(
+      {
+        kind: "llm",
+        code: "UNKNOWN",
+        message: "the model was rejected",
+      },
+      "s1",
+    );
+    expect(first.kind).toBe("appended");
+    expect(second).toEqual({ kind: "counted" });
+    expect(connector.captured).toHaveLength(1);
+  });
+
+  it("counts a different message of the same code separately", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    await recorder.requestError(failure("RATE_LIMIT", "first failure"));
+    await recorder.requestError(failure("RATE_LIMIT", "second failure"));
+    expect(connector.captured).toHaveLength(2);
+  });
+
+  it("reports the outcome of a solution to the core", async () => {
+    const connector = fakeConnector({ candidate: candidate() });
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    expect(await recorder.feedback(candidate().issue_id, "success")).toBe(true);
+    expect(connector.core.calls.at(-1)).toMatchObject({
+      operation: "feedback",
+      payload: {
+        issue_id: candidate().issue_id,
+        solution_version_id: "00000000-0000-4000-8000-000000000005",
+        outcome: "success",
+      },
+    });
+  });
+
+  it("skips feedback when the issue has no recorded solution", async () => {
+    const connector = fakeConnector({
+      candidate: { ...candidate(), solution: undefined },
+    });
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    expect(
+      await recorder.feedback(
+        "00000000-0000-4000-8000-000000000003",
+        "failure",
+      ),
+    ).toBe(false);
+    expect(
+      connector.core.calls.some((call) => call.operation === "feedback"),
+    ).toBe(false);
+  });
+
+  it("swallows a failing feedback write", async () => {
+    const connector = fakeConnector({
+      candidate: candidate(),
+      reject: (operation) =>
+        operation === "feedback" ? new Error("core down") : undefined,
+    });
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    expect(await recorder.feedback(candidate().issue_id, "success")).toBe(
+      false,
+    );
+    expect(recorder.stats.failures).toBe(1);
   });
 });
