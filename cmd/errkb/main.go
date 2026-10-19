@@ -46,6 +46,7 @@ Commands:
   feedback               record an outcome for a solution version
   stats                  knowledge-base totals and timings
   run -- <command>       run a command and look up its known fix
+  mcp                    serve MCP over stdio for LLM hosts
   daemon                 run the local daemon
   doctor                 diagnose the runtime and connector state
   version                print the version
@@ -99,6 +100,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 			stdin:  os.Stdin,
 			dial:   dialClient,
 		})
+	case "mcp":
+		return runMCP(rest, os.Stdin, stdout, stderr)
 	}
 	env := &cliEnv{
 		json:   jsonMode,
