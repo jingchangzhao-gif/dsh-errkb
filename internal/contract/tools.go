@@ -14,6 +14,11 @@ import (
 // (EKB-011 owns the compatibility rule).
 const ToolSchemaVersion = "v1"
 
+// ConnectorSDKVersion is the version on the connector capture envelope
+// (spec/connector.cue #ConnectorSDKVersion). It is its own anchor: the six MCP
+// operations can move without touching the connector SDK.
+const ConnectorSDKVersion = "v1"
+
 // MaxCandidates is the plan section 5 ceiling: a response with four candidates
 // is invalid, and only a candidate with approximate=false may auto-apply.
 const MaxCandidates = 3
@@ -27,6 +32,9 @@ const (
 	OperationFeedback = "feedback"
 	OperationList     = "list"
 	OperationStats    = "stats"
+	// OperationCapture is the connector SDK capture call (spec/connector.cue).
+	// It is a local API operation only: MCP must never become passive capture.
+	OperationCapture = "capture"
 )
 
 // matchReasons is the plan section 5 order. The first three prove "same
@@ -457,6 +465,107 @@ func checkRedacted(field, text string) error {
 		if pattern.re.MatchString(text) {
 			return fmt.Errorf("%s: still contains %s, redact before the write point", field, pattern.what)
 		}
+	}
+	return nil
+}
+
+// ConnectorObservation is the raw failure shape a connector hands to the core
+// (spec/connector.cue #Observation, EKB-036). Nothing here is classified,
+// redacted, fingerprinted or stored yet: those are the core's job, and an
+// adapter that reimplements them violates plan section 3.2.
+type ConnectorObservation struct {
+	ObservedAt      string            `json:"observed_at"`
+	Source          string            `json:"source"`
+	Message         string            `json:"message"`
+	ErrorCode       string            `json:"error_code,omitempty"`
+	Command         string            `json:"command,omitempty"`
+	ExitCode        *int              `json:"exit_code,omitempty"`
+	ToolName        string            `json:"tool_name,omitempty"`
+	OS              string            `json:"os,omitempty"`
+	Shell           string            `json:"shell,omitempty"`
+	RuntimeVersions map[string]string `json:"runtime_versions,omitempty"`
+	ProjectKey      string            `json:"project_key,omitempty"`
+	Evidence        string            `json:"evidence,omitempty"`
+	Confidence      *float64          `json:"confidence,omitempty"`
+}
+
+// Validate enforces the shape the capture pipeline relies on. Raw message text
+// is allowed on purpose; redaction happens before the database write.
+func (o ConnectorObservation) Validate() error {
+	if _, err := time.Parse(time.RFC3339, o.ObservedAt); err != nil {
+		return fmt.Errorf("observation.observed_at: %v", err)
+	}
+	if !validCategories[o.Source] {
+		return fmt.Errorf("observation.source: unknown source %q", o.Source)
+	}
+	if o.Confidence != nil && (*o.Confidence < 0 || *o.Confidence > 1) {
+		return fmt.Errorf("observation.confidence: want 0..1, got %v", *o.Confidence)
+	}
+	for key, value := range o.RuntimeVersions {
+		if key == "" || value == "" {
+			return errors.New("observation.runtime_versions: keys and values must be non-empty")
+		}
+	}
+	return nil
+}
+
+// CaptureRequest is the connector SDK capture envelope (spec/connector.cue).
+type CaptureRequest struct {
+	SchemaVersion string               `json:"schema_version"`
+	ConnectorID   string               `json:"connector_id"`
+	SessionID     string               `json:"session_id"`
+	Channel       string               `json:"channel,omitempty"`
+	ObservationID string               `json:"observation_id,omitempty"`
+	Observation   ConnectorObservation `json:"observation"`
+}
+
+// Validate checks the envelope. ConnectorID is the connector name an adapter
+// knows; the core maps it to the row's uuid. An empty channel defaults to "A".
+func (r CaptureRequest) Validate() error {
+	if r.SchemaVersion != ConnectorSDKVersion {
+		return fmt.Errorf("capture.schema_version: want %q, got %q", ConnectorSDKVersion, r.SchemaVersion)
+	}
+	if r.ConnectorID == "" {
+		return errors.New("capture.connector_id: required")
+	}
+	if r.SessionID == "" {
+		return errors.New("capture.session_id: required")
+	}
+	if r.Channel != "" && !validChannels[r.Channel] {
+		return fmt.Errorf("capture.channel: unknown channel %q", r.Channel)
+	}
+	return r.Observation.Validate()
+}
+
+// CaptureResponse mirrors the record result: the issue identity and whether
+// this call created the issue.
+type CaptureResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	EventID       string `json:"event_id"`
+	OccurrenceID  string `json:"occurrence_id"`
+	IssueID       string `json:"issue_id"`
+	Fingerprint   string `json:"fingerprint"`
+	Created       bool   `json:"created"`
+}
+
+// Validate rejects an empty identity and a malformed fingerprint.
+func (r CaptureResponse) Validate() error {
+	if r.SchemaVersion != ConnectorSDKVersion {
+		return fmt.Errorf("capture.schema_version: want %q, got %q", ConnectorSDKVersion, r.SchemaVersion)
+	}
+	identities := []struct {
+		name  string
+		value string
+	}{
+		{"event_id", r.EventID}, {"occurrence_id", r.OccurrenceID}, {"issue_id", r.IssueID},
+	}
+	for _, identity := range identities {
+		if identity.value == "" {
+			return fmt.Errorf("capture.%s: required", identity.name)
+		}
+	}
+	if !fingerprintPattern.MatchString(r.Fingerprint) {
+		return fmt.Errorf("capture.fingerprint: want 12 lowercase hex characters, got %q", r.Fingerprint)
 	}
 	return nil
 }

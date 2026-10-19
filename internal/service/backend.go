@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jingchangzhao-gif/dsh-errkb/internal/capture"
 	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
 	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
 	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
@@ -247,6 +248,28 @@ func mapCandidates(candidates []database.RetrievalCandidate) []contract.Candidat
 		mapped = append(mapped, entry)
 	}
 	return mapped
+}
+
+// Capture accepts a connector observation and hands it to the capture pipeline
+// (EKB-038 rollback): the core classifies, redacts, fingerprints and stores, so
+// the adapter stays capability-free.
+func (b *SQLBackend) Capture(ctx context.Context, request contract.CaptureRequest) (contract.CaptureResponse, error) {
+	if err := request.Validate(); err != nil {
+		return contract.CaptureResponse{}, APIErrorf(CodeInvalidRequest, "%v", err)
+	}
+	var response contract.CaptureResponse
+	err := b.withConn(ctx, func(ctx context.Context, conn *pgx.Conn) error {
+		stored, err := capture.CaptureObservation(ctx, conn, request)
+		if err != nil {
+			return err
+		}
+		response = stored
+		return nil
+	})
+	if err != nil {
+		return contract.CaptureResponse{}, translateBackendError("capture", err)
+	}
+	return response, nil
 }
 
 func matchReason(candidate database.RetrievalCandidate) string {

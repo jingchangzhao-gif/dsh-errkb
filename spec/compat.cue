@@ -212,8 +212,10 @@ compat: {
 			}
 			version_anchor: "#ConnectorSDKVersion"
 			fields: [
+				"ConnectorCaptureRequest.channel",
 				"ConnectorCaptureRequest.connector_id",
 				"ConnectorCaptureRequest.observation",
+				"ConnectorCaptureRequest.observation_id",
 				"ConnectorCaptureRequest.schema_version",
 				"ConnectorCaptureRequest.session_id",
 				"ConnectorCaptureResponse.created",
@@ -555,7 +557,7 @@ compat: {
 				"LocalError.retryable",
 			]
 			enums: {
-				operation: ["lookup", "search", "record", "feedback", "list", "stats"]
+				operation: ["lookup", "search", "record", "feedback", "list", "stats", "capture"]
 				error_code: ["invalid_request", "not_found", "unavailable", "conflict", "internal"]
 			}
 		}

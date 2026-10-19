@@ -22,6 +22,7 @@ var validOperations = map[string]bool{
 	OperationFeedback: true,
 	OperationList:     true,
 	OperationStats:    true,
+	OperationCapture:  true,
 }
 
 var validErrorCodes = map[string]bool{
@@ -175,6 +176,12 @@ func validatePayload(operation string, payload []byte) error {
 			return fmt.Errorf("stats payload: %w", err)
 		}
 		return decoded.Validate()
+	case OperationCapture:
+		var decoded CaptureRequest
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("capture payload: %w", err)
+		}
+		return decoded.Validate()
 	default:
 		return fmt.Errorf("operation: unknown %q", operation)
 	}
@@ -218,6 +225,12 @@ func validateResult(operation string, payload []byte) error {
 		var decoded StatsResponse
 		if err := decodeStrict(payload, &decoded); err != nil {
 			return fmt.Errorf("stats result: %w", err)
+		}
+		return decoded.Validate()
+	case OperationCapture:
+		var decoded CaptureResponse
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("capture result: %w", err)
 		}
 		return decoded.Validate()
 	default:
