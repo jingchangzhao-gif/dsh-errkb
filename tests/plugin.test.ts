@@ -1,872 +1,614 @@
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  writeFile,
-} from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import type { Context } from "@deepseek-ai/cordis";
+// The recorder is a thin client (EKB-038d): every failure becomes one
+// observation for the core, every read is a core call, and nothing is stored
+// or matched locally. These tests drive it with a fake connector.
 import type {
   ToolExecution,
   ToolExecutionResult,
 } from "@deepseek-ai/dsh-tools";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { Config, apply, recorderOptions } from "../src/index";
-import { filesIn } from "../src/paths";
+import { describe, expect, it } from "vitest";
+import { CoreError } from "../src/connector";
 import {
-  FAILURE_LOG_INTERVAL_MS,
+  DEFAULT_INJECTION_OPTIONS,
+  DEFAULT_RECORDER_OPTIONS,
+  MAX_PENDING,
   MAX_SESSIONS,
-  RETRY_DELAY_MS,
-  WRITE_RETRIES,
   commandFrom,
   createRecorder,
+  exitCode,
   registerListeners,
-  resultText,
-  settled,
-  stateTrustStore,
+  toolInput,
 } from "../src/plugin";
-import type { RecorderDeps, RecorderLogger } from "../src/plugin";
-import { nodeStoreFs, parseDocument } from "../src/store";
-import type { StoreClock, StoreFs } from "../src/store";
+import type { RecorderOptions } from "../src/plugin";
+import { candidate, fakeConnector, fakeRecorder, settle } from "./support";
 
-// ---------------------------------------------------------------------------
-// Fixtures
-
-let dir: string;
-
-beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "errkb-plugin-"));
+const options = (
+  overrides: Partial<RecorderOptions> = {},
+): RecorderOptions => ({
+  ...DEFAULT_RECORDER_OPTIONS,
+  ...overrides,
 });
 
-afterEach(async () => {
-  await rm(dir, { recursive: true, force: true });
-});
-
-type Listener = (...args: unknown[]) => unknown;
-
-/** A context that records registrations and lets a test fire events. */
-function fakeCtx() {
-  const listeners = new Map<string, Listener[]>();
-  const logs: Array<{ level: string; args: unknown[] }> = [];
-  const log =
-    (level: string) =>
-    (...args: unknown[]) => {
-      logs.push({ level, args });
-    };
-  const sections: unknown[] = [];
-  const ctx = {
-    on(name: string, listener: Listener) {
-      listeners.set(name, [...(listeners.get(name) ?? []), listener]);
-      return () => true;
-    },
-    tools: {
-      register: () => () => undefined,
-    },
-    systemPrompt: {
-      section(section: unknown) {
-        sections.push(section);
-        return () => undefined;
-      },
-    },
-    logger: {
-      info: log("info"),
-      warn: log("warn"),
-      error: log("error"),
-      debug: log("debug"),
-    },
-  };
-  return {
-    ctx: ctx as unknown as Context,
-    listeners,
-    logs,
-    fire(name: string, ...args: unknown[]) {
-      for (const listener of listeners.get(name) ?? []) listener(...args);
-    },
-  };
-}
-
-/** A clock whose time only moves when the code sleeps, or a test says so. */
-function fakeClock(start = Date.UTC(2026, 9, 1, 8, 0, 0)) {
-  let t = start;
-  const clock: StoreClock = {
-    now: () => new Date(t),
-    sleep: async (ms) => {
-      t += ms;
-    },
-    random: () => 0.5,
-  };
-  return {
-    clock,
-    advance(ms: number) {
-      t += ms;
-    },
-  };
-}
-
-function quietLogger() {
-  const warnings: unknown[][] = [];
-  const logger: RecorderLogger = {
-    warn: (...args) => {
-      warnings.push(args);
-    },
-  };
-  return { logger, warnings };
-}
-
-const exec = (
-  name: string,
-  args: unknown = {},
-  agent: { id: string } | undefined = { id: "s1" },
-) =>
+const toolExec = (overrides: Partial<ToolExecution> = {}) =>
   ({
-    name,
-    arguments: args,
-    ...(agent === undefined ? {} : { agent }),
-  }) as unknown as Readonly<ToolExecution>;
+    name: "shell",
+    arguments: { command: "pnpm build" },
+    agent: { id: "s1" },
+    ...overrides,
+  }) as unknown as ToolExecution;
 
-const ok = (text: string) =>
+const toolResult = (overrides: Partial<ToolExecutionResult> = {}) =>
   ({
     isError: false,
-    value: null,
-    content: [{ type: "text", text }],
-  }) as unknown as Readonly<ToolExecutionResult>;
+    content: [{ type: "text", text: "ok" }],
+    ...overrides,
+  }) as unknown as ToolExecutionResult;
 
-const failed = (message: string, code?: string) =>
-  ({
-    isError: true,
-    error: {
-      message,
-      ...(code === undefined ? {} : { info: { name: "Error", code } }),
-    },
-    content: [{ type: "text", text: message }],
-  }) as unknown as Readonly<ToolExecutionResult>;
-
-const TSC_A =
-  "/srv/app/src/a.ts:12:5 - error TS2307: Cannot find module 'missing-pkg'.\n[exit code: 1]";
-const TSC_B =
-  "/srv/other/src/a.ts:40:9 - error TS2307: Cannot find module 'missing-pkg'.\n[exit code: 1]";
-
-async function readState(): Promise<unknown> {
-  return JSON.parse(await readFile(filesIn(dir).state, "utf8"));
-}
-
-async function readEntries(path: string) {
-  return parseDocument(await readFile(path, "utf8")).blocks.map((b) => b.entry);
-}
-
-function recorder(over: Partial<RecorderDeps> = {}) {
-  const { logger, warnings } = quietLogger();
-  const files = filesIn(dir);
-  const rec = createRecorder({ files, logger, ...over });
-  return { rec, files, warnings };
-}
-
-// ---------------------------------------------------------------------------
-// apply(): registration and end-to-end
-
-describe("apply: registration", () => {
-  it("registers the T11 listeners and the T13 hooks, not T16's, and logs the directory", () => {
-    const fake = fakeCtx();
-    apply(fake.ctx, Config({ kbDir: dir }));
-    expect([...fake.listeners.keys()].sort()).toEqual([
-      "agent/error",
-      "agent/pre-step",
-      "agent/session-start",
-      "tools/post-execute",
-      "tools/result",
-    ]);
-    expect(fake.listeners.has("agent/request-error")).toBe(false);
-    expect(fake.logs).toHaveLength(1);
-    expect(fake.logs[0]?.level).toBe("info");
-    expect(String(fake.logs[0]?.args[0])).toContain(dir);
-  });
-
-  it("the tools/result listener returns undefined, as the emit event declares", () => {
-    const fake = fakeCtx();
-    apply(fake.ctx, Config({ kbDir: dir }));
-    const listener = fake.listeners.get("tools/result")?.[0] as Listener;
-    expect(listener(exec("read"), ok("fine"))).toBeUndefined();
-  });
-});
-
-describe("apply: end to end on a temporary knowledge base", () => {
-  it("a guaranteed-failing command produces E-0001 in ERRORS.md", async () => {
-    const fake = fakeCtx();
-    apply(fake.ctx, Config({ kbDir: dir }));
-    fake.fire("tools/result", exec("bash", { command: "pnpm tsc" }), ok(TSC_A));
-    await settled(filesIn(dir).errors);
-
-    const text = await readFile(filesIn(dir).errors, "utf8");
-    expect(text).toMatch(/^## E-0001 · \[command-exit:bash\] /m);
-    const [entry] = await readEntries(filesIn(dir).errors);
-    expect(entry).toMatchObject({
-      id: "E-0001",
-      category: "command-exit / bash",
-      hits: 1,
-      meta: { cat: "command-exit", code: "TS2307" },
+describe("createRecorder", () => {
+  it("forwards one appended observation and counts it", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
     });
-    // The store redacts: the absolute path never reaches the document.
-    expect(text).not.toContain("/srv/app");
-  });
-
-  it("the same failure with another path and line is still E-0001, hits 2", async () => {
-    const fake = fakeCtx();
-    apply(fake.ctx, Config({ kbDir: dir }));
-    fake.fire("tools/result", exec("bash", { command: "pnpm tsc" }), ok(TSC_A));
-    fake.fire("tools/result", exec("bash", { command: "pnpm tsc" }), ok(TSC_B));
-    await settled(filesIn(dir).errors);
-
-    // The block keeps its baseline; the repeat is counted in state.json.
-    const entries = await readEntries(filesIn(dir).errors);
-    expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ id: "E-0001", hits: 1 });
-    expect(await readState()).toMatchObject({
-      entries: { "E-0001": { hits: 1 } },
+    const outcome = await recorder.capture({
+      kind: "tool",
+      toolName: "shell",
+      isError: true,
+      message: "EPERM",
     });
-  });
-
-  it("two different silent commands take two IDs", async () => {
-    const fake = fakeCtx();
-    apply(fake.ctx, Config({ kbDir: dir }));
-    fake.fire(
-      "tools/result",
-      exec("bash", { command: "pnpm test" }),
-      ok("[exit code: 1]"),
-    );
-    fake.fire(
-      "tools/result",
-      exec("bash", { command: "pnpm lint" }),
-      ok("[exit code: 1]"),
-    );
-    await settled(filesIn(dir).errors);
-
-    const entries = await readEntries(filesIn(dir).errors);
-    expect(entries.map((e) => [e.id, e.title])).toEqual([
-      ["E-0001", "[command-exit:bash] pnpm test → exit code 1"],
-      ["E-0002", "[command-exit:bash] pnpm lint → exit code 1"],
-    ]);
-  });
-
-  it("tool failures and turn errors are recorded too", async () => {
-    const fake = fakeCtx();
-    apply(fake.ctx, Config({ kbDir: dir }));
-    fake.fire(
-      "tools/result",
-      exec("write"),
-      failed("EPERM: operation not permitted", "EPERM"),
-    );
-    fake.fire("agent/error", {
-      agent: { id: "s1" },
-      turn: 1,
-      step: 2,
-      error: new TypeError("x is not a function"),
+    expect(outcome).toEqual({
+      kind: "appended",
+      id: "00000000-0000-4000-8000-000000000003",
     });
-    await settled(filesIn(dir).errors);
-
-    const entries = await readEntries(filesIn(dir).errors);
-    expect(
-      entries.map((e) => [e.id, e.title, e.meta.cat, e.meta.code]),
-    ).toEqual([
-      [
-        "E-0001",
-        "[tool:write] EPERM: operation not permitted",
-        "tool",
-        "EPERM",
-      ],
-      [
-        "E-0002",
-        "[agent] TypeError: x is not a function",
-        "agent",
-        "TypeError",
-      ],
-    ]);
+    expect(connector.captured[0]?.source).toBe("tool");
+    expect(connector.captured[0]?.message).toBe("EPERM");
+    expect(connector.captured[0]?.tool_name).toBe("shell");
+    expect(recorder.stats.appended).toBe(1);
+    expect(recorder.stats.failures).toBe(0);
   });
 
-  it("a store that throws is swallowed: nothing reaches the turn, one warning", async () => {
-    // ERRORS.md is a directory: every read fails with EISDIR.
-    await mkdir(filesIn(dir).errors);
-    const fake = fakeCtx();
-    apply(fake.ctx, Config({ kbDir: dir }));
-    expect(() => {
-      fake.fire("tools/result", exec("bash"), ok("boom\n[exit code: 1]"));
-      fake.fire("agent/error", { agent: { id: "s1" }, error: new Error("x") });
-    }).not.toThrow();
-    await settled(filesIn(dir).errors);
-
-    const warnings = fake.logs.filter((l) => l.level === "warn");
-    expect(warnings).toHaveLength(1);
-    expect(String(warnings[0]?.args[0])).toContain("not recorded");
-  });
-
-  it("capture: [] writes nothing", async () => {
-    const fake = fakeCtx();
-    apply(fake.ctx, Config({ kbDir: dir, capture: [] }));
-    fake.fire("tools/result", exec("bash"), ok("boom\n[exit code: 1]"));
-    fake.fire("tools/result", exec("write"), failed("EPERM"));
-    fake.fire("agent/error", { agent: { id: "s1" }, error: new Error("x") });
-    await settled(filesIn(dir).errors);
-    await expect(readFile(filesIn(dir).errors, "utf8")).rejects.toThrow();
-  });
-
-  it("settings reach the store: idPrefix, idWidth and labels", async () => {
-    const fake = fakeCtx();
-    apply(
-      fake.ctx,
-      Config({ kbDir: dir, idPrefix: "ERR-", idWidth: 2, labels: "zh" }),
-    );
-    fake.fire("tools/result", exec("bash"), ok("boom\n[exit code: 1]"));
-    await settled(filesIn(dir).errors);
-    const text = await readFile(filesIn(dir).errors, "utf8");
-    expect(text).toMatch(/^## ERR-01 · /m);
-    expect(text).toContain("- 指纹:");
-  });
-});
-
-describe("recorderOptions", () => {
-  it("maps every setting the recorder reads", () => {
-    expect(recorderOptions(Config({}))).toEqual({
-      capture: ["tool", "command", "llm", "agent"],
-      captureExitCodes: true,
-      transientThreshold: 5,
-      fuzzyThreshold: 0.72,
-      share: "public",
-      maxEntries: 200,
-      maxSampleChars: 500,
-      labels: "en",
-      idPrefix: "E-",
-      idWidth: 4,
-    });
-  });
-
-  it("share: only `private` is private; anything else is the safer public", () => {
-    expect(recorderOptions(Config({ share: "private" })).share).toBe("private");
-    expect(recorderOptions(Config({ share: "Private " })).share).toBe("public");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The recorder
-
-describe("recorder: the record and count-only paths", () => {
-  it("transient promotion end to end: counted, promoted once, then counted as hits", async () => {
-    const { rec, files } = recorder({ options: { transientThreshold: 3 } });
-    const rateLimit = {
-      kind: "llm",
-      code: "RATE_LIMIT",
-      message: "429 Too Many Requests",
-    } as const;
-    for (let i = 0; i < 5; i++) rec.capture(rateLimit, "s1");
-    await rec.idle();
-    expect(rec.outcomes.map((o) => o.kind)).toEqual([
-      "counted",
-      "counted",
-      "appended",
-      "hit",
-      "hit",
-    ]);
-    const [entry] = await readEntries(files.errors);
-    expect(entry).toMatchObject({ id: "E-0001", hits: 1 });
-    expect(rec.outcomes.at(-1)).toEqual({ kind: "hit", id: "E-0001", hits: 3 });
-
-    // Another session has its own count, but the entry exists: still a hit.
-    rec.capture(rateLimit, "s2");
-    await rec.idle();
-    expect(rec.outcomes.at(-1)).toEqual({ kind: "hit", id: "E-0001", hits: 4 });
-    expect(rec.stats).toEqual({
-      appended: 1,
-      hits: 3,
-      counted: 2,
-      timeouts: 0,
-      failures: 0,
-    });
-  });
-
-  it("a permanent LLM failure takes an ID at once", async () => {
-    const { rec } = recorder();
-    rec.capture({ kind: "llm", code: "AUTH", message: "invalid api key" });
-    await rec.idle();
-    expect(rec.outcomes).toEqual([{ kind: "appended", id: "E-0001" }]);
-  });
-
-  it("only the most recently active sessions keep a counter", async () => {
-    const { rec } = recorder({ options: { transientThreshold: 2 } });
-    const llm = { kind: "llm", code: "TIMEOUT", message: "timed out" } as const;
-    rec.capture(llm, "first");
-    for (let i = 0; i < MAX_SESSIONS; i++) rec.capture(llm, `other-${i}`);
-    // "first" was evicted, so this is its first occurrence again, not its second.
-    rec.capture(llm, "first");
-    await rec.idle();
-    expect(rec.stats.appended).toBe(0);
-
-    // A session kept active is not evicted.
-    const { rec: kept } = recorder({ options: { transientThreshold: 2 } });
-    kept.capture(llm, "first");
-    for (let i = 0; i < MAX_SESSIONS; i++) {
-      kept.capture(llm, "first-keepalive");
-      kept.capture(llm, `other-${i}`);
-    }
-    await kept.idle();
-    expect(kept.stats.appended).toBe(1);
-  });
-
-  it("payloads without an agent share one plugin-wide counter", async () => {
-    const { rec } = recorder({ options: { transientThreshold: 2 } });
-    rec.capture({ kind: "llm", code: "SERVER", message: "502" });
-    rec.capture({ kind: "llm", code: "SERVER", message: "502" });
-    await rec.idle();
-    expect(rec.outcomes.map((o) => o.kind)).toEqual(["counted", "appended"]);
-  });
-
-  it("a hit against a cached entry gone from ERRORS.md still only counts", async () => {
-    // mtime stays put, so the cached index keeps an entry that, once `vanish`
-    // is set, ERRORS.md no longer has. A hit writes only state.json, so
-    // nothing re-reads the document: the counter for an ID that is never
-    // reused is harmless.
-    const files = filesIn(dir);
-    const real = nodeStoreFs();
-    let vanish = false;
-    let vanishedReads = 0;
-    const fs: StoreFs = {
-      ...real,
-      mtimeMs: async (path) => (path === files.errors ? 1 : real.mtimeMs(path)),
-      readFile: async (path) => {
-        if (!vanish || path !== files.errors) return real.readFile(path);
-        vanishedReads++;
-        return "# ERRORS\n";
-      },
-    };
-    const { rec } = recorder({ fs, options: { transientThreshold: 2 } });
-    const slow = { kind: "llm", code: "RATE_LIMIT", message: "slow" } as const;
-    rec.capture(slow, "s1");
-    rec.capture(slow, "s1");
-    // A first occurrence elsewhere reads the index and writes nothing.
-    rec.capture({ kind: "llm", code: "TIMEOUT", message: "late" }, "s2");
-    await rec.idle();
-    expect(rec.outcomes.map((o) => o.kind)).toEqual([
-      "counted",
-      "appended",
-      "counted",
-    ]);
-
-    vanish = true;
-    rec.capture(slow, "s1");
-    await rec.idle();
-    expect(vanishedReads).toBe(0);
-    expect(rec.outcomes.at(-1)).toEqual({ kind: "hit", id: "E-0001", hits: 2 });
-  });
-});
-
-describe("recorder: hit counters in state.json (§4.3)", () => {
-  const auth = { kind: "llm", code: "AUTH", message: "bad key" } as const;
-
-  it("a repeat leaves ERRORS.md byte-identical while state.json counts 1, 2", async () => {
-    const { rec, files } = recorder();
-    rec.capture(auth);
-    await rec.idle();
-    const before = await readFile(files.errors, "utf8");
-    await expect(readFile(files.state, "utf8")).rejects.toThrow();
-
-    for (const n of [1, 2]) {
-      rec.capture(auth);
-      await rec.idle();
-      expect(await readFile(files.errors, "utf8")).toBe(before);
-      expect(await readState()).toMatchObject({
-        version: 1,
-        entries: { "E-0001": { hits: n } },
-        trust: {},
-      });
-      expect(rec.outcomes.at(-1)).toEqual({
-        kind: "hit",
-        id: "E-0001",
-        hits: 1 + n,
-      });
-    }
-    const index = await rec.entries();
-    expect(index?.map(({ entry }) => entry.hits)).toEqual([3]);
-  });
-
-  it("concurrent hits serialize to the right count", async () => {
-    const { rec, files } = recorder();
-    for (let i = 0; i < 12; i++) rec.capture(auth);
-    await rec.idle();
-    expect(rec.stats).toMatchObject({ appended: 1, hits: 11, failures: 0 });
-    expect(await readState()).toMatchObject({
-      entries: { "E-0001": { hits: 11 } },
-    });
-    expect((await readEntries(files.errors))[0]?.hits).toBe(1);
-  });
-
-  it("a corrupt state.json never throws, reads as empty, is reported once and saved aside by the next hit", async () => {
-    const { rec, files, warnings } = recorder();
-    rec.capture(auth);
-    rec.capture(auth);
-    await rec.idle();
-    await writeFile(files.state, "{ broken");
-
-    // Read twice: the counts fall back to the baseline, one warning.
-    expect((await rec.entries())?.[0]?.entry.hits).toBe(1);
-    expect((await rec.entries())?.[0]?.entry.hits).toBe(1);
-    expect(warnings).toHaveLength(1);
-    expect(String(warnings[0]?.[2])).toContain("state.json is not valid");
-    expect(await readFile(files.state, "utf8")).toBe("{ broken");
-
-    // The next hit saves it aside and starts a fresh delta.
-    rec.capture(auth);
-    await rec.idle();
-    expect(rec.outcomes.at(-1)).toEqual({ kind: "hit", id: "E-0001", hits: 2 });
-    const copies = (await readdir(dir)).filter((n) =>
-      n.startsWith("state.corrupt-"),
-    );
-    expect(copies).toHaveLength(1);
-    expect(await readFile(join(dir, copies[0] as string), "utf8")).toBe(
-      "{ broken",
-    );
-    expect(await readState()).toMatchObject({
-      entries: { "E-0001": { hits: 1 } },
-    });
-
-    // A new corruption after that is reported again (subject to the
-    // once-a-minute throttle: here it counts as a failure).
-    await writeFile(files.state, '{"version":2}');
-    expect((await rec.entries())?.[0]?.entry.hits).toBe(1);
-    expect(rec.stats.failures).toBe(2);
-  });
-
-  it("a busy lock on the hit path times out like any write", async () => {
-    const { clock } = fakeClock();
-    const { rec, files } = recorder({ clock });
-    rec.capture(auth);
-    await rec.idle();
-    await writeFile(files.lock, "held elsewhere");
-    rec.capture(auth);
-    await rec.idle();
-    expect(rec.outcomes.at(-1)).toEqual({ kind: "timeout" });
-    await rm(files.lock);
-    await expect(readFile(files.state, "utf8")).rejects.toThrow();
-  });
-});
-
-describe("stateTrustStore", () => {
-  it("an unreadable state.json loads nothing and is counted, never thrown", async () => {
-    const { rec, files, warnings } = recorder();
-    await mkdir(files.state, { recursive: true });
-    expect(await rec.machineState()).toBeUndefined();
-    const store = stateTrustStore(rec);
-    expect(store.load()).toEqual({ entries: {} });
-    expect(await store.loaded).toBeUndefined();
-    expect(rec.stats.failures).toBe(2);
-    expect(warnings).toHaveLength(1);
-  });
-
-  it("a corrupt state.json loads as empty trust", async () => {
-    const { rec, files } = recorder();
-    await writeFile(files.state, "[]");
-    expect(await stateTrustStore(rec).loaded).toEqual({ entries: {} });
-  });
-});
-
-describe("recorder: listener bodies", () => {
-  it("agentError without an agent still records", async () => {
-    const { rec } = recorder();
-    rec.agentError({ error: "plain string failure" });
-    await rec.idle();
-    expect(rec.outcomes).toEqual([{ kind: "appended", id: "E-0001" }]);
-  });
-
-  it("toolResult: a failure without info has no code", async () => {
-    const { rec, files } = recorder();
-    rec.toolResult(exec("fetch", {}, undefined), failed("socket hang up"));
-    await rec.idle();
-    const [entry] = await readEntries(files.errors);
-    expect(entry?.meta.code).toBeUndefined();
-    expect(entry?.title).toBe("[tool:fetch] socket hang up");
-  });
-
-  it("toolResult: a success without an exit marker writes nothing", async () => {
-    const { rec } = recorder();
-    rec.toolResult(exec("read"), ok("all good"));
-    rec.toolResult(exec("bash"), ok("built\n[exit code: 0]"));
-    await rec.idle();
-    expect(rec.outcomes).toEqual([]);
-  });
-
-  it("a payload whose getters throw is swallowed and counted", () => {
-    const { rec, warnings } = recorder();
-    const hostile = new Proxy(
+  it("counts a hit when the core did not create the issue", async () => {
+    const connector = fakeConnector(
       {},
       {
-        get() {
-          throw new Error("hostile payload");
-        },
+        capture: () =>
+          Promise.resolve({
+            queued: false,
+            created: false,
+            issueId: "00000000-0000-4000-8000-000000000003",
+          }),
       },
     );
-    expect(() => rec.agentError(hostile as never)).not.toThrow();
-    expect(() => rec.toolResult(hostile as never, ok("x"))).not.toThrow();
-    expect(() => rec.capture(hostile as never)).not.toThrow();
-    expect(rec.stats.failures).toBe(3);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]?.[2]).toBe("hostile payload");
-  });
-
-  it("a logger that throws does not reach the caller", () => {
-    const { rec } = recorder({
-      logger: {
-        warn() {
-          throw new Error("logger down");
-        },
-      },
-    });
-    expect(() => rec.agentError(null as never)).not.toThrow();
-    expect(rec.stats.failures).toBe(1);
-  });
-
-  it("registerListeners forwards both events to the recorder", async () => {
-    const fake = fakeCtx();
-    const { rec } = recorder();
-    registerListeners(fake.ctx, rec);
-    fake.fire("agent/error", { agent: { id: "s9" }, error: new Error("boom") });
-    fake.fire("tools/result", exec("write"), failed("EACCES: denied"));
-    await rec.idle();
-    expect(rec.stats.appended).toBe(2);
-  });
-});
-
-describe("recorder: §13 write budget, retries and throttled logging", () => {
-  it("a transient write failure is retried and then succeeds", async () => {
-    const { clock } = fakeClock();
-    const real = nodeStoreFs();
-    let renames = 0;
-    const fs: StoreFs = {
-      ...real,
-      rename: async (from, to) => {
-        if (renames++ === 0)
-          throw Object.assign(new Error("EBUSY: busy"), { code: "EBUSY" });
-        return real.rename(from, to);
-      },
-    };
-    const { rec, warnings } = recorder({ fs, clock });
-    rec.capture({ kind: "agent", error: new Error("boom") });
-    await rec.idle();
-    expect(rec.outcomes).toEqual([{ kind: "appended", id: "E-0001" }]);
-    expect(renames).toBe(2);
-    expect(warnings).toEqual([]);
-  });
-
-  it(`gives up after ${WRITE_RETRIES} retries, counts and logs the failure`, async () => {
-    const { clock } = fakeClock();
-    let attempts = 0;
-    const fs: StoreFs = {
-      ...nodeStoreFs(),
-      mtimeMs: async () => {
-        attempts++;
-        throw new Error("disk gone");
-      },
-    };
-    const { rec, warnings } = recorder({ fs, clock });
-    rec.capture({ kind: "agent", error: new Error("boom") });
-    await rec.idle();
-    expect(attempts).toBe(WRITE_RETRIES + 1);
-    expect(rec.outcomes).toEqual([{ kind: "failed" }]);
-    expect(rec.stats.failures).toBe(1);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]?.slice(1)).toEqual([1, "disk gone"]);
-  });
-
-  it("logs at most one failure per interval, with the running count", async () => {
-    const { clock, advance } = fakeClock();
-    const fs: StoreFs = {
-      ...nodeStoreFs(),
-      mtimeMs: async () => {
-        throw new Error("disk gone");
-      },
-    };
-    const { rec, warnings } = recorder({ fs, clock });
-    rec.capture({ kind: "agent", error: new Error("one") });
-    rec.capture({ kind: "agent", error: new Error("two") });
-    await rec.idle();
-    expect(warnings).toHaveLength(1);
-    advance(FAILURE_LOG_INTERVAL_MS);
-    rec.capture({ kind: "agent", error: new Error("three") });
-    await rec.idle();
-    expect(warnings).toHaveLength(2);
-    expect(warnings[1]?.[1]).toBe(3);
-  });
-
-  it("a document that does not parse is not retried", async () => {
-    const { clock } = fakeClock();
-    const files = filesIn(dir);
-    await writeFile(files.errors, "# ERRORS\n\n## E-0001 · broken\n");
-    let reads = 0;
-    const real = nodeStoreFs();
-    const fs: StoreFs = {
-      ...real,
-      readFile: async (path) => {
-        if (path === files.errors) reads++;
-        return real.readFile(path);
-      },
-    };
-    const { rec, warnings } = recorder({ fs, clock });
-    rec.capture({ kind: "agent", error: new Error("boom") });
-    await rec.idle();
-    expect(reads).toBe(1);
-    expect(rec.outcomes).toEqual([{ kind: "failed" }]);
-    expect(warnings).toHaveLength(1);
-  });
-
-  it("a lock held for the whole budget skips the write silently", async () => {
-    const { clock } = fakeClock();
-    const files = filesIn(dir);
-    const real = nodeStoreFs();
-    const fs: StoreFs = {
-      ...real,
-      createExclusive: async () => false,
-      readFile: async (path) =>
-        path === files.lock ? "someone-else" : real.readFile(path),
-      mtimeMs: async (path) =>
-        path === files.lock ? clock.now().getTime() : real.mtimeMs(path),
-    };
-    const { rec, warnings } = recorder({ fs, clock });
-    rec.capture({ kind: "agent", error: new Error("boom") });
-    await rec.idle();
-    expect(rec.outcomes).toEqual([{ kind: "timeout" }]);
-    expect(rec.stats).toMatchObject({ timeouts: 1, failures: 0 });
-    expect(warnings).toEqual([]);
-  });
-
-  it("a retry that would start past the budget is skipped as a timeout", async () => {
-    const { clock, advance } = fakeClock();
-    const fs: StoreFs = {
-      ...nodeStoreFs(),
-      mtimeMs: async () => {
-        advance(500);
-        throw new Error("slow disk");
-      },
-    };
-    const { rec, warnings } = recorder({ fs, clock });
-    rec.capture({ kind: "agent", error: new Error("boom") });
-    await rec.idle();
-    expect(rec.outcomes).toEqual([{ kind: "timeout" }]);
-    expect(warnings).toEqual([]);
-    expect(RETRY_DELAY_MS).toBeLessThan(500);
-  });
-
-  it("writes to one knowledge base run one at a time, in order", async () => {
-    const { rec: a } = recorder();
-    const { rec: b } = recorder();
-    for (let i = 0; i < 5; i++) {
-      a.capture({ kind: "agent", error: new Error(`a${i} unique failure`) });
-      b.capture({ kind: "agent", error: new Error(`b${i} different one`) });
-    }
-    await settled(filesIn(dir).errors);
-    const entries = await readEntries(filesIn(dir).errors);
-    expect(entries.map((e) => e.id)).toEqual(
-      Array.from(
-        { length: 10 },
-        (_, i) => `E-${String(i + 1).padStart(4, "0")}`,
-      ),
-    );
-    expect(entries[0]?.title).toContain("a0");
-    expect(entries[1]?.title).toContain("b0");
-  });
-
-  it("settled() of a knowledge base with nothing queued resolves at once", async () => {
-    await expect(settled(join(dir, "nothing", "ERRORS.md"))).resolves.toBe(
-      undefined,
-    );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Payload readers
-
-describe("recorder: recordFix (T14)", () => {
-  it("writes the fix, redacted, and marks the entry fixed", async () => {
-    const { rec, files } = recorder();
-    rec.capture({ kind: "agent", error: new Error("boom") });
-    const secret = "sk-" + "a".repeat(24);
-    const outcome = await rec.recordFix(
-      "E-0001",
-      `export OPENAI_KEY=${secret} and retry`,
-    );
-    expect(outcome).toMatchObject({
-      kind: "fixed",
-      entry: { id: "E-0001", status: "fixed" },
-    });
-    const [entry] = await readEntries(files.errors);
-    expect(entry?.status).toBe("fixed");
-    expect(entry?.fix).toContain("and retry");
-    expect(entry?.fix).not.toContain(secret);
-  });
-
-  it("is serialized behind the writes queued before it", async () => {
-    const { rec } = recorder();
-    rec.capture({ kind: "agent", error: new Error("boom") });
-    // Queued right after the append, which has not run yet: it still finds
-    // the entry.
-    expect((await rec.recordFix("E-0001", "f")).kind).toBe("fixed");
-  });
-
-  it("an unknown ID writes nothing", async () => {
-    const { rec } = recorder();
-    expect(await rec.recordFix("E-0042", "f")).toEqual({ kind: "unknown" });
-  });
-
-  it("a lock held for the whole budget is a timeout, not a failure", async () => {
-    const { clock } = fakeClock();
-    const files = filesIn(dir);
-    const real = nodeStoreFs();
-    const fs: StoreFs = {
-      ...real,
-      createExclusive: async () => false,
-      readFile: async (path) =>
-        path === files.lock ? "someone-else" : real.readFile(path),
-      mtimeMs: async (path) =>
-        path === files.lock ? clock.now().getTime() : real.mtimeMs(path),
-    };
-    const { rec, warnings } = recorder({ fs, clock });
-    expect(await rec.recordFix("E-0001", "f")).toEqual({ kind: "timeout" });
-    expect(warnings).toEqual([]);
-  });
-
-  it("a document that does not parse is counted as a failure", async () => {
-    const { rec, files, warnings } = recorder();
-    await writeFile(files.errors, "# ERRORS\n\n## E-0001 · broken\n");
-    expect(await rec.recordFix("E-0001", "f")).toEqual({ kind: "failed" });
-    expect(rec.stats.failures).toBe(1);
-    expect(warnings).toHaveLength(1);
-  });
-});
-
-describe("commandFrom", () => {
-  it("reads the common argument spellings", () => {
-    expect(commandFrom("ls -la")).toBe("ls -la");
-    expect(commandFrom({ command: "pnpm test" })).toBe("pnpm test");
-    expect(commandFrom({ cmd: ["git", "status"] })).toBe("git status");
-    expect(commandFrom({ script: "make", command: 3 })).toBe("make");
-  });
-
-  it("names no command when there is none", () => {
-    expect(commandFrom(undefined)).toBeUndefined();
-    expect(commandFrom(null)).toBeUndefined();
-    expect(commandFrom(42)).toBeUndefined();
-    expect(commandFrom({ path: "a.ts" })).toBeUndefined();
-    expect(commandFrom({ command: ["git", 1] })).toBeUndefined();
-  });
-});
-
-describe("resultText", () => {
-  it("joins the text blocks and skips everything else", () => {
+    const recorder = createRecorder({ createConnector: () => connector });
     expect(
-      resultText([
-        { type: "text", text: "one" },
-        { type: "image" },
-        { type: "text" },
-        { type: "text", text: "two" },
-      ] as never),
-    ).toBe("one\ntwo");
-    expect(resultText([])).toBe("");
+      await recorder.capture({ kind: "agent", error: new Error("x") }),
+    ).toEqual({
+      kind: "hit",
+      id: "00000000-0000-4000-8000-000000000003",
+      hits: 1,
+    });
+    expect(recorder.stats.hits).toBe(1);
+  });
+
+  it("counts a queued observation as stored later", async () => {
+    const connector = fakeConnector(
+      {},
+      {
+        capture: () => Promise.resolve({ queued: true }),
+      },
+    );
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect(await recorder.capture({ kind: "agent", error: "x" })).toEqual({
+      kind: "counted",
+    });
+    expect(recorder.stats.counted).toBe(1);
+  });
+
+  it("counts a failed capture without throwing", async () => {
+    const connector = fakeConnector(
+      {},
+      {
+        capture: () => Promise.reject(new Error("pipe broke")),
+      },
+    );
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect(await recorder.capture({ kind: "agent", error: "x" })).toEqual({
+      kind: "failed",
+    });
+    expect(recorder.stats.failures).toBe(1);
+  });
+
+  it("skips a source the capture setting does not name", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options({ capture: ["tool"] }),
+      createConnector: () => connector,
+    });
+    expect(await recorder.capture({ kind: "agent", error: "x" })).toEqual({
+      kind: "timeout",
+    });
+    expect(connector.captured).toHaveLength(0);
+  });
+
+  it("never forwards a successful command", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect(
+      recorder.toolResult(
+        toolExec(),
+        toolResult({
+          content: [{ type: "text", text: "built\n[exit code: 0]" }],
+        }),
+      ),
+    ).toBeUndefined();
+    expect(connector.captured).toHaveLength(0);
+  });
+
+  it("forwards a failing command with its exit code", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({ createConnector: () => connector });
+    recorder.toolResult(
+      toolExec(),
+      toolResult({ content: [{ type: "text", text: "boom\n[exit code: 2]" }] }),
+    );
+    await recorder.idle();
+    expect(connector.captured[0]?.source).toBe("command-exit");
+    expect(connector.captured[0]?.exit_code).toBe(2);
+    expect(connector.captured[0]?.command).toBe("pnpm build");
+  });
+
+  it("honours captureExitCodes: false", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options({ captureExitCodes: false }),
+      createConnector: () => connector,
+    });
+    expect(
+      recorder.toolResult(
+        toolExec(),
+        toolResult({ content: [{ type: "text", text: "[exit code: 2]" }] }),
+      ),
+    ).toBeUndefined();
+    expect(connector.captured).toHaveLength(0);
+  });
+
+  it("forwards a tool error result as a tool observation", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({ createConnector: () => connector });
+    recorder.toolResult(
+      toolExec(),
+      toolResult({
+        isError: true,
+        error: {
+          message: "read failed",
+          info: { name: "read", code: "EACCES" },
+        },
+      }),
+    );
+    await recorder.idle();
+    expect(connector.captured[0]?.source).toBe("tool");
+    expect(connector.captured[0]?.error_code).toBe("EACCES");
+  });
+
+  it("forwards an agent error with its session", async () => {
+    const connectors = new Map<string, ReturnType<typeof fakeConnector>>();
+    const recorder = createRecorder({
+      createConnector: (session) => {
+        const connector = fakeConnector();
+        connectors.set(session, connector);
+        return connector;
+      },
+    });
+    await recorder.agentError({ agent: { id: "s2" }, error: "nope" });
+    expect(connectors.get("s2")?.captured[0]?.source).toBe("agent");
+    expect(connectors.get("s2")?.captured[0]?.message).toContain("nope");
+  });
+
+  it("maps a core candidate to the hit the injection layer understands", async () => {
+    const connector = fakeConnector({ candidate: candidate() });
+    const recorder = createRecorder({ createConnector: () => connector });
+    const hit = await recorder.lookup({
+      kind: "tool",
+      toolName: "shell",
+      isError: true,
+      message: "EPERM",
+    });
+    expect(hit?.matched).toBe(true);
+    if (hit?.matched === true) {
+      expect(hit.via).toBe("exact");
+      expect(hit.approximate).toBe(false);
+      expect(hit.entry.hits).toBe(3);
+      expect(hit.entry.fix).toBe("Close the open handle first.");
+      expect(hit.injectable).toBe(true);
+    }
+    expect(connector.core.calls[0]?.operation).toBe("lookup");
+    expect(connector.core.calls[0]?.payload.session_id).toBe("dsh");
+  });
+
+  it("marks an approximate candidate and its reason", async () => {
+    const connector = fakeConnector({
+      candidate: candidate({
+        match_reason: "jaccard_rerank",
+        approximate: true,
+        confidence: 0.75,
+        solution: undefined,
+      }),
+    });
+    const recorder = createRecorder({ createConnector: () => connector });
+    const hit = await recorder.lookup({
+      kind: "agent",
+      error: new Error("EPERM"),
+    });
+    expect(hit?.matched).toBe(true);
+    if (hit?.matched === true) {
+      expect(hit.via).toBe("fuzzy");
+      expect(hit.approximate).toBe(true);
+      expect(hit.similarity).toBe(0.75);
+      expect(hit.entry.status).toBe("open");
+    }
+  });
+
+  it("reports a code-matched candidate through via=code", async () => {
+    const connector = fakeConnector({
+      candidate: candidate({
+        match_reason: "error_code",
+        approximate: false,
+        solution: undefined,
+      }),
+    });
+    const recorder = createRecorder({ createConnector: () => connector });
+    const hit = await recorder.lookup({
+      kind: "tool",
+      toolName: "shell",
+      isError: true,
+      message: "x",
+    });
+    expect(hit?.matched === true && hit.via).toBe("code");
+  });
+
+  it("returns an unmatched result for an empty candidate list", async () => {
+    const recorder = createRecorder({
+      createConnector: () => fakeConnector(),
+    });
+    expect(
+      await recorder.lookup({ kind: "agent", error: new Error("x") }),
+    ).toEqual({ matched: false });
+  });
+
+  it("returns undefined when the lookup call fails", async () => {
+    const connector = fakeConnector({
+      reject: (operation) =>
+        operation === "lookup"
+          ? new CoreError("unavailable", "down")
+          : undefined,
+    });
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect(
+      await recorder.lookup({ kind: "agent", error: new Error("x") }),
+    ).toBeUndefined();
+    expect(recorder.stats.failures).toBe(1);
+  });
+
+  it("looks an issue up by id and by fingerprint", async () => {
+    const connector = fakeConnector({ candidate: candidate() });
+    const recorder = createRecorder({ createConnector: () => connector });
+    const byId = await recorder.lookupIssue(candidate().issue_id);
+    const byFingerprint = await recorder.lookupFingerprint("0123456789ab");
+    expect(byId?.matched).toBe(true);
+    expect(byFingerprint?.matched).toBe(true);
+    expect(connector.core.calls[0]?.payload.issue_id).toBe(
+      candidate().issue_id,
+    );
+    expect(connector.core.calls[1]?.payload.fingerprint).toBe("0123456789ab");
+  });
+
+  it("passes a search query through with the three-candidate ceiling", async () => {
+    const connector = fakeConnector({ candidate: candidate() });
+    const recorder = createRecorder({ createConnector: () => connector });
+    const found = await recorder.search("EPERM rename", 10);
+    expect(found).toHaveLength(1);
+    expect(connector.core.calls[0]?.operation).toBe("search");
+    expect(connector.core.calls[0]?.payload.limit).toBe(3);
+  });
+
+  it("returns undefined when the search fails", async () => {
+    const connector = fakeConnector({
+      reject: (operation) =>
+        operation === "search" ? new Error("down") : undefined,
+    });
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect(await recorder.search("x")).toBeUndefined();
+  });
+
+  it("maps list rows to indexed entries with hits and exclusions", async () => {
+    const connector = fakeConnector({
+      items: [
+        {
+          id: "00000000-0000-4000-8000-000000000003",
+          title: "EPERM: rename",
+          updated_at: "2026-10-19T10:00:00Z",
+          hits: 4,
+          status: "wontfix",
+          fix: "not a fix",
+        },
+      ],
+    });
+    const recorder = createRecorder({ createConnector: () => connector });
+    const index = await recorder.entries();
+    expect(index).toHaveLength(1);
+    expect(index?.[0]?.entry.hits).toBe(4);
+    expect(index?.[0]?.entry.status).toBe("wontfix");
+    expect(index?.[0]?.entry.fix).toBe("not a fix");
+    expect(index?.[0]?.excluded).toBe("wontfix");
+  });
+
+  it("returns undefined when the list call fails", async () => {
+    const connector = fakeConnector({
+      reject: (operation) =>
+        operation === "list" ? new Error("down") : undefined,
+    });
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect(await recorder.entries()).toBeUndefined();
+  });
+
+  it("records a fix through record_solution", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({ createConnector: () => connector });
+    const outcome = await recorder.recordFix(
+      "00000000-0000-4000-8000-000000000003",
+      "Close the handle.",
+    );
+    expect(outcome.kind).toBe("fixed");
+    expect(connector.core.calls[0]?.operation).toBe("record_solution");
+    expect(connector.core.calls[0]?.payload.body).toBe("Close the handle.");
+  });
+
+  it("rejects an empty fix and counts a failed write", async () => {
+    const recorder = createRecorder({
+      createConnector: () => fakeConnector(),
+    });
+    expect(await recorder.recordFix("id", "  ")).toEqual({ kind: "timeout" });
+    const failing = fakeConnector({
+      reject: (operation) =>
+        operation === "record_solution" ? new Error("down") : undefined,
+    });
+    const other = createRecorder({ createConnector: () => failing });
+    expect(await other.recordFix("id", "fix")).toEqual({ kind: "failed" });
+  });
+
+  it("changes a status through set_status", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({ createConnector: () => connector });
+    const outcome = await recorder.setStatus("abc", "wontfix");
+    expect(outcome.kind).toBe("fixed");
+    expect(connector.core.calls[0]?.payload.status).toBe("wontfix");
+  });
+
+  it("counts a failed status write", async () => {
+    const connector = fakeConnector({
+      reject: (operation) =>
+        operation === "set_status" ? new Error("down") : undefined,
+    });
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect((await recorder.setStatus("abc", "open")).kind).toBe("failed");
+  });
+
+  it("replays the queue without throwing", async () => {
+    const connector = fakeConnector(
+      {},
+      {
+        replay: () => Promise.reject(new Error("still down")),
+      },
+    );
+    const recorder = createRecorder({ createConnector: () => connector });
+    await recorder.replay();
+    expect(recorder.stats.failures).toBe(1);
+  });
+
+  it("waits for capture to settle in idle()", async () => {
+    let release: (() => void) | undefined;
+    const connector = fakeConnector(
+      {},
+      {
+        capture: () =>
+          new Promise((resolve) => {
+            release = () =>
+              resolve({
+                queued: false,
+                created: true,
+                issueId: "00000000-0000-4000-8000-000000000003",
+              });
+          }),
+      },
+    );
+    const recorder = createRecorder({ createConnector: () => connector });
+    void recorder.capture({ kind: "agent", error: new Error("x") });
+    const idle = recorder.idle();
+    release?.();
+    await idle;
+    expect(recorder.stats.appended).toBe(1);
+  });
+
+  it("exposes its defaults", () => {
+    expect(DEFAULT_INJECTION_OPTIONS.inject).toBe("hit-only");
+    expect(DEFAULT_RECORDER_OPTIONS.connectorId).toBe("dsh");
+    expect(MAX_PENDING).toBe(4);
+    expect(MAX_SESSIONS).toBe(64);
+  });
+
+  it("reads the exit code from the last marker", () => {
+    expect(exitCode("x\n[exit code: 1]\ny\n[exit code: 3]")).toBe(3);
+    expect(exitCode("no marker")).toBeUndefined();
+  });
+
+  it("turns a tool result into a command input", () => {
+    const input = toolInput(toolExec(), toolResult());
+    expect(input.kind).toBe("command");
+    if (input.kind === "command") expect(input.command).toBe("pnpm build");
+  });
+
+  it("passes a session id through to a per-session connector", async () => {
+    const seen: string[] = [];
+    const recorder = createRecorder({
+      createConnector: (session) => {
+        seen.push(session);
+        return fakeConnector();
+      },
+    });
+    await recorder.capture({ kind: "agent", error: "x" }, "s7");
+    await settle();
+    expect(seen).toEqual(["s7"]);
+  });
+});
+
+describe("adapter edges", () => {
+  it("returns a timeout when the source is not captured", async () => {
+    const recorder = createRecorder({
+      options: options({ capture: ["agent"] }),
+      createConnector: () => fakeConnector(),
+    });
+    expect(
+      await recorder.capture({
+        kind: "tool",
+        isError: true,
+        toolName: "shell",
+        message: "EPERM",
+      }),
+    ).toEqual({ kind: "timeout" });
+    expect(recorder.stats.timeouts).toBe(1);
+  });
+
+  it("maps an llm failure and joins a command array", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({ createConnector: () => connector });
+    await recorder.capture({
+      kind: "llm",
+      code: "RATE_LIMIT",
+      message: "slow down",
+    });
+    expect(connector.captured[0]?.source).toBe("llm");
+    expect(connector.captured[0]?.error_code).toBe("RATE_LIMIT");
+    expect(commandFrom({ command: ["pnpm", "build"] })).toBe("pnpm build");
+    expect(commandFrom({ command: 7 })).toBeUndefined();
+    await recorder.capture({
+      kind: "command",
+      toolName: "shell",
+      text: "[exit code: 1]",
+      command: "pnpm build",
+    });
+    expect(connector.captured[1]?.command).toBe("pnpm build");
+  });
+
+  it("counts a failed capture", async () => {
+    const connector = fakeConnector(
+      {},
+      {
+        capture: () => Promise.reject(new Error("exploded")),
+      },
+    );
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect(
+      await recorder.capture({ kind: "agent", error: new Error("x") }),
+    ).toEqual({
+      kind: "failed",
+    });
+    expect(recorder.stats.failures).toBe(1);
+  });
+
+  it("swallows core lookup failures", async () => {
+    const connector = fakeConnector();
+    connector.core.lookup = () => Promise.reject(new Error("exploded"));
+    const recorder = createRecorder({ createConnector: () => connector });
+    expect(
+      await recorder.lookup({ kind: "agent", error: new Error("x") }),
+    ).toBeUndefined();
+    expect(await recorder.lookupIssue("id")).toBeUndefined();
+  });
+
+  it("keeps excluded statuses in the index view", async () => {
+    const item = (status: string | undefined) => ({
+      id: "00000000-0000-4000-8000-000000000003",
+      title: "t",
+      updated_at: "2026-01-01T00:00:00Z",
+      hits: 1,
+      status,
+      fix: "",
+    });
+    const connector = fakeConnector({
+      items: [item("wontfix"), item(undefined)],
+    });
+    const recorder = createRecorder({ createConnector: () => connector });
+    const index = await recorder.entries();
+    expect(index?.[0]?.excluded).toBe("wontfix");
+    expect(index?.[1]?.entry.status).toBe("open");
+  });
+
+  it("opens the default connector lazily and honours a provided one", () => {
+    const lazy = createRecorder({ options: options() });
+    expect(lazy.connector).toBeDefined();
+    const connector = fakeConnector();
+    const provided = createRecorder({ connector: () => connector });
+    expect(provided.connector).toBe(connector);
+  });
+
+  it("reports listener errors without throwing", () => {
+    const make = () => {
+      const listeners = new Map<string, Function[]>();
+      const ctx = {
+        on: (name: string, fn: Function) => {
+          listeners.set(name, [...(listeners.get(name) ?? []), fn]);
+          return () => true;
+        },
+      } as never;
+      return { ctx, listeners };
+    };
+    const { ctx, listeners } = make();
+    const recorder = fakeRecorder();
+    registerListeners(ctx, recorder);
+    listeners.get("agent/error")?.[0]?.({
+      agent: { id: "s1" },
+      turn: 1,
+      step: 1,
+      error: new Error("x"),
+    });
+    listeners.get("tools/result")?.[0]?.(
+      { name: "shell", arguments: {}, agent: { id: "s1" } },
+      { isError: false, content: [] },
+    );
+    expect(recorder.calls).toContain("agentError");
+    expect(recorder.calls).toContain("toolResult");
+  });
+});
+describe("core edge paths", () => {
+  it("looks a fingerprint up and swallows a failing core", async () => {
+    const connector = fakeConnector({ candidate: candidate() });
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    const found = await recorder.lookupFingerprint("0123456789ab");
+    expect(found?.id).toBe(candidate().issue_id);
+    expect(connector.core.calls.at(-1)).toMatchObject({
+      operation: "lookup",
+      payload: { fingerprint: "0123456789ab" },
+    });
+    connector.core.lookup = () =>
+      Promise.reject(new Error("core down")) as never;
+    expect(await recorder.lookupFingerprint("0123456789ab")).toBeUndefined();
+    expect(recorder.stats.failures).toBe(1);
+  });
+
+  it("forwards the error code of an llm lookup", async () => {
+    const connector = fakeConnector();
+    const recorder = createRecorder({
+      options: options(),
+      createConnector: () => connector,
+    });
+    await recorder.lookup({
+      kind: "llm",
+      message: "rate limited",
+      code: "RATE_LIMIT",
+    } as never);
+    expect(connector.core.calls.at(-1)?.payload.error_code).toBe("RATE_LIMIT");
   });
 });

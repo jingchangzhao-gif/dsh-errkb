@@ -95,6 +95,7 @@ type Candidate struct {
 	MatchDetail string             `json:"match_detail"`
 	Approximate bool               `json:"approximate"`
 	Confidence  *float64           `json:"confidence"`
+	Hits        *int               `json:"hits,omitempty"`
 	Solution    *CandidateSolution `json:"solution,omitempty"`
 }
 
@@ -121,6 +122,9 @@ func (c Candidate) Validate() error {
 	}
 	if *c.Confidence < 0 || *c.Confidence > 1 {
 		return fmt.Errorf("candidate.confidence: want 0..1, got %v", *c.Confidence)
+	}
+	if c.Hits != nil && *c.Hits < 0 {
+		return fmt.Errorf("candidate.hits: want a non-negative count, got %d", *c.Hits)
 	}
 	if exactMatchReasons[c.MatchReason] && c.Approximate {
 		return fmt.Errorf("candidate.approximate: %q is exact, want false", c.MatchReason)
@@ -328,6 +332,9 @@ type ListItem struct {
 	ID        string `json:"id"`
 	Title     string `json:"title"`
 	UpdatedAt string `json:"updated_at"`
+	Hits      *int   `json:"hits,omitempty"`
+	Status    string `json:"status,omitempty"`
+	Fix       string `json:"fix,omitempty"`
 }
 
 // Validate checks the entry and its timestamp.
@@ -343,6 +350,17 @@ func (i ListItem) Validate() error {
 	}
 	if _, err := time.Parse(time.RFC3339, i.UpdatedAt); err != nil {
 		return fmt.Errorf("list.item.updated_at: %w", err)
+	}
+	if i.Hits != nil && *i.Hits < 0 {
+		return fmt.Errorf("list.item.hits: want a non-negative count, got %d", *i.Hits)
+	}
+	if i.Status != "" && !validIssueStatuses[i.Status] {
+		return fmt.Errorf("list.item.status: unknown status %q", i.Status)
+	}
+	if i.Fix != "" {
+		if err := checkRedacted("list.item.fix", i.Fix); err != nil {
+			return err
+		}
 	}
 	return checkRedacted("list.item.title", i.Title)
 }

@@ -265,6 +265,7 @@ describe("connector adapter", () => {
     expect(outcome).toEqual({ queued: true });
     expect(queue.enqueue).toHaveBeenCalledTimes(1);
     expect(queue.items.get("obs-1")?.request.observation.message).toBe("boom");
+    expect(await connector.pending()).toMatchObject({ pending: 1 });
   });
 
   it("fails a non-retryable core error instead of queueing", async () => {
@@ -621,5 +622,53 @@ describe("core helpers", () => {
     );
     expect(built?.message).toBe("123");
     expect(built?.command).toBeUndefined();
+  });
+});
+
+describe("connector edges", () => {
+  it("rejects an envelope with neither result nor error", async () => {
+    const transport = createPipeTransport({
+      connect: () =>
+        new FakeSocket((request) => envelope(request, {})) as unknown as Socket,
+    });
+    await expect(transport.call("lookup", {})).rejects.toMatchObject({
+      code: "internal",
+      message: "the errkb daemon answered without a result",
+    });
+  });
+
+  it("fails a capture without a queue and reports empty pending state", async () => {
+    const core = fakeCore({
+      capture: async () => {
+        throw new CoreError("unavailable", "down", true);
+      },
+    });
+    const connector = createConnector({
+      connectorId: "dsh",
+      sessionId: "s-1",
+      core,
+      newObservationId: () => "obs-1",
+    });
+    await expect(connector.capture(observation("boom"))).rejects.toMatchObject({
+      code: "unavailable",
+      message: "the errkb daemon is down and no offline queue is configured",
+    });
+    await expect(connector.pending()).resolves.toEqual({
+      pending: 0,
+      bytes: 0,
+      dropped: 0,
+    });
+    await expect(connector.replay()).resolves.toEqual({
+      replayed: 0,
+      remaining: 0,
+    });
+  });
+
+  it("stamps the runtime versions on an agent observation", () => {
+    const built = observationFromAgentError(
+      { agent: { id: "a-1" }, error: new Error("boom") } as never,
+      { projectKey: "default", runtimeVersions: { node: "24.16.0" } },
+    );
+    expect(built.runtime_versions).toEqual({ node: "24.16.0" });
   });
 });

@@ -180,10 +180,14 @@ func (b *SQLBackend) List(ctx context.Context, request contract.ListRequest) (co
 	}
 	mapped := make([]contract.ListItem, 0, len(items))
 	for _, item := range items {
+		hits := item.Hits
 		mapped = append(mapped, contract.ListItem{
 			ID:        item.ID,
 			Title:     item.Title,
 			UpdatedAt: item.UpdatedAt.UTC().Format(time.RFC3339),
+			Hits:      &hits,
+			Status:    item.Status,
+			Fix:       item.Fix,
 		})
 	}
 	return contract.ListResponse{SchemaVersion: contract.ToolSchemaVersion, Items: mapped, NextCursor: next}, nil
@@ -225,6 +229,7 @@ func mapCandidates(candidates []database.RetrievalCandidate) []contract.Candidat
 	mapped := make([]contract.Candidate, 0, len(candidates))
 	for _, candidate := range candidates {
 		score := candidate.Score
+		hits := candidate.Hits
 		reason := matchReason(candidate)
 		detail := matchDetail(candidate)
 		entry := contract.Candidate{
@@ -235,6 +240,7 @@ func mapCandidates(candidates []database.RetrievalCandidate) []contract.Candidat
 			MatchDetail: detail,
 			Approximate: candidate.Approximate,
 			Confidence:  &score,
+			Hits:        &hits,
 		}
 		if candidate.Solution != nil {
 			entry.Solution = &contract.CandidateSolution{
