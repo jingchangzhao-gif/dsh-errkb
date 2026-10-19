@@ -25,7 +25,6 @@ const injection = (
     notices: number;
     fixNotices: number;
     noticeTokens: number;
-    suppressed: string[];
   }> = {},
 ) => {
   const counts = {
@@ -33,14 +32,8 @@ const injection = (
     fixNotices: overrides.fixNotices ?? 2,
     noticeTokens: overrides.noticeTokens ?? 40,
   };
-  const suppressed = new Set(overrides.suppressed ?? []);
   return {
     counts: () => counts,
-    trust: {
-      ready: Promise.resolve(),
-      level: (_id: string, _fix: string) =>
-        suppressed.has(_id) ? "suppressed" : "trusted",
-    },
   } as never;
 };
 
@@ -332,7 +325,7 @@ describe("err_forget", () => {
 
 describe("err_stats", () => {
   it("summarises the core ledger and the notices", async () => {
-    const test = deps({}, { suppressed: [entry().id] });
+    const test = deps();
     test.recorder.entries = () =>
       Promise.resolve([indexed({ status: "open", fix: "" }), indexed()]);
     const result = await run(tool(test, "err_stats"), {});
@@ -342,7 +335,6 @@ describe("err_stats", () => {
     expect(result.notices).toBe(3);
     expect(result.fixNotices).toBe(2);
     expect(result.estimatedTokensSaved).toBe(2 * 800 - 40);
-    expect(result.suppressed).toEqual([entry().id]);
   });
 
   it("needs a session for scope=session", async () => {
@@ -537,12 +529,10 @@ describe("rendered output", () => {
       fixNotices: 5,
       noticeTokens: 900_000,
       estimatedTokensSaved: 0,
-      suppressed: ["E-0002"],
     };
     const rendered = render(tool(deps(), "err_stats"), {}, stats);
     expect(rendered).toContain("this session");
     expect(rendered).toContain("shown as 0");
-    expect(rendered).toContain("E-0002");
     expect(
       render(
         tool(deps(), "err_stats"),
@@ -552,10 +542,9 @@ describe("rendered output", () => {
           scope: "all",
           fixNotices: 2,
           noticeTokens: 1,
-          suppressed: [],
         },
       ),
-    ).toContain("Distrusted fixes, not injected: none");
+    ).toContain("all sessions");
     expect(render(tool(deps(), "err_stats"), {}, { error: "boom" })).toBe(
       "err_stats: boom",
     );

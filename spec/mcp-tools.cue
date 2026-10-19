@@ -73,7 +73,9 @@ import "list"
 	issue?:              string & !=""
 	error_code?:         string & !=""
 	fingerprint?:        #Fingerprint
-	normalized_message?: #NoSensitive & !=""
+	// Raw host text is accepted: a lookup is a query, and the daemon
+	// normalizes it before matching. Only stored text carries #NoSensitive.
+	normalized_message?: string & !=""
 	project_key?:        string & !=""
 }
 
@@ -94,7 +96,9 @@ import "list"
 // lookup: the plan forbids implementing both with one fuzzy text query.
 #SearchRequest: {
 	schema_version: "v1"
-	query:          #NoSensitive & !=""
+	// Raw host text is accepted: a search is a query, and the daemon
+	// normalizes it before matching.
+	query:          string & !=""
 	project_key?:   string & !=""
 	limit?:         int & >=1 & <=#MaxCandidates
 }

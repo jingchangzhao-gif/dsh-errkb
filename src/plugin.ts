@@ -36,10 +36,8 @@ import type {
 import { createConnector } from "./connector";
 import {
   CapTracker,
-  FixTrust,
   Injector,
   estimateTokens,
-  memoryTrustStore,
   SYSTEM_PROMPT_HINT,
   SYSTEM_PROMPT_SECTION,
   noticeSource,
@@ -52,7 +50,6 @@ import type {
   NoticeKind,
   NoticeSource,
   SessionDigestMode,
-  TrustStore,
 } from "./inject";
 import type { Exclusion, Hit, IndexedEntry, MatchResult } from "./match";
 import { ResolutionTracker, callOutcome } from "./resolve-detect";
@@ -81,6 +78,12 @@ export interface RecorderOptions {
   capture?: readonly string[];
   /** Capture command results that reported a non-zero exit code. */
   captureExitCodes?: boolean;
+  /**
+   * Which LLM providers' request failures to record; `["*"]` keeps every one.
+   * A payload without a provider is kept too, because dropping it would lose
+   * an error the adapter cannot classify.
+   */
+  providers?: readonly string[];
 }
 
 export const DEFAULT_RECORDER_OPTIONS: RecorderOptions = {
@@ -89,6 +92,7 @@ export const DEFAULT_RECORDER_OPTIONS: RecorderOptions = {
   sessionId: "dsh",
   capture: ["agent", "tool", "command", "llm"],
   captureExitCodes: true,
+  providers: ["*"],
 };
 
 export interface RecorderLogger {
@@ -145,6 +149,14 @@ export interface AgentErrorPayload {
   error: unknown;
 }
 
+/** The `agent/request-error` payload, exactly as dsh-agent declares it. */
+export type RequestErrorPayload = Parameters<Events["agent/request-error"]>[0];
+
+/** What the request-error waterfall returns: a retry veto, or undefined. */
+export type RequestErrorAction = Awaited<
+  ReturnType<Events["agent/request-error"]>
+>;
+
 /** Settles with a write's outcome; never rejects. */
 export type PendingWrite = Promise<RecordOutcome>;
 
@@ -162,6 +174,19 @@ export interface Recorder {
     exec: Readonly<ToolExecution>,
     result: Readonly<ToolExecutionResult>,
   ): PendingWrite | undefined;
+  /**
+   * The `agent/request-error` observation: record one LLM request failure;
+   * never throws. The waterfall forwarding is the caller's job, so the
+   * observation never decides whether the request retries.
+   */
+  requestError(payload: RequestErrorPayload): PendingWrite;
+  /**
+   * Report one outcome for an issue's known fix (the resolution path): the
+   * only trust path, so it goes to the core and never rejects.
+   *
+   * @returns true when an outcome was recorded (the issue has a fix).
+   */
+  feedback(issueId: string, outcome: "success" | "failure"): Promise<boolean>;
   /**
    * Ask the core for the best candidate for one capture input (the T13 hot
    * path). Reads never write anything.
@@ -262,6 +287,19 @@ export function toolInput(
     text: resultText(result.content),
     ...(command === undefined ? {} : { command }),
   };
+}
+
+/** A host agent's id, when the value exposes a readable one. */
+export function agentId(value: unknown): string | undefined {
+  try {
+    const agent = (value as { agent?: { id?: unknown } } | undefined)?.agent;
+    return typeof agent?.id === "string" && agent.id !== ""
+      ? agent.id
+      : undefined;
+  } catch {
+    // Host payloads may guard service access behind an inject declaration.
+    return undefined;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -370,6 +408,11 @@ function hitFrom(candidate: CoreCandidate, projectKey: string): Hit {
     fix,
     status,
   );
+  // The solution identity travels with the view so feedback() can name the
+  // exact version; Entry predates solutions, so it rides as an extra field.
+  const version = candidate.solution?.solution_version_id;
+  if (version !== undefined)
+    Object.assign(entry, { solutionVersionId: version });
   const exact =
     !candidate.approximate &&
     (candidate.match_reason === "exact_fingerprint" ||
@@ -416,6 +459,50 @@ export function createRecorder(deps: RecorderDeps = {}): Recorder {
   };
   const inFlight = new Set<Promise<unknown>>();
   let lastLog = 0;
+
+  // The same request failure can reach the adapter twice: dsh-llm fires
+  // `agent/request-error` for the LLM request, and the failing tool call that
+  // carried it may also arrive through `tools/result`. The core keys
+  // occurrences by event id, so without a client-side guard such a pair would
+  // count one failure twice. The window is deliberately short: a real retry is
+  // slower than this, so it still counts.
+  // shortcut: identity is the code plus the first message line within 1.5 s,
+  // not a host-provided event id (the host does not expose one); upgrade if one
+  // appears.
+  const DEDUPE_WINDOW_MS = 1_500;
+  const recentFailures = new Map<string, number>();
+  const providers = new Set(
+    (options.providers ?? ["*"]).map((provider) =>
+      provider.trim().toLowerCase(),
+    ),
+  );
+
+  /** Whether this provider's request failures are captured. */
+  function providerAllowed(provider: string): boolean {
+    if (providers.size === 0 || providers.has("*")) return true;
+    return providers.has(provider.trim().toLowerCase());
+  }
+
+  /** True when this observation was already forwarded a moment ago. */
+  function duplicate(
+    observation: RawObservation,
+    session: string | undefined,
+  ): boolean {
+    const firstLine = observation.message.split(/\r?\n/, 1)[0]?.trim() ?? "";
+    // One failure can arrive twice: `agent/request-error` for the LLM request
+    // and `agent/error` for the same message, sometimes with different codes.
+    // The message text is the part both share, so it is the dedupe key; the
+    // window is short enough that two genuine failures of identical text are
+    // still counted separately when they are more than a moment apart.
+    const key = `${session ?? defaultSession}\u0000${firstLine}`;
+    const now = Date.now();
+    const seen = recentFailures.get(key);
+    for (const [known, at] of recentFailures)
+      if (now - at >= DEDUPE_WINDOW_MS) recentFailures.delete(known);
+    if (seen !== undefined && now - seen < DEDUPE_WINDOW_MS) return true;
+    recentFailures.set(key, now);
+    return false;
+  }
 
   const connectors = new Map<string, Connector>();
 
@@ -477,6 +564,8 @@ export function createRecorder(deps: RecorderDeps = {}): Recorder {
   ): PendingWrite {
     if (observation === undefined)
       return Promise.resolve(record({ kind: "counted" }));
+    if (duplicate(observation, session))
+      return Promise.resolve(record({ kind: "counted" }));
     const pending = (async (): Promise<RecordOutcome> => {
       try {
         const outcome = await connectorFor(session).capture(observation);
@@ -519,8 +608,6 @@ export function createRecorder(deps: RecorderDeps = {}): Recorder {
       const connector = connectorFor();
       const response = (await connector.core.lookup({
         schema_version: "v1",
-        connector_id: connectorId,
-        session_id: defaultSession,
         project_key: projectKey,
         normalized_message: observation.message,
         ...(observation.error_code === undefined
@@ -539,10 +626,8 @@ export function createRecorder(deps: RecorderDeps = {}): Recorder {
       const connector = connectorFor();
       const response = (await connector.core.lookup({
         schema_version: "v1",
-        connector_id: connectorId,
-        session_id: defaultSession,
         project_key: projectKey,
-        issue_id: id,
+        issue: id,
       })) as CoreLookupResponse;
       const best = response.candidates?.[0];
       return best === undefined ? undefined : hitFrom(best, projectKey);
@@ -559,8 +644,6 @@ export function createRecorder(deps: RecorderDeps = {}): Recorder {
       const connector = connectorFor();
       const response = (await connector.core.lookup({
         schema_version: "v1",
-        connector_id: connectorId,
-        session_id: defaultSession,
         project_key: projectKey,
         fingerprint,
       })) as CoreLookupResponse;
@@ -597,7 +680,8 @@ export function createRecorder(deps: RecorderDeps = {}): Recorder {
       const response = (await connector.core.list({
         schema_version: "v1",
         kind: "issue",
-        limit: 200,
+        // The list contract caps a page at 100 (core MaxListLimit).
+        limit: 100,
         project_key: projectKey,
       })) as CoreListResponse;
       const items = response.items ?? [];
@@ -695,17 +779,40 @@ export function createRecorder(deps: RecorderDeps = {}): Recorder {
           source: "agent",
           message: safeErrorText(payload.error).message,
         },
-        payload.agent?.id,
+        agentId(payload),
       );
+    },
+    requestError(payload) {
+      const observation = observationFor(
+        {
+          kind: "llm",
+          code: payload.failure.code,
+          message: payload.failure.message,
+        },
+        captureExitCodes,
+      );
+      const session = agentId(payload);
+      if (observation === undefined)
+        return Promise.resolve(record({ kind: "timeout" }));
+      if (!captureSources.has("llm"))
+        return Promise.resolve(record({ kind: "timeout" }));
+      if (!providerAllowed(payload.provider)) {
+        // Mark the message as seen even though it is not recorded: the same
+        // failure arrives a second time through agent/error, which carries no
+        // provider, and "providers" decides whether the failure is kept at all.
+        duplicate(observation, session);
+        return Promise.resolve(record({ kind: "timeout" }));
+      }
+      return forward(observation, session);
     },
     toolResult(exec, result) {
       const input = toolInput(exec, result);
       if (input.kind === "tool") {
-        return forward(observationFor(input, captureExitCodes), exec.agent?.id);
+        return forward(observationFor(input, captureExitCodes), agentId(exec));
       }
       const observation = observationFor(input, captureExitCodes);
       if (observation === undefined) return undefined;
-      return forward(observation, exec.agent?.id);
+      return forward(observation, agentId(exec));
     },
     lookup,
     lookupIssue,
@@ -714,6 +821,24 @@ export function createRecorder(deps: RecorderDeps = {}): Recorder {
     entries,
     recordFix,
     setStatus,
+    async feedback(issueId, outcome) {
+      try {
+        const found = await lookupIssue(issueId);
+        const version = (found?.entry as Entry & { solutionVersionId?: string })
+          ?.solutionVersionId;
+        if (found === undefined || version === undefined) return false;
+        await connectorFor().core.feedback({
+          schema_version: "v1",
+          issue_id: issueId,
+          solution_version_id: version,
+          outcome,
+        });
+        return true;
+      } catch (error) {
+        fail(error);
+        return false;
+      }
+    },
     fail,
     async idle() {
       while (inFlight.size > 0) await Promise.allSettled(inFlight);
@@ -753,8 +878,6 @@ export const DEFAULT_INJECTION_OPTIONS: InjectionOptions = {
 export interface InjectionDeps {
   recorder: Recorder;
   options?: Partial<InjectionOptions>;
-  /** Where fix trust lives; in memory by default (the core owns trust). */
-  trust?: TrustStore;
   /** Lower notice budgets, for every session. */
   caps?: Partial<CapLimits>;
 }
@@ -774,7 +897,6 @@ export type PromptSection = Parameters<Context["systemPrompt"]["section"]>[0];
 /** The listener bodies of the four injection points. */
 export interface Injection {
   readonly options: InjectionOptions;
-  readonly trust: FixTrust;
   /** `agent/error`: record, and queue the notice for the next step. */
   agentError(payload: AgentErrorPayload): void;
   /**
@@ -878,7 +1000,6 @@ function counted(hit: Hit): Hit {
 export function createInjection(deps: InjectionDeps): Injection {
   const o: InjectionOptions = { ...DEFAULT_INJECTION_OPTIONS, ...deps.options };
   const { recorder } = deps;
-  const trust = new FixTrust(deps.trust ?? memoryTrustStore());
   const sessions = new Map<string, SessionState>();
   // A tool miss whose write will name the ID, keyed by the execution object
   // that `tools/post-execute` and `tools/result` both receive (the registry
@@ -905,7 +1026,6 @@ export function createInjection(deps: InjectionDeps): Injection {
       injector: new Injector({
         mode: o.inject,
         caps: new CapTracker(deps.caps),
-        trust,
         scope: session,
       }),
       resolver: new ResolutionTracker(),
@@ -1027,7 +1147,8 @@ export function createInjection(deps: InjectionDeps): Injection {
     const found = await recorder.lookupIssue(id);
     if (found === undefined) return;
     const { entry } = found;
-    trust.succeeded(id, entry.fix);
+    // Outcome is the only trust path: the core's errkb_trust() owns trust.
+    void recorder.feedback(id, "success");
     if (
       !injecting ||
       o.captureFix !== "prompt-once" ||
@@ -1074,11 +1195,10 @@ export function createInjection(deps: InjectionDeps): Injection {
 
   return {
     options: o,
-    trust,
 
     agentError(payload) {
       try {
-        const session = payload.agent?.id;
+        const session = agentId(payload);
         if (!injecting || session === undefined) {
           void recorder.agentError(payload);
           return;
@@ -1125,7 +1245,7 @@ export function createInjection(deps: InjectionDeps): Injection {
             write,
           );
         }
-        const session = exec.agent?.id;
+        const session = agentId(exec);
         if (session !== undefined)
           detect(stateFor(session), exec, result, write);
       } catch (error) {
@@ -1137,7 +1257,7 @@ export function createInjection(deps: InjectionDeps): Injection {
       let pending: Promise<Notice | undefined> | undefined;
       let state: SessionState | undefined;
       try {
-        const session = exec.agent?.id;
+        const session = agentId(exec);
         if (injecting && session !== undefined) {
           state = stateFor(session);
           const current = state;
@@ -1168,7 +1288,9 @@ export function createInjection(deps: InjectionDeps): Injection {
     async preStep(payload, next) {
       let state: SessionState | undefined;
       try {
-        state = stateFor(payload.agent.id);
+        const session = agentId(payload);
+        if (session === undefined) return next();
+        state = stateFor(session);
         if (state.turn !== payload.turn) {
           state.turn = payload.turn;
           state.injector.beginTurn();
@@ -1245,8 +1367,7 @@ export type ListenerHost = Pick<Context, "on">;
 export type InjectionHost = Pick<Context, "on" | "systemPrompt">;
 
 /**
- * Register the two capture listeners (T11). `agent/request-error` (T16) is
- * deliberately absent.
+ * Register the three capture listeners (T11 + T16).
  *
  * @param ctx - the plugin's context.
  * @param recorder - from createRecorder().
@@ -1258,6 +1379,21 @@ export function registerListeners(ctx: ListenerHost, recorder: Recorder): void {
   ctx.on("tools/result", (exec, result) => {
     void recorder.toolResult(exec, result);
     return undefined;
+  });
+  // `agent/request-error` is a waterfall (§13): the listener must await the
+  // downstream chain and return its answer unchanged, and it must never take
+  // the request over. The observation is awaited too: a fire-and-forget write
+  // can be dropped when the host process exits right after a failed request.
+  ctx.on("agent/request-error", async (payload, next) => {
+    try {
+      return await next();
+    } finally {
+      try {
+        await recorder.requestError(payload);
+      } catch {
+        // Recording must never change the waterfall answer.
+      }
+    }
   });
 }
 

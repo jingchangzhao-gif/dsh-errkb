@@ -154,6 +154,19 @@ func TestUnredactedTextIsRejected(t *testing.T) {
 	}
 }
 
+func TestRedactedRequestIdIsAccepted(t *testing.T) {
+	// redact.Text keeps the label and replaces the value with <request-id>;
+	// the label alone must not be mistaken for a leak (found live when a real
+	// provider error carried "request_id: ..." and redaction succeeded).
+	event := validEvent()
+	event["headline"] = "provider failed (request_id: " + "<request-id>" + ")"
+	event["normalized_message"] = event["headline"]
+	event["redacted_sample"] = event["headline"]
+	if _, err := DecodeErrorEvent(encode(t, event)); err != nil {
+		t.Fatalf("redacted request id was rejected: %v", err)
+	}
+}
+
 func TestAggregateAndUnknownFieldsAreRejected(t *testing.T) {
 	// Events are not issues: aggregate data must not ride along.
 	for _, field := range []string{"issue_id", "solution_id", "hit_count"} {

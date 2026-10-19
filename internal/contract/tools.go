@@ -164,7 +164,9 @@ func (r LookupRequest) Validate() error {
 	if r.Fingerprint != "" && !fingerprintPattern.MatchString(r.Fingerprint) {
 		return fmt.Errorf("lookup.fingerprint: want %d lowercase hex characters, got %q", FingerprintLength, r.Fingerprint)
 	}
-	return checkRedacted("lookup.normalized_message", r.NormalizedMessage)
+	// A lookup is a query, not a write: raw host text is accepted here and the
+	// daemon normalizes it before matching (the stored side is redacted).
+	return nil
 }
 
 // LookupResponse carries at most MaxCandidates hits with their reasons.
@@ -198,7 +200,9 @@ func (r SearchRequest) Validate() error {
 	if r.Limit != nil && (*r.Limit < 1 || *r.Limit > MaxCandidates) {
 		return fmt.Errorf("search.limit: want 1..%d, got %d", MaxCandidates, *r.Limit)
 	}
-	return checkRedacted("search.query", r.Query)
+	// A search is a query, not a write: raw host text is accepted here and the
+	// daemon normalizes it before matching (the stored side is redacted).
+	return nil
 }
 
 // SearchResponse is the same candidate shape as lookup: one reason per hit.

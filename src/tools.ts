@@ -69,8 +69,8 @@ export const DEFAULT_TOOLS_OPTIONS: ToolsOptions = {
 /** Everything the tools need. */
 export interface ToolsDeps {
   recorder: Recorder;
-  /** For err_stats: notices delivered and fix trust. */
-  injection: Pick<Injection, "counts" | "trust">;
+  /** For err_stats: notices delivered (trust now lives in the core). */
+  injection: Pick<Injection, "counts">;
   /** A label for the knowledge base, shown by err_stats. */
   kbDir: string;
   options?: Partial<ToolsOptions>;
@@ -606,7 +606,7 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
   const stats = defineTool({
     name: "err_stats",
     description:
-      "Show the errkb ledger: entries, hits, notices injected, an estimate of tokens saved, open entries without a fix, distrusted fixes and the knowledge base path. Costs no model call.",
+      "Show the errkb ledger: entries, hits, notices injected, an estimate of tokens saved, open entries without a fix and the knowledge base path. Costs no model call.",
     parameters: {
       scope: {
         type: "string",
@@ -634,11 +634,6 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
               fixNotices: { type: "integer", required: true },
               noticeTokens: { type: "integer", required: true },
               estimatedTokensSaved: { type: "integer", required: true },
-              suppressed: {
-                type: "array",
-                items: { type: "string" },
-                required: true,
-              },
             },
             additionalProperties: false,
           },
@@ -658,7 +653,6 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
             `Entries: ${value.entries} · hits: ${value.hits} · open without a fix: ${value.openWithoutFix}`,
             `Notices (${where}): ${value.notices}, ${value.fixNotices} with a fix, ${value.noticeTokens} tokens`,
             `Estimated tokens saved: ${value.estimatedTokensSaved} (estimate: ${value.fixNotices} fix notices × ${ASSUMED_DIAGNOSIS_TOKENS} − ${value.noticeTokens} notice tokens${clamped})`,
-            `Distrusted fixes, not injected: ${value.suppressed.length === 0 ? "none" : value.suppressed.join(", ")}`,
           ].join("\n"),
         );
       },
@@ -675,8 +669,6 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
         const counts = deps.injection.counts(
           scope === "session" ? session : undefined,
         );
-        const { trust } = deps.injection;
-        await trust.ready;
         return {
           scope,
           kbDir: deps.kbDir,
@@ -690,13 +682,6 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
             counts.fixNotices,
             counts.noticeTokens,
           ),
-          suppressed: index
-            .filter(
-              ({ entry }) =>
-                entry.fix.trim() !== "" &&
-                trust.level(entry.id, entry.fix) === "suppressed",
-            )
-            .map(({ entry }) => entry.id),
         };
       }),
   });

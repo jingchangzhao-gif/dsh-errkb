@@ -300,6 +300,10 @@ export function fakeRecorder(options: FakeRecorderOptions = {}): Recorder & {
       calls.push("agentError");
       return Promise.resolve({ kind: "appended", id: entry().id });
     },
+    requestError() {
+      calls.push("requestError");
+      return Promise.resolve({ kind: "appended", id: entry().id });
+    },
     toolResult() {
       calls.push("toolResult");
       return Promise.resolve({ kind: "appended", id: entry().id });
@@ -335,6 +339,10 @@ export function fakeRecorder(options: FakeRecorderOptions = {}): Recorder & {
       return Promise.resolve(
         options.statusOutcome ?? { kind: "fixed", entry: entry() },
       );
+    },
+    feedback() {
+      calls.push("feedback");
+      return Promise.resolve(true);
     },
     fail() {
       stats.failures++;

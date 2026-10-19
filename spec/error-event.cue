@@ -34,8 +34,10 @@ package spec
 	// Absolute paths, which redaction collapses to <path>.
 	!~"[A-Za-z]:\\\\" &
 	!~"/home/|/Users/" &
-	// Raw request identifiers.
-	!~"(?i)request[_-]?id[ \t]*[:=]"
+	// Raw request identifiers. The redacted form keeps the label and replaces
+	// the value with <request-id>, so the pattern requires an
+	// identifier-shaped value after the separator.
+	!~"(?i)request[_-]?id[ \t]*[:=][ \t]*[\"']?[A-Za-z0-9]"
 
 // #ErrorEvent is one redacted observation. Events, issues, solutions and
 // outcomes stay separate entities, so this struct carries no aggregate.
@@ -62,7 +64,7 @@ package spec
 	exit_code?:  int
 	tool_name?:  string
 
-	os:    string & !=""
+	os:     string & !=""
 	shell?: string
 	// runtime_versions is an optional key/value table, e.g. node: 24.16.0.
 	runtime_versions?: [string]: string
