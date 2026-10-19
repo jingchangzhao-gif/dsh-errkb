@@ -54,6 +54,7 @@ import "list"
 	match_detail: string & !=""
 	approximate:  bool
 	confidence:   >=0 & <=1
+	hits?:        int & >=0
 	solution?:    #Solution
 
 	if match_reason == "issue_id" || match_reason == "error_code" || match_reason == "exact_fingerprint" {
@@ -175,6 +176,9 @@ import "list"
 	id:         string & !=""
 	title:      #NoSensitive & !=""
 	updated_at: string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
+	hits?:       int & >=0
+	status?:     #IssueStatus
+	fix?:        #NoSensitive
 }
 
 #ListResponse: {

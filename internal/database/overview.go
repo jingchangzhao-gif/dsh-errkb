@@ -18,6 +18,9 @@ type ListSummary struct {
 	ID        string
 	Title     string
 	UpdatedAt time.Time
+	Hits      int
+	Status    string
+	Fix       string
 }
 
 // StatsSummary is the aggregate view behind errkb_stats.
@@ -39,8 +42,9 @@ func ListIssues(ctx context.Context, conn *pgx.Conn, project, cursor string, lim
 		return nil, "", err
 	}
 	rows, err := conn.Query(ctx, `
-		select id::text, title, updated_at
+		select id::text, title, updated_at, hits, status, coalesce(fix.body, '')
 		from issues
+		left join lateral (select sv.body from solutions s join solution_versions sv on sv.solution_id = s.id where s.issue_id = issues.id order by sv.version desc limit 1) fix on true
 		where ($1 = '' or project_key = $1)
 		  and ($2::timestamptz is null or (updated_at, id) < ($2::timestamptz, $3::uuid))
 		order by updated_at desc, id desc
@@ -53,7 +57,7 @@ func ListIssues(ctx context.Context, conn *pgx.Conn, project, cursor string, lim
 	items := make([]ListSummary, 0, limit)
 	for rows.Next() {
 		var item ListSummary
-		if err := rows.Scan(&item.ID, &item.Title, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.UpdatedAt, &item.Hits, &item.Status, &item.Fix); err != nil {
 			return nil, "", fmt.Errorf("list issues: %w", err)
 		}
 		items = append(items, item)
@@ -76,8 +80,9 @@ func ListSolutions(ctx context.Context, conn *pgx.Conn, project, cursor string, 
 		return nil, "", err
 	}
 	rows, err := conn.Query(ctx, `
-		select s.id::text, i.title, s.updated_at
+		select s.id::text, i.title, s.updated_at, i.hits, s.status, coalesce(fix.body, '')
 		from solutions s
+		left join lateral (select sv.body from solution_versions sv where sv.solution_id = s.id order by sv.version desc limit 1) fix on true
 		join issues i on i.id = s.issue_id
 		where ($1 = '' or i.project_key = $1)
 		  and ($2::timestamptz is null or (s.updated_at, s.id) < ($2::timestamptz, $3::uuid))
@@ -91,7 +96,7 @@ func ListSolutions(ctx context.Context, conn *pgx.Conn, project, cursor string, 
 	items := make([]ListSummary, 0, limit)
 	for rows.Next() {
 		var item ListSummary
-		if err := rows.Scan(&item.ID, &item.Title, &item.UpdatedAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Title, &item.UpdatedAt, &item.Hits, &item.Status, &item.Fix); err != nil {
 			return nil, "", fmt.Errorf("list solutions: %w", err)
 		}
 		items = append(items, item)

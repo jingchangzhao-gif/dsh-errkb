@@ -1,53 +1,20 @@
-// The capture pipeline behind the plugin's listeners (T11): a hook payload goes
-// in, an entry in ERRORS.md comes out - or nothing, and never a throw. The
-// injection points built on it (T13) are described where they start, under
-// "Injection (T13)" below.
+// The DSH adapter (EKB-038): this file no longer owns a knowledge base. Every
+// failure becomes one observation, which the connector hands to the core over
+// the local Named Pipe; the core classifies, redacts, fingerprints, stores and
+// matches. The recorder interface below is what the injection layer and the
+// tools are built on; it is a thin client, not a store.
 //
-// Two hooks feed it, both `emit` events whose listener return value is ignored
-// (design document §2, §6). Their payload types are the real ones, read off the
-// installed packages rather than guessed:
+// What the adapter must not do (§3.2): no classification, no redaction, no
+// fingerprinting, no matching, no file writes. A failure the core cannot store
+// (the daemon is down) is queued as the raw observation by createConnector()
+// and replayed in order when the core returns; the queue keeps only redacted
+// request payloads and caps itself (see src/state.ts).
 //
-// - `agent/error` - `Events['agent/error']` in @deepseek-ai/dsh-agent
-//   (lib/types/runtime-types.d.ts): `{ agent: Agent; turn; step; error:
-//   unknown }`. `Agent.id` is the session id (`SessionId`, lib/types/types.d.ts).
-// - `tools/result` - `Events['tools/result']` in @deepseek-ai/dsh-tools
-//   (lib/types/index.d.ts): `(exec: Readonly<ToolExecution>, result:
-//   Readonly<ToolExecutionResult>)`. A failure is `ToolExecutionFailure`, with
-//   `error: ToolFailure` (`message`, `info?: ToolErrorInfo` with `code`); a
-//   success carries `content: ContentBlock[]` (dsh-llm), whose `TextBlock`s the
-//   command sniffing reads. `exec.agent` is optional: a call made outside an
-//   agent has none.
-//
-// Each captured error goes through classify() (T10), then, off the turn, through
-// match() (T09) against the store's current entries and into the store (T08):
-//
-// - `record`: a hit bumps the entry's hits and last-seen; a miss appends a new
-//   entry under the next ID.
-// - `count-only`: an entry with the same signature - a transient error promoted
-//   earlier - still has its hits and last-seen bumped; without one, nothing is
-//   written. This closes the T10 gap where every repeat after the promotion
-//   came back `count-only` and went uncounted.
-//
-// A bump never touches ERRORS.md (§4.3): it counts in this machine's
-// state.json (src/state.ts), so the block stays byte-identical and two devices
-// that hit the same error merge cleanly in git. Every entry the recorder hands
-// out - to match(), the notices, the digest and the tools - is the effective
-// one: the block's hits plus this machine's, through effectiveEntry().
-//
-// Safety (§13). Listeners only classify and enqueue: they never await, and a
-// throw anywhere is caught, counted and logged at most once a minute through
-// the logger. Writes are chained per knowledge base so they run one at a time
-// in arrival order, without blocking the turn. Each write gets 500 ms in total
-// and up to 3 retries; the store's lock wait is bounded by what is left, and a
-// lock that is still busy when the time is up skips that write silently. A
-// write that has already taken the lock is not cut off - the store has no way
-// to abandon it half done - so the bound is on waiting, not on the write.
-//
-// Transient errors are counted per session: one TransientCounter per
-// `Agent.id`, from `agent/error`'s payload or `exec.agent` on `tools/result`.
-// A payload without an agent counts under one plugin-wide counter. Only the 64
-// most recently active sessions keep a counter, so a long-lived host does not
-// grow without bound.
+// Injection (T13) still runs here: a hit becomes a one-line notice in the next
+// step, a repeated failure earns the fix prompt, and the system-prompt section
+// and session digest are unchanged. Fix trust is process-local (memory) — the
+// core's errkb_trust() is the shared authority, and outcomes are reported
+// through the feedback operation (EKB-033 deferral, EKB-038c decision).
 import type { Context, Events } from "@deepseek-ai/cordis";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import type { UserMessage } from "@deepseek-ai/dsh-llm";
@@ -56,18 +23,23 @@ import type {
   ToolExecution,
   ToolExecutionResult,
 } from "@deepseek-ai/dsh-tools";
-import {
-  DEFAULT_CAPTURE_OPTIONS,
-  TransientCounter,
-  classify,
-  safeErrorText,
-} from "./capture";
-import type { CaptureInput, CaptureOptions, Classified } from "./capture";
+import { safeErrorText } from "./capture";
+import type { CaptureInput } from "./capture";
+import type {
+  Connector,
+  CoreCandidate,
+  CoreListItem,
+  CoreListResponse,
+  CoreLookupResponse,
+  RawObservation,
+} from "./connector";
+import { createConnector } from "./connector";
 import {
   CapTracker,
   FixTrust,
   Injector,
   estimateTokens,
+  memoryTrustStore,
   SYSTEM_PROMPT_HINT,
   SYSTEM_PROMPT_SECTION,
   noticeSource,
@@ -82,39 +54,11 @@ import type {
   SessionDigestMode,
   TrustStore,
 } from "./inject";
-import { DEFAULT_MATCH_OPTIONS, indexEntries, match } from "./match";
+import type { Exclusion, Hit, IndexedEntry, MatchResult } from "./match";
 import { ResolutionTracker, callOutcome } from "./resolve-detect";
 import type { CaptureFixMode } from "./resolve-detect";
-import type { Hit, IndexedEntry, MatchOptions, MatchResult } from "./match";
-import type { KbFiles } from "./paths";
-import { addHit, createStateFile, effectiveEntry } from "./state";
-import type { MachineState, StateFile } from "./state";
-import {
-  DEFAULT_STORE_OPTIONS,
-  LockTimeoutError,
-  ParseError,
-  StoreCorruptError,
-  createStore,
-  formatSeen,
-  nodeStoreFs,
-  systemClock,
-} from "./store";
-import type {
-  Entry,
-  ErrorStore,
-  StoreClock,
-  StoreFs,
-  StoreOptions,
-} from "./store";
-
-/** Retries after a failed write, within {@link WRITE_TIMEOUT_MS} (§13). */
-export const WRITE_RETRIES = 3;
-
-/** The time one write may spend, retries and lock waits included (§13). */
-export const WRITE_TIMEOUT_MS = 500;
-
-/** Pause before a retry. */
-export const RETRY_DELAY_MS = 25;
+import type { ObservationQueue } from "./state";
+import type { Entry, EntryStatus } from "./store";
 
 /** At most one failure is logged per this many milliseconds. */
 export const FAILURE_LOG_INTERVAL_MS = 60_000;
@@ -126,78 +70,65 @@ export const MAX_SESSIONS = 64;
 export const NO_SESSION = "";
 
 /** Recorder settings; every one has a default. */
-export interface RecorderOptions
-  extends
-    CaptureOptions,
-    MatchOptions,
-    Pick<
-      StoreOptions,
-      | "idPrefix"
-      | "idWidth"
-      | "maxEntries"
-      | "labels"
-      | "share"
-      | "maxSampleChars"
-    > {}
+export interface RecorderOptions {
+  /** Knowledge-base project the observations belong to; `default` when unset. */
+  projectKey?: string;
+  /** Connector row name; `dsh` by default. */
+  connectorId?: string;
+  /** The session id used when the host names no agent; `dsh` by default. */
+  sessionId?: string;
+  /** The capture sources to forward (the `capture` setting). */
+  capture?: readonly string[];
+  /** Capture command results that reported a non-zero exit code. */
+  captureExitCodes?: boolean;
+}
 
 export const DEFAULT_RECORDER_OPTIONS: RecorderOptions = {
-  ...DEFAULT_CAPTURE_OPTIONS,
-  ...DEFAULT_MATCH_OPTIONS,
-  idPrefix: DEFAULT_STORE_OPTIONS.idPrefix,
-  idWidth: DEFAULT_STORE_OPTIONS.idWidth,
-  maxEntries: DEFAULT_STORE_OPTIONS.maxEntries,
-  labels: DEFAULT_STORE_OPTIONS.labels,
-  share: DEFAULT_STORE_OPTIONS.share,
-  maxSampleChars: DEFAULT_STORE_OPTIONS.maxSampleChars,
+  projectKey: "default",
+  connectorId: "dsh",
+  sessionId: "dsh",
+  capture: ["agent", "tool", "command", "llm"],
+  captureExitCodes: true,
 };
 
-/** The one logger method the recorder uses; `ctx.logger` fits. */
 export interface RecorderLogger {
   warn(format: string, ...param: unknown[]): void;
 }
 
-/** Everything a recorder needs; the filesystem and clock are injectable. */
+/** Everything a recorder needs; the core and queue are injectable. */
 export interface RecorderDeps {
-  files: Pick<KbFiles, "errors" | "archive" | "lock" | "state">;
-  logger: RecorderLogger;
   options?: Partial<RecorderOptions>;
-  fs?: StoreFs;
-  clock?: StoreClock;
+  logger?: RecorderLogger;
+  /** The pipe client; defaults to a real one over `\\.\pipe\errkb`. */
+  connector?: (sessionId: string) => Connector;
+  /** The observation queue, when the connector is not injected. */
+  queue?: ObservationQueue;
+  /** Builds the connector for one session; the wiring supplies the options. */
+  createConnector?: (sessionId: string) => Connector;
 }
 
 /** What one captured error led to. */
 export type RecordOutcome =
+  /** The core created a new issue; `id` is its UUID. */
   | { kind: "appended"; id: string }
+  /** The core counted an occurrence of a known issue. */
   | { kind: "hit"; id: string; hits: number }
-  /** `count-only` with no entry to count against: nothing written. */
+  /** Queued for replay (or captured a transient the core did not store). */
   | { kind: "counted" }
-  /** The lock stayed busy for the whole write budget: skipped silently. */
+  /** The capture was not forwarded (a successful command). */
   | { kind: "timeout" }
   /** The write failed; the failure was counted and maybe logged. */
   | { kind: "failed" };
-
-/** An outcome of a write that did not fail. */
-type Written = Exclude<RecordOutcome, { kind: "failed" }>;
 
 /** What one recordFix() led to. */
 export type FixOutcome =
-  /** The entry now carries the fix, redacted, and is `fixed`. */
+  /** The core now carries the fix; `entry` reflects it. */
   | { kind: "fixed"; entry: Entry }
-  /** No entry has that ID. */
+  /** No issue has that ID. */
   | { kind: "unknown" }
-  /** The lock stayed busy for the whole write budget: nothing written. */
   | { kind: "timeout" }
   /** The write failed; the failure was counted and maybe logged. */
   | { kind: "failed" };
-
-/** What one write() led to. */
-export type WriteOutcome<T> =
-  /** The write ran; `value` is what it returned. */
-  | { kind: "done"; value: T }
-  /** The lock stayed busy for the whole write budget: nothing written. */
-  | { kind: "timeout" }
-  /** The write failed; the failure was counted and maybe logged. */
-  | { kind: "failed"; error: unknown };
 
 /** Running totals since the recorder was created. */
 export interface RecorderStats {
@@ -219,97 +150,49 @@ export type PendingWrite = Promise<RecordOutcome>;
 
 /** Listener bodies and their bookkeeping. */
 export interface Recorder {
-  /**
-   * Classify one error now and queue its write; never throws.
-   *
-   * @returns the queued write, or undefined when nothing was captured.
-   */
-  capture(input: CaptureInput, session?: string): PendingWrite | undefined;
+  /** Forward one error as an observation; never throws. */
+  capture(input: CaptureInput, session?: string): PendingWrite;
   /** The `agent/error` listener body; never throws. */
-  agentError(payload: AgentErrorPayload): PendingWrite | undefined;
-  /** The `tools/result` listener body; never throws. */
+  agentError(payload: AgentErrorPayload): PendingWrite;
+  /**
+   * The `tools/result` listener body: records failures only, and never throws.
+   * A successful command returns undefined (nothing to capture).
+   */
   toolResult(
     exec: Readonly<ToolExecution>,
     result: Readonly<ToolExecutionResult>,
   ): PendingWrite | undefined;
   /**
-   * Match one error against the knowledge base without writing anything (the
-   * T13 hot path). The read is queued behind every write queued before it, so
-   * an error recorded in an earlier step is already there to hit, and it runs
-   * before any write queued after it, so an error never hits its own entry.
-   * Classification is the pure part of capture: tool, command and turn errors
-   * touch no counter, and an LLM error here does not count towards its
-   * promotion.
+   * Ask the core for the best candidate for one capture input (the T13 hot
+   * path). Reads never write anything.
    *
-   * @returns the match, or undefined when the error is not captured at all or
-   *   the read failed (counted like a failed write).
+   * @returns the match, or undefined when the read failed or nothing matched.
    */
   lookup(input: CaptureInput): Promise<MatchResult | undefined>;
-  /** The indexed entries, read like lookup(); undefined when the read failed. */
+  /** Look one issue up by its core id (the fix prompt path). */
+  lookupIssue(id: string): Promise<Hit | undefined>;
+  /** Look one issue up by its 12-hex fingerprint (err_lookup's fast path). */
+  lookupFingerprint(fingerprint: string): Promise<Hit | undefined>;
+  /** The closest core candidates for free text (err_lookup on a miss). */
+  search(query: string, limit?: number): Promise<CoreCandidate[] | undefined>;
+  /** The indexed core entries, for the digest and the fix prompt. */
   entries(): Promise<IndexedEntry[] | undefined>;
-  /**
-   * Write a fix into an entry and mark it `fixed` (T14), for `err_record`
-   * (T15) to call. Off the turn and serialized with the other writes, under
-   * the same budget and retries; the store redacts the fix. Never rejects.
-   */
+  /** Record a fix for an issue (EKB-015 err_record). Never rejects. */
   recordFix(id: string, fix: string): Promise<FixOutcome>;
-  /**
-   * Run any store operation on the same path as recordFix(): queued behind
-   * every earlier write, under the same budget and retries (T15's other
-   * writes: status and notes, a new entry, an archived one). `state` is this
-   * machine's state.json, under the same budget. Never rejects.
-   */
-  write<T>(
-    task: (store: ErrorStore, state: StateFile) => Promise<T>,
-  ): Promise<WriteOutcome<T>>;
-  /**
-   * This machine's state.json, read like entries(); a corrupt file reads as
-   * empty. Undefined when the read failed.
-   */
-  machineState(): Promise<MachineState | undefined>;
+  /** Change one issue's status (err_record/err_forget). Never rejects. */
+  setStatus(id: string, status: EntryStatus): Promise<FixOutcome>;
   /** Count a failure and log it, at most once a minute; never throws. */
   fail(error: unknown): void;
-  /** Settles once every write queued so far has finished. */
+  /** Settles once every in-flight capture has settled. */
   idle(): Promise<void>;
   /** Outcomes in the order their writes finished. */
   readonly outcomes: readonly RecordOutcome[];
   readonly stats: Readonly<RecorderStats>;
-}
-
-// ---------------------------------------------------------------------------
-// Per-knowledge-base write chains
-
-const chains = new Map<string, Promise<void>>();
-
-/**
- * Run `task` after every task queued before it for the same knowledge base.
- * The task must not reject; the recorder's never do.
- */
-function enqueue(key: string, task: () => Promise<void>): void {
-  const next = (chains.get(key) ?? Promise.resolve()).then(task);
-  chains.set(key, next);
-  void next.then(() => {
-    if (chains.get(key) === next) chains.delete(key);
-  });
-}
-
-/**
- * Queue `task` like enqueue() and settle with its result. A rejection of
- * `task` settles the returned promise, so the chain itself never rejects and
- * the tasks after it still run.
- */
-function queued<T>(key: string, task: () => Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    enqueue(key, () => task().then(resolve, reject));
-  });
-}
-
-/**
- * Settles once every write queued so far for the knowledge base whose
- * `ERRORS.md` is at `errorsPath` has finished, whichever recorder queued it.
- */
-export function settled(errorsPath: string): Promise<void> {
-  return chains.get(errorsPath) ?? Promise.resolve();
+  /** The connector this layer captures through (queue, replay, notices). */
+  readonly connector: Connector;
+  /** Replay queued observations; the daemon may be back. Never rejects. */
+  replay(): Promise<void>;
+  readonly projectKey: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -356,11 +239,7 @@ export function commandFrom(args: unknown): string | undefined {
 
 /**
  * The capture input for one tool outcome: a failure as a tool error, anything
- * else as command output, which classify() keeps only when it reports a
- * non-zero exit code.
- *
- * @param exec - the call, for its tool name and arguments.
- * @param result - the outcome.
+ * else as command output, whose exit code decides whether it is forwarded.
  */
 export function toolInput(
   exec: Readonly<ToolExecution>,
@@ -388,41 +267,145 @@ export function toolInput(
 // ---------------------------------------------------------------------------
 // The recorder
 
-/** The indexed effective entries, and the baselines they were built on. */
-interface Snapshot {
-  /** ERRORS.md's and state.json's mtimes when this was read. */
-  mtime: number | undefined;
-  stateMtime: number | undefined;
-  index: IndexedEntry[];
-  /** Each entry as written in ERRORS.md, by ID. */
-  baseline: Map<string, Entry>;
+const exitCodePattern = /\[exit code: (\d+)\]/g;
+
+/** The last `[exit code: N]` in `text`, when there is one. */
+export function exitCode(text: string): number | undefined {
+  let code: number | undefined;
+  for (const match of text.matchAll(exitCodePattern))
+    code = Number.parseInt(match[1] as string, 10);
+  return code;
 }
 
-/** What budgeted() returns when the write budget ran out. */
-const TIMEOUT = Symbol("timeout");
-
-/**
- * True for a failure a retry cannot fix: a document that does not parse stays
- * unparseable until someone repairs it (§13 keeps it append-only meanwhile).
- */
-function final(error: unknown): boolean {
-  return error instanceof StoreCorruptError || error instanceof ParseError;
+/** One observation for a capture input, or undefined when it is not a failure. */
+function observationFor(
+  input: CaptureInput,
+  captureExitCodes: boolean,
+): RawObservation | undefined {
+  const at = new Date().toISOString();
+  switch (input.kind) {
+    case "agent": {
+      const text = safeErrorText(input.error);
+      return {
+        observed_at: at,
+        source: "agent",
+        message: text.message,
+        ...(text.code === undefined ? {} : { error_code: text.code }),
+      };
+    }
+    case "llm": {
+      return {
+        observed_at: at,
+        source: "llm",
+        message: input.message,
+        ...(input.code === undefined ? {} : { error_code: input.code }),
+      };
+    }
+    case "tool": {
+      return {
+        observed_at: at,
+        source: "tool",
+        message: input.message,
+        ...(input.toolName === undefined ? {} : { tool_name: input.toolName }),
+        ...(input.code === undefined ? {} : { error_code: input.code }),
+      };
+    }
+    case "command": {
+      const code = exitCode(input.text);
+      if (!captureExitCodes || code === undefined || code === 0)
+        return undefined;
+      return {
+        observed_at: at,
+        source: "command-exit",
+        message: input.text,
+        exit_code: code,
+        ...(input.command === undefined ? {} : { command: input.command }),
+        ...(input.toolName === undefined ? {} : { tool_name: input.toolName }),
+      };
+    }
+  }
 }
 
-/**
- * Bind the capture pipeline to one knowledge base.
- *
- * @param deps - where to write, what to log through, settings, and optionally
- *   the filesystem and clock.
- * @returns listener bodies that never throw.
- */
-export function createRecorder(deps: RecorderDeps): Recorder {
-  const o: RecorderOptions = { ...DEFAULT_RECORDER_OPTIONS, ...deps.options };
-  const fs = deps.fs ?? nodeStoreFs();
-  const clock = deps.clock ?? systemClock();
-  const key = deps.files.errors;
-  const stateFile = deps.files.state;
-  const counters = new Map<string, TransientCounter>();
+/** A synthetic entry for a candidate or a list row (the adapter's view). */
+function entryView(
+  id: string,
+  title: string,
+  fingerprint: string,
+  hits: number,
+  fix: string,
+  status: EntryStatus,
+): Entry {
+  return {
+    id,
+    title,
+    meta: { sig: fingerprint },
+    fingerprint,
+    category: "",
+    firstSeen: "",
+    lastSeen: "",
+    hits,
+    trigger: "",
+    raw: "",
+    fix,
+    status,
+    notes: "",
+  };
+}
+
+function statusOf(raw: unknown): EntryStatus {
+  return raw === "fixed" || raw === "wontfix" || raw === "misjudged"
+    ? (raw as EntryStatus)
+    : "open";
+}
+
+/** Map a core candidate to the hit shape the injection layer understands. */
+function hitFrom(candidate: CoreCandidate, projectKey: string): Hit {
+  const fix = candidate.solution?.body ?? "";
+  const status: EntryStatus = fix.trim() === "" ? "open" : "fixed";
+  const entry = entryView(
+    candidate.issue_id,
+    candidate.title,
+    candidate.fingerprint,
+    candidate.hits ?? 0,
+    fix,
+    status,
+  );
+  const exact =
+    !candidate.approximate &&
+    (candidate.match_reason === "exact_fingerprint" ||
+      candidate.match_reason === "issue_id");
+  const via: Hit["via"] =
+    candidate.match_reason === "error_code"
+      ? "code"
+      : exact
+        ? "exact"
+        : "fuzzy";
+  const similarity = exact
+    ? 1
+    : Math.max(0, Math.min(1, candidate.confidence ?? 0));
+  void projectKey;
+  return {
+    matched: true,
+    id: entry.id,
+    entry,
+    via,
+    approximate: candidate.approximate,
+    similarity,
+    injectable: true,
+  };
+}
+
+/** Build the recorder the injection layer and the tools run on. */
+export function createRecorder(deps: RecorderDeps = {}): Recorder {
+  const options: RecorderOptions = {
+    ...DEFAULT_RECORDER_OPTIONS,
+    ...deps.options,
+  };
+  const projectKey = options.projectKey ?? "default";
+  const connectorId = options.connectorId ?? "dsh";
+  const defaultSession = options.sessionId ?? "dsh";
+  const captureSources = new Set(options.capture ?? []);
+  const captureExitCodes = options.captureExitCodes !== false;
   const outcomes: RecordOutcome[] = [];
   const stats: RecorderStats = {
     appended: 0,
@@ -431,228 +414,217 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     timeouts: 0,
     failures: 0,
   };
-  let cache: Snapshot | undefined;
-  let lastLog: number | undefined;
-  // A corrupt state.json is reported once, until a write saves it aside.
-  let reportedCorrupt = false;
+  const inFlight = new Set<Promise<unknown>>();
+  let lastLog = 0;
 
-  const now = () => clock.now().getTime();
+  const connectors = new Map<string, Connector>();
 
-  /** Count a failure; log it unless one was logged less than a minute ago. */
+  /** One connector per host session, sharing the core and the queue. */
+  function connectorFor(session?: string): Connector {
+    const key = session ?? defaultSession;
+    const existing = connectors.get(key);
+    if (existing !== undefined) return existing;
+    const provided = deps.connector?.(key);
+    const built =
+      provided ??
+      (deps.createConnector !== undefined
+        ? deps.createConnector(key)
+        : createConnector({
+            connectorId,
+            sessionId: key,
+            projectKey,
+            ...(deps.queue === undefined ? {} : { queue: deps.queue }),
+          }));
+    connectors.set(key, built);
+    return built;
+  }
+
+  /** Count and append one outcome; never throws. */
+  function record(outcome: RecordOutcome): RecordOutcome {
+    outcomes.push(outcome);
+    switch (outcome.kind) {
+      case "appended":
+        stats.appended++;
+        break;
+      case "hit":
+        stats.hits++;
+        break;
+      case "counted":
+        stats.counted++;
+        break;
+      case "timeout":
+        stats.timeouts++;
+        break;
+    }
+    return outcome;
+  }
+
   function fail(error: unknown): void {
     stats.failures++;
-    try {
-      const at = now();
-      if (lastLog !== undefined && at - lastLog < FAILURE_LOG_INTERVAL_MS)
-        return;
-      lastLog = at;
-      deps.logger.warn(
-        "err-kb: an error was not recorded (%d so far): %s",
-        stats.failures,
-        safeErrorText(error).message,
-      );
-    } catch {
-      // A logger that throws must not reach the turn either.
-    }
-  }
-
-  /** This session's counter, kept among the most recently active ones. */
-  function counterFor(session: string): TransientCounter {
-    const counter = counters.get(session) ?? new TransientCounter();
-    counters.delete(session);
-    counters.set(session, counter);
-    if (counters.size > MAX_SESSIONS)
-      counters.delete(counters.keys().next().value as string);
-    return counter;
-  }
-
-  /** This machine's state; a corrupt file reads as empty and is reported once. */
-  async function readState(state: StateFile): Promise<MachineState> {
-    const read = await state.read();
-    if (read.corrupt && !reportedCorrupt) {
-      reportedCorrupt = true;
-      fail(
-        new Error(
-          "state.json is not valid; hit counts fall back to ERRORS.md until the next write saves it aside",
-        ),
-      );
-    }
-    return read.state;
-  }
-
-  /**
-   * The indexed effective entries, re-read only when ERRORS.md or state.json
-   * changed on disk.
-   */
-  async function currentIndex(
-    store: ErrorStore,
-    state: StateFile,
-  ): Promise<Snapshot> {
-    const mtime = await fs.mtimeMs(key);
-    const stateMtime = await fs.mtimeMs(stateFile);
-    if (
-      cache !== undefined &&
-      cache.mtime === mtime &&
-      cache.stateMtime === stateMtime
-    )
-      return cache;
-    const document = await store.read();
-    const machine = await readState(state);
-    const baseline = new Map<string, Entry>();
-    const index = indexEntries(
-      document.blocks.map(({ entry }) => {
-        baseline.set(entry.id, entry);
-        return effectiveEntry(entry, machine.entries[entry.id]);
-      }),
-    );
-    cache = { mtime, stateMtime, index, baseline };
-    return cache;
-  }
-
-  /** Match a classified record against the index. */
-  function matchRecord(
-    record: Classified["record"],
-    index: readonly IndexedEntry[],
-  ): MatchResult {
-    return match(
-      {
-        category: record.category,
-        message: record.message,
-        ...(record.code === undefined ? {} : { code: record.code }),
-      },
-      index,
-      o,
+    const now = Date.now();
+    if (now - lastLog < FAILURE_LOG_INTERVAL_MS) return;
+    lastLog = now;
+    deps.logger?.warn(
+      "errkb: %s",
+      error instanceof Error ? error.message : String(error),
     );
   }
 
-  /**
-   * Bump an entry's hits and last-seen in state.json; ERRORS.md is not
-   * touched (§4.3).
-   *
-   * @returns the hit, with the effective count after it.
-   */
-  async function bump(
-    state: StateFile,
-    snapshot: Snapshot,
-    id: string,
-  ): Promise<Written> {
-    const at = formatSeen(clock.now());
-    const written = await state.update((machine) => {
-      addHit(machine, id, at);
-    });
-    if (written.savedAs !== undefined) reportedCorrupt = false;
-    cache = undefined;
-    const entry = effectiveEntry(
-      snapshot.baseline.get(id) as Entry,
-      written.state.entries[id],
-    );
-    return { kind: "hit", id, hits: entry.hits };
-  }
-
-  /** One attempt at writing a classified error. */
-  async function once(
-    store: ErrorStore,
-    state: StateFile,
-    { decision, record }: Classified,
-  ): Promise<Written> {
-    const snapshot = await currentIndex(store, state);
-    const { index } = snapshot;
-    if (decision === "count-only") {
-      const known = index.find((i) => i.sig === record.signature);
-      return known === undefined
-        ? { kind: "counted" }
-        : bump(state, snapshot, known.entry.id);
-    }
-    const found = matchRecord(record, index);
-    if (found.matched) return bump(state, snapshot, found.id);
-    const { id } = await store.append({
-      title: record.title,
-      signature: record.signature,
-      category: record.displayCategory,
-      meta: {
-        cat: record.category,
-        ...(record.code === undefined ? {} : { code: record.code }),
-      },
-      raw: record.raw,
-    });
-    cache = undefined;
-    return { kind: "appended", id };
-  }
-
-  /**
-   * Run one write within the time budget, with retries.
-   *
-   * @returns what `write` returned, or `TIMEOUT` when the budget ran out.
-   */
-  async function budgeted<T>(
-    write: (store: ErrorStore, state: StateFile) => Promise<T>,
-  ): Promise<T | typeof TIMEOUT> {
-    const deadline = now() + WRITE_TIMEOUT_MS;
-    for (let attempt = 0; ; attempt++) {
-      // One budget for both files: each lock wait gets what is left of it.
-      const lockTimeoutMs = () => Math.max(0, deadline - now());
-      const store = createStore(
-        deps.files,
-        { ...o, lockTimeoutMs: lockTimeoutMs() },
-        fs,
-        clock,
-      );
-      const state: StateFile = {
-        read: () => createStateFile(deps.files, {}, fs, clock).read(),
-        update: (mutate) =>
-          createStateFile(
-            deps.files,
-            { lockTimeoutMs: lockTimeoutMs() },
-            fs,
-            clock,
-          ).update(mutate),
-      };
+  /** Forward one observation; never rejects. */
+  function forward(
+    observation: RawObservation | undefined,
+    session?: string,
+  ): PendingWrite {
+    if (observation === undefined)
+      return Promise.resolve(record({ kind: "counted" }));
+    const pending = (async (): Promise<RecordOutcome> => {
       try {
-        return await write(store, state);
+        const outcome = await connectorFor(session).capture(observation);
+        if (outcome.queued === true) return record({ kind: "counted" });
+        if (outcome.issueId === undefined) return record({ kind: "counted" });
+        if (outcome.created === true)
+          return record({ kind: "appended", id: outcome.issueId });
+        return record({ kind: "hit", id: outcome.issueId, hits: 1 });
       } catch (error) {
-        cache = undefined;
-        if (error instanceof LockTimeoutError) return TIMEOUT;
-        if (final(error) || attempt >= WRITE_RETRIES) throw error;
-        await clock.sleep(RETRY_DELAY_MS);
-        if (now() >= deadline) return TIMEOUT;
+        fail(error);
+        outcomes.push({ kind: "failed" });
+        return { kind: "failed" };
       }
+    })();
+    inFlight.add(pending);
+    void pending.finally(() => inFlight.delete(pending));
+    return pending;
+  }
+
+  function capture(input: CaptureInput, session?: string): PendingWrite {
+    if (!captureSources.has(input.kind)) {
+      return Promise.resolve(record({ kind: "timeout" }));
+    }
+    return forward(observationFor(input, captureExitCodes), session);
+  }
+
+  /** Map one core response to a match; undefined when nothing matched. */
+  function matchOf(
+    response: CoreLookupResponse | undefined,
+  ): MatchResult | undefined {
+    const best = response?.candidates?.[0];
+    if (best === undefined) return { matched: false };
+    return hitFrom(best, projectKey);
+  }
+
+  async function lookup(input: CaptureInput): Promise<MatchResult | undefined> {
+    try {
+      const observation = observationFor(input, captureExitCodes);
+      if (observation === undefined) return undefined;
+      const connector = connectorFor();
+      const response = (await connector.core.lookup({
+        schema_version: "v1",
+        connector_id: connectorId,
+        session_id: defaultSession,
+        project_key: projectKey,
+        normalized_message: observation.message,
+        ...(observation.error_code === undefined
+          ? {}
+          : { error_code: observation.error_code }),
+      })) as CoreLookupResponse;
+      return matchOf(response);
+    } catch (error) {
+      fail(error);
+      return undefined;
     }
   }
 
-  /** Write one classified error within the time budget, with retries. */
-  async function persist(classified: Classified): Promise<Written> {
-    const outcome = await budgeted((store, state) =>
-      once(store, state, classified),
-    );
-    return outcome === TIMEOUT ? { kind: "timeout" } : outcome;
-  }
-
-  function tally(outcome: Written): void {
-    outcomes.push(outcome);
-    if (outcome.kind === "appended") stats.appended++;
-    else if (outcome.kind === "hit") stats.hits++;
-    else if (outcome.kind === "counted") stats.counted++;
-    else stats.timeouts++;
-  }
-
-  function capture(
-    input: CaptureInput,
-    session = NO_SESSION,
-  ): PendingWrite | undefined {
+  async function lookupIssue(id: string): Promise<Hit | undefined> {
     try {
-      const classified = classify(input, counterFor(session), o);
-      if (classified === undefined) return undefined;
-      return queued(key, async (): Promise<RecordOutcome> => {
-        try {
-          const outcome = await persist(classified);
-          tally(outcome);
-          return outcome;
-        } catch (error) {
-          fail(error);
-          const outcome: RecordOutcome = { kind: "failed" };
-          outcomes.push(outcome);
-          return outcome;
-        }
+      const connector = connectorFor();
+      const response = (await connector.core.lookup({
+        schema_version: "v1",
+        connector_id: connectorId,
+        session_id: defaultSession,
+        project_key: projectKey,
+        issue_id: id,
+      })) as CoreLookupResponse;
+      const best = response.candidates?.[0];
+      return best === undefined ? undefined : hitFrom(best, projectKey);
+    } catch (error) {
+      fail(error);
+      return undefined;
+    }
+  }
+
+  async function lookupFingerprint(
+    fingerprint: string,
+  ): Promise<Hit | undefined> {
+    try {
+      const connector = connectorFor();
+      const response = (await connector.core.lookup({
+        schema_version: "v1",
+        connector_id: connectorId,
+        session_id: defaultSession,
+        project_key: projectKey,
+        fingerprint,
+      })) as CoreLookupResponse;
+      const best = response.candidates?.[0];
+      return best === undefined ? undefined : hitFrom(best, projectKey);
+    } catch (error) {
+      fail(error);
+      return undefined;
+    }
+  }
+
+  async function search(
+    query: string,
+    limit = 3,
+  ): Promise<CoreCandidate[] | undefined> {
+    try {
+      const connector = connectorFor();
+      const response = (await connector.core.search({
+        schema_version: "v1",
+        query,
+        project_key: projectKey,
+        limit: Math.max(1, Math.min(limit, 3)),
+      })) as { candidates?: CoreCandidate[] };
+      return response.candidates ?? [];
+    } catch (error) {
+      fail(error);
+      return undefined;
+    }
+  }
+
+  async function entries(): Promise<IndexedEntry[] | undefined> {
+    try {
+      const connector = connectorFor();
+      const response = (await connector.core.list({
+        schema_version: "v1",
+        kind: "issue",
+        limit: 200,
+        project_key: projectKey,
+      })) as CoreListResponse;
+      const items = response.items ?? [];
+      return items.map((item: CoreListItem) => {
+        const status = statusOf(item.status);
+        const excludedStatus: string = item.status ?? "";
+        const entry = entryView(
+          item.id,
+          item.title,
+          "",
+          item.hits ?? 0,
+          item.fix ?? "",
+          status,
+        );
+        return {
+          entry,
+          sig: entry.fingerprint,
+          category: entry.category,
+          code: undefined,
+          proj: projectKey,
+          tokens: new Set<string>(),
+          length: entry.title.length,
+          excluded:
+            excludedStatus === "wontfix" || excludedStatus === "misjudged"
+              ? (excludedStatus as Exclusion)
+              : undefined,
+        };
       });
     } catch (error) {
       fail(error);
@@ -660,185 +632,106 @@ export function createRecorder(deps: RecorderDeps): Recorder {
     }
   }
 
-  /** Read the current index on the write chain; undefined on failure. */
-  function read(): Promise<IndexedEntry[] | undefined> {
-    return queued(key, async () => {
-      try {
-        const snapshot = await currentIndex(
-          createStore(deps.files, o, fs, clock),
-          createStateFile(deps.files, {}, fs, clock),
-        );
-        return snapshot.index;
-      } catch (error) {
-        cache = undefined;
-        fail(error);
-        return undefined;
-      }
-    });
+  function fixed(id: string, fix: string): FixOutcome {
+    return {
+      kind: "fixed",
+      entry: entryView(id, "", "", 0, fix, "fixed"),
+    };
   }
 
-  function write<T>(
-    task: (store: ErrorStore, state: StateFile) => Promise<T>,
-  ): Promise<WriteOutcome<T>> {
-    return queued(key, async (): Promise<WriteOutcome<T>> => {
-      try {
-        const value = await budgeted(task);
-        cache = undefined;
-        return value === TIMEOUT
-          ? { kind: "timeout" }
-          : { kind: "done", value };
-      } catch (error) {
-        fail(error);
-        return { kind: "failed", error };
-      }
-    });
-  }
-
-  return {
-    capture,
-
-    agentError(payload) {
-      try {
-        return capture(
-          { kind: "agent", error: payload.error },
-          payload.agent?.id,
-        );
-      } catch (error) {
-        fail(error);
-        return undefined;
-      }
-    },
-
-    toolResult(exec, result) {
-      try {
-        return capture(toolInput(exec, result), exec.agent?.id);
-      } catch (error) {
-        fail(error);
-        return undefined;
-      }
-    },
-
-    async lookup(input) {
-      try {
-        const classified = classify(input, new TransientCounter(), o);
-        if (classified === undefined) return undefined;
-        const index = await read();
-        return index === undefined
-          ? undefined
-          : matchRecord(classified.record, index);
-      } catch (error) {
-        fail(error);
-        return undefined;
-      }
-    },
-
-    entries: read,
-
-    machineState() {
-      return queued(key, async () => {
-        try {
-          return await readState(createStateFile(deps.files, {}, fs, clock));
-        } catch (error) {
-          fail(error);
-          return undefined;
-        }
+  async function recordFix(id: string, fix: string): Promise<FixOutcome> {
+    if (fix.trim() === "") return { kind: "timeout" };
+    try {
+      const connector = connectorFor();
+      await connector.core.recordSolution({
+        schema_version: "v1",
+        issue_id: id,
+        body: fix,
+        source: "dsh",
+        actor: "dsh",
       });
-    },
+      return fixed(id, fix);
+    } catch (error) {
+      fail(error);
+      return { kind: "failed" };
+    }
+  }
 
-    write,
+  async function setStatus(
+    id: string,
+    status: EntryStatus,
+  ): Promise<FixOutcome> {
+    try {
+      const connector = connectorFor();
+      await connector.core.setStatus({
+        schema_version: "v1",
+        issue_id: id,
+        status,
+      });
+      return {
+        kind: "fixed",
+        entry: entryView(id, "", "", 0, "", status),
+      };
+    } catch (error) {
+      fail(error);
+      return { kind: "failed" };
+    }
+  }
 
-    async recordFix(id, fix) {
-      const outcome = await write((store) =>
-        store.update(id, { fix, status: "fixed" }),
+  async function replay(): Promise<void> {
+    try {
+      await connectorFor().replay();
+    } catch (error) {
+      fail(error);
+    }
+  }
+
+  const after: Recorder = {
+    capture,
+    agentError(payload) {
+      return forward(
+        {
+          observed_at: new Date().toISOString(),
+          source: "agent",
+          message: safeErrorText(payload.error).message,
+        },
+        payload.agent?.id,
       );
-      if (outcome.kind !== "done") return { kind: outcome.kind };
-      return outcome.value === undefined
-        ? { kind: "unknown" }
-        : { kind: "fixed", entry: outcome.value };
     },
-
+    toolResult(exec, result) {
+      const input = toolInput(exec, result);
+      if (input.kind === "tool") {
+        return forward(observationFor(input, captureExitCodes), exec.agent?.id);
+      }
+      const observation = observationFor(input, captureExitCodes);
+      if (observation === undefined) return undefined;
+      return forward(observation, exec.agent?.id);
+    },
+    lookup,
+    lookupIssue,
+    lookupFingerprint,
+    search,
+    entries,
+    recordFix,
+    setStatus,
     fail,
-    idle: () => settled(key),
+    async idle() {
+      while (inFlight.size > 0) await Promise.allSettled(inFlight);
+    },
     outcomes,
     stats,
+    get connector() {
+      return connectorFor();
+    },
+    replay,
+    projectKey,
   };
+  return after;
 }
 
 // ---------------------------------------------------------------------------
-// Injection (T13)
-//
-// Four points hand what the knowledge base knows back to the model (§7). Their
-// types are read off the installed packages, through cordis `Events` as those
-// packages augment it:
-//
-// - `tools/post-execute` - a waterfall in @deepseek-ai/dsh-tools
-//   (lib/types/index.d.ts): `(exec: ToolExecution, result:
-//   Readonly<ToolExecutionResult>, next: () => Promise<PostToolDecision>)`.
-//   `PostToolDecision` is accept / accept-with-value / block, each with
-//   `additionalContexts?: UserMessage[]`, which reach the next request.
-// - `agent/pre-step` - a waterfall in @deepseek-ai/dsh-agent
-//   (lib/types/runtime-types.d.ts): `({agent, messages, turn, step, signal},
-//   next: () => Promise<PreStepDecision>)`, where `PreStepDecision` is
-//   `{kind: 'reject'} | {kind: 'enter', messages: UserMessage[]}`.
-// - `agent/session-start` - an emit in the same file: `({agent, source})`;
-//   `Agent.inject(message: UserMessage)` queues context for the next pre-step.
-// - `ctx.systemPrompt.section(section: PromptSection)` - `SystemPrompt` in
-//   @deepseek-ai/dsh-system-prompt (lib/types/index.d.ts), `{name, order,
-//   text}`; it throws on a duplicate name.
-//
-// Messages are built with dsh-llm's `createUserMessage` (lib/types/message.d.ts)
-// from one `TextBlock` and the notice's `MessageSourceMap['plugin']` source.
-//
-// Both waterfalls `await next()` first and return what it returned, with only
-// our message appended: `additionalContexts` or `messages` grow, nothing else
-// changes, and with nothing to add the downstream object itself comes back. A
-// failure of ours returns it unchanged; a rejection from `next()` is not ours
-// and passes through.
-//
-// The hot path. A tool failure is matched inside `tools/post-execute`: the
-// recorder's lookup() classifies it (pure for tool and command input) and reads
-// the cached index, queued behind earlier writes so last step's new entry is
-// there to hit. The write itself still happens later, off the turn, from
-// `tools/result`. A miss under `inject: 'always'` therefore has no ID inside
-// the hook; instead of guessing one or saying "pending", that notice waits for
-// the write and rides the next `agent/pre-step`, when `recorded as E-00NN`
-// can name the real ID. If the write has not settled by then it waits for the
-// step after; if it fails, nothing is said.
-//
-// A turn error (`agent/error`) kills its turn, so its notice cannot ride
-// `additionalContexts`. It is looked up as it is captured - the read queued
-// ahead of its own write - and offered when the next step opens, appended to
-// that step's entry messages (§7). LLM request failures reach this path only
-// when they end the turn as an `agent/error`; `agent/request-error` is T16.
-//
-// Per-session state, keyed by `Agent.id` and bounded to the {@link
-// MAX_SESSIONS} most recently active sessions like the transient counters:
-// one Injector, so one CapTracker, and the pending pre-step notices. The
-// boundaries come from `agent/pre-step`, the only hook that carries both
-// numbers: a `turn` different from the last one seen calls beginTurn(), and
-// every pre-step calls beginStep(). The tool calls of a step run after its
-// pre-step, so their notices count against that step. `agent/session-start`
-// starts a session's state afresh, since `clear` and `compact` begin a new
-// lifecycle on the same agent. A tool call without `exec.agent` has nobody to
-// read its context and is never injected.
-//
-// Fix trust is one FixTrust per plugin instance over an injectable TrustStore
-// (state.json's `trust` by default, see stateTrustStore()), scoped per
-// session, so a recurrence is counted only within the session and turn that
-// injected the fix.
-//
-// Resolution detection (T14) rides `tools/result`. Each session keeps a
-// ResolutionTracker (src/resolve-detect.ts, where the rule and the window are
-// described), advanced by the same turn boundary as the caps. A failed call
-// is watched once its write names the entry; a successful one is checked
-// against the watches. Both are handled in arrival order on a per-session
-// chain, so a success is never checked before the failure in front of it has
-// been written. A resolved entry feeds FixTrust a success; one without a fix
-// queues the one-shot `captureFix` prompt for the next pre-step, through the
-// same pending list as a dead turn's notice. recordFix() on the recorder is
-// the write `err_record` (T15) calls.
+// Injection
 
-/** Pending pre-step notices kept per session; the oldest goes first. */
 export const MAX_PENDING = 4;
 
 /** Injection settings; every one has a default. */
@@ -860,7 +753,7 @@ export const DEFAULT_INJECTION_OPTIONS: InjectionOptions = {
 export interface InjectionDeps {
   recorder: Recorder;
   options?: Partial<InjectionOptions>;
-  /** Where fix trust lives; state.json by default. */
+  /** Where fix trust lives; in memory by default (the core owns trust). */
   trust?: TrustStore;
   /** Lower notice budgets, for every session. */
   caps?: Partial<CapLimits>;
@@ -969,43 +862,11 @@ function pluginMessage(text: string, source: NoticeSource): UserMessage {
 }
 
 /**
- * A hit whose hit count includes the occurrence being reported: the store is
+ * A hit whose hit count includes the occurrence being reported: the core is
  * about to add it, and "known (1 hit)" for the second sighting would undersell.
  */
 function counted(hit: Hit): Hit {
   return { ...hit, entry: { ...hit.entry, hits: hit.entry.hits + 1 } };
-}
-
-/**
- * Fix trust kept in state.json under `trust` (§4.3, T12): machine-local, so
- * a fix suppressed here stays suppressed after a restart and on no other
- * device. The saved records are read once through the recorder and join the
- * in-memory state through FixTrust's `ready`. Every save queues a write of
- * this process's records over what is on disk, on the recorder's write chain
- * and under its lock and budget: records of IDs this process never touched -
- * another harness's on the same machine - are kept, and for an ID both
- * touched the later save wins. A failed or timed-out save is counted like any
- * write, and the next save writes the full set again.
- *
- * @param recorder - the recorder whose knowledge base holds state.json.
- */
-export function stateTrustStore(recorder: Recorder): TrustStore {
-  return {
-    load: () => ({ entries: {} }),
-    loaded: recorder
-      .machineState()
-      .then((state) =>
-        state === undefined ? undefined : { entries: state.trust },
-      ),
-    save(state) {
-      const entries = structuredClone(state.entries);
-      void recorder.write((_store, file) =>
-        file.update((machine) => {
-          Object.assign(machine.trust, entries);
-        }),
-      );
-    },
-  };
 }
 
 /**
@@ -1017,7 +878,7 @@ export function stateTrustStore(recorder: Recorder): TrustStore {
 export function createInjection(deps: InjectionDeps): Injection {
   const o: InjectionOptions = { ...DEFAULT_INJECTION_OPTIONS, ...deps.options };
   const { recorder } = deps;
-  const trust = new FixTrust(deps.trust ?? stateTrustStore(recorder));
+  const trust = new FixTrust(deps.trust ?? memoryTrustStore());
   const sessions = new Map<string, SessionState>();
   // A tool miss whose write will name the ID, keyed by the execution object
   // that `tools/post-execute` and `tools/result` both receive (the registry
@@ -1064,20 +925,13 @@ export function createInjection(deps: InjectionDeps): Injection {
    * `start()`, with a handler attached before anything else can run: a throw
    * or a rejection is counted and settles as undefined. Every promise the
    * hooks start and do not await at once goes through here, so none is ever
-   * left to reject unhandled while `next()` runs (§13) - the Recorder
-   * contract says lookup() and the writes never reject, but a recorder that
-   * breaks it must not crash the host.
+   * left to reject unhandled while `next()` runs (§13).
    */
   function guard<T>(start: () => Promise<T>): Promise<T | undefined> {
-    try {
-      return start().catch((error: unknown) => {
-        recorder.fail(error);
-        return undefined;
-      });
-    } catch (error) {
+    return start().catch((error: unknown) => {
       recorder.fail(error);
-      return Promise.resolve(undefined);
-    }
+      return undefined;
+    });
   }
 
   /** Queue a notice for the next step; never rejects. */
@@ -1170,19 +1024,18 @@ export function createInjection(deps: InjectionDeps): Injection {
     id: string,
     turn: number,
   ): Promise<void> {
-    const index = await recorder.entries();
-    const found = index?.find((indexed) => indexed.entry.id === id);
+    const found = await recorder.lookupIssue(id);
     if (found === undefined) return;
-    const { entry, excluded } = found;
+    const { entry } = found;
     trust.succeeded(id, entry.fix);
     if (
       !injecting ||
       o.captureFix !== "prompt-once" ||
-      excluded !== undefined ||
       entry.fix.trim() !== "" ||
       !state.resolver.ask(id)
     )
       return;
+    // Trust is the core's (errkb_trust); this prompt only asks for the fix.
     track(
       state,
       { read: Promise.resolve(), miss: false, written: true, ask: id, turn },
@@ -1199,8 +1052,6 @@ export function createInjection(deps: InjectionDeps): Injection {
     for (const item of items) {
       if (item.hit !== undefined) {
         notice ??= state.injector.offer({ kind: "hit", hit: item.hit }, true);
-      } else if (item.miss && !item.written) {
-        kept.push(item);
       } else if (item.id !== undefined) {
         notice ??= state.injector.offer({ kind: "miss", id: item.id });
       } else if (
@@ -1229,7 +1080,7 @@ export function createInjection(deps: InjectionDeps): Injection {
       try {
         const session = payload.agent?.id;
         if (!injecting || session === undefined) {
-          recorder.agentError(payload);
+          void recorder.agentError(payload);
           return;
         }
         const state = stateFor(session);
@@ -1402,10 +1253,10 @@ export type InjectionHost = Pick<Context, "on" | "systemPrompt">;
  */
 export function registerListeners(ctx: ListenerHost, recorder: Recorder): void {
   ctx.on("agent/error", (payload) => {
-    recorder.agentError(payload);
+    void recorder.agentError(payload);
   });
   ctx.on("tools/result", (exec, result) => {
-    recorder.toolResult(exec, result);
+    void recorder.toolResult(exec, result);
     return undefined;
   });
 }
@@ -1440,6 +1291,12 @@ export function registerInjection(
   // gets the digest queued before the first step; one that does not still
   // gets it at the next pre-step after the read. It never rejects.
   ctx.on("agent/session-start", (payload) => injection.sessionStart(payload));
+  // Queued observations from a previous outage are replayed as a session
+  // starts, so a restarted daemon drains the queue without a new failure.
+  ctx.on("agent/session-start", () => {
+    void recorder.replay();
+    return undefined;
+  });
   const section = injection.section();
   if (section === undefined) return;
   try {

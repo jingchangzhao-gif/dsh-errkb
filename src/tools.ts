@@ -1,48 +1,23 @@
-// The five agent tools (T15, design document §9): err_lookup, err_record,
-// err_list, err_forget and err_stats. The model and a person at the prompt
-// call them the same way.
+// The five tools (EKB-030 style host contract) proxied to the core: lookup,
+// record, list, forget and stats. No tool owns knowledge any more — every
+// answer comes from the local API over the Named Pipe, and the tools only
+// shape it for the model (EKB-038d).
 //
-// The API is the real one in @deepseek-ai/dsh-tools (lib/types/schema.d.ts and
-// lib/types/index.d.ts), read off the installed package:
-//
-// - `defineTool(options: DefineToolOptions<S, O>): ToolDefinition`. `S` is a
-//   `ParameterSchemaSpec` (one `ParameterPropertySpec` per argument, `required:
-//   true` where needed); `O` is a `ValueSchemaSpec`. `execute(args:
-//   InferArgs<S>, exec: ToolRunContext)` returns the canonical value,
-//   `InferValue<O>`. defineTool validates the arguments against `S` first and
-//   throws `ToolArgsError` (a `HarnessError` the registry turns into a clear
-//   error result) for a wrong type or an unknown `status`/`scope` value.
-// - `output: ToolOutputDefinition`, `{ schema, render(args, value) }`. The
-//   registry checks every value against `schema` and the model reads only what
-//   `render` returns: plain `TextBlock`s (dsh-llm `ContentBlock`), as in
-//   dsh-note (§9). The structured value stays with the host.
-// - `ctx.tools.register(definition): () => void` on `ToolRuntime`, the `tools`
-//   service index.ts already injects. `ToolRunContext.agent?.id` is the session.
-//
-// Errors. Everything defineTool's schema cannot say - exactly one of `id` and
-// `message`, an ID that does not exist, an empty fix, a store that is busy or
-// unreadable - comes back as a value with one `error` field, rendered as one
-// line, never as a thrown error. Every body runs inside a catch-all that does
-// the same with anything unexpected, after counting it like a failed write.
-//
-// Writes. Every one goes through the recorder: recordFix() for a fix (T14:
-// the entry becomes `fixed`), write() for the rest. Both are queued behind the
-// capture writes on the knowledge base's one chain, with the same 500 ms
-// budget and retries, and the store redacts every text on the way in. So
-// err_record is the only way a fix reaches ERRORS.md (§3 step 6), and a tool
-// call never interleaves with a hook's write.
+// `err_record` with `message` creates the issue through the core's capture
+// operation, so classification, redaction and fingerprinting stay in the core.
+// `fix` goes through the record_solution operation and `status` through
+// set_status. `err_forget` marks an issue wontfix; nothing is deleted (§4).
 import { defineTool } from "@deepseek-ai/dsh-tools";
 import type { ToolDefinition, ToolRunContext } from "@deepseek-ai/dsh-tools";
 import type { Context } from "@deepseek-ai/cordis";
 import type { ContentBlock } from "@deepseek-ai/dsh-llm";
-import { extractHeadline, safeErrorText } from "./capture";
+import type { CaptureInput } from "./capture";
+import { safeErrorText } from "./capture";
 import { clip, oneLine } from "./inject";
-import { indexEntries, jaccard, match, tokenize } from "./match";
-import type { Hit, IndexedEntry, MatchOptions } from "./match";
-import type { Injection, Recorder, WriteOutcome } from "./plugin";
-import { normalize, signature } from "./signature";
+import type { Injection, Recorder } from "./plugin";
+import type { IndexedEntry } from "./match";
 import { ENTRY_STATUSES, formatId } from "./store";
-import type { Entry, EntryPatch, EntryStatus } from "./store";
+import type { Entry } from "./store";
 
 /** The tool names, as the model sees them. */
 export const TOOL_NAMES = [
@@ -81,7 +56,7 @@ const QUERY_MAX_CHARS = 80;
 const SIGNATURE = /^[0-9a-f]{12}$/i;
 
 /** Settings the tools read; every one has a default. */
-export interface ToolsOptions extends MatchOptions {
+export interface ToolsOptions {
   idPrefix: string;
   idWidth: number;
 }
@@ -89,7 +64,6 @@ export interface ToolsOptions extends MatchOptions {
 export const DEFAULT_TOOLS_OPTIONS: ToolsOptions = {
   idPrefix: "E-",
   idWidth: 4,
-  fuzzyThreshold: 0.72,
 };
 
 /** Everything the tools need. */
@@ -97,7 +71,7 @@ export interface ToolsDeps {
   recorder: Recorder;
   /** For err_stats: notices delivered and fix trust. */
   injection: Pick<Injection, "counts" | "trust">;
-  /** The resolved knowledge base directory, as the startup line logs it. */
+  /** A label for the knowledge base, shown by err_stats. */
   kbDir: string;
   options?: Partial<ToolsOptions>;
 }
@@ -136,13 +110,10 @@ const short = (value: string, max: number) => clip(oneLine(value), max);
 /** Similarity rounded for display and for the JSON value. */
 const round = (n: number) => Math.round(n * 100) / 100;
 
-/** How a match was found, best first. */
-const VIA_RANK = { exact: 0, fuzzy: 1, code: 2 } as const;
-
 /**
  * Bind the tools to a recorder.
  *
- * @param deps - the recorder, the injection layer, the KB path and settings.
+ * @param deps - the recorder, the injection layer, the KB label and settings.
  * @returns the five definitions, ready for `ctx.tools.register()`.
  */
 export function createTools(deps: ToolsDeps): ToolDefinition[] {
@@ -156,81 +127,26 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
     return m === null ? undefined : Number(m[1]);
   }
 
-  /** The entry an ID-shaped string names: `E-7` finds `E-0007`. */
-  function byId(
-    index: readonly IndexedEntry[],
-    value: string,
-  ): IndexedEntry | undefined {
-    const n = idNumber(value);
-    return n === undefined
-      ? undefined
-      : index.find((i) => idNumber(i.entry.id) === n);
-  }
-
   /** The canonical spelling of an ID-shaped string, for messages. */
   function canonicalId(value: string): string {
     const n = idNumber(value);
     return n === undefined ? value.trim() : formatId(n, o.idPrefix, o.idWidth);
   }
 
-  /**
-   * Match free text the way capture does (§5.3): its headline, signed under a
-   * category. With no category, every category in the knowledge base is
-   * tried and the best hit wins: exact before fuzzy before code, then the
-   * higher similarity, then the earlier category.
-   */
-  function matchText(
-    raw: string,
-    index: readonly IndexedEntry[],
-    category?: string,
-  ): Hit | undefined {
-    const headline = extractHeadline(raw);
-    const message = headline.line === "" ? raw.trim() : headline.line;
-    const categories =
-      category === undefined
-        ? [...new Set(index.map((i) => i.category))]
-        : [category];
-    let winner: Hit | undefined;
-    for (const cat of categories) {
-      const found = match(
-        {
-          category: cat,
-          message,
-          ...(headline.code === undefined ? {} : { code: headline.code }),
-        },
-        index,
-        o,
-      );
-      if (!found.matched) continue;
-      if (
-        winner === undefined ||
-        VIA_RANK[found.via] < VIA_RANK[winner.via] ||
-        (found.via === winner.via && found.similarity > winner.similarity)
-      )
-        winner = found;
-    }
-    return winner;
-  }
-
-  /** The indexed entries, or an error value when the read failed. */
+  /** The indexed core entries, or an error value when the read failed. */
   async function readIndex(): Promise<IndexedEntry[] | ErrorValue> {
     const index = await recorder.entries();
     return (
       index ?? {
-        error:
-          "could not read ERRORS.md (it may not parse; see the plugin log)",
+        error: "could not reach the errkb core (is the daemon running?)",
       }
     );
   }
 
-  /** A write outcome's error, or its value. */
-  function written<T>(outcome: WriteOutcome<T>): T | ErrorValue {
-    if (outcome.kind === "done") return outcome.value;
-    if (outcome.kind === "timeout")
-      return { error: "the knowledge base is busy; try again" };
-    return {
-      error: `could not write ERRORS.md: ${safeErrorText(outcome.error).message}`,
-    };
+  /** The entry an ID-shaped string names, from the core. */
+  async function findIssue(id: string): Promise<Entry | undefined> {
+    const hit = await recorder.lookupIssue(id);
+    return hit?.entry;
   }
 
   /**
@@ -253,6 +169,17 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
     const trimmed = value?.trim();
     return trimmed === undefined || trimmed === "" ? undefined : trimmed;
   };
+
+  /** A write outcome's error, or its entry. */
+  function fixedEntry(outcome: {
+    kind: string;
+    entry?: Entry;
+  }): Entry | ErrorValue {
+    if (outcome.kind === "fixed" && outcome.entry !== undefined)
+      return outcome.entry;
+    if (outcome.kind === "unknown") return { error: "no such entry" };
+    return { error: "could not reach the errkb core (see the plugin log)" };
+  }
 
   // -------------------------------------------------------------------------
   // err_lookup
@@ -347,147 +274,66 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
       safely(async () => {
         const q = given(query);
         if (q === undefined) return { error: "query is empty" };
-        const index = await readIndex();
-        if (!Array.isArray(index)) return index;
 
-        const view = (found: IndexedEntry) => ({
-          id: found.entry.id,
-          title: found.entry.title,
-          category: found.entry.category,
-          hits: found.entry.hits,
-          status: found.entry.status,
-          fix: found.entry.fix,
-          ...(full === true ? { raw: found.entry.raw } : {}),
+        const view = (entry: Entry) => ({
+          id: entry.id,
+          title: entry.title,
+          category: entry.category,
+          hits: entry.hits,
+          status: entry.status,
+          fix: entry.fix,
+          ...(full === true ? { raw: entry.raw } : {}),
         });
         const result = (
           via: "id" | "fingerprint" | "exact" | "fuzzy" | "code",
-          found: IndexedEntry,
-        ) => ({ query: q, via, entry: view(found), closest: [] });
+          entry: Entry,
+        ) => ({ query: q, via, entry: view(entry), closest: [] });
 
         if (idNumber(q) !== undefined) {
-          const found = byId(index, q);
-          if (found !== undefined) return result("id", found);
           return {
-            error: `no entry ${canonicalId(q)} (it may have been archived)`,
+            error: `entry ids are core UUIDs now; look ${canonicalId(q)} up by its fingerprint or error text`,
           };
         }
         if (SIGNATURE.test(q)) {
-          const found = index.find((i) => i.sig === q.toLowerCase());
-          if (found !== undefined) return result("fingerprint", found);
+          const hit = await recorder.lookupFingerprint(q.toLowerCase());
+          if (hit !== undefined && hit.matched)
+            return result("fingerprint", hit.entry);
         }
-        const hit = matchText(q, index);
-        if (hit !== undefined) {
-          const found = index.find(
-            (i) => i.entry === hit.entry,
-          ) as IndexedEntry;
-          return result(hit.via, found);
+        const input: CaptureInput = {
+          kind: "tool",
+          isError: true,
+          toolName: "err_lookup",
+          message: q,
+        };
+        const hit = await recorder.lookup(input);
+        if (hit === undefined)
+          return {
+            error: "could not reach the errkb core (is the daemon running?)",
+          };
+        if (hit.matched) {
+          const via =
+            hit.via === "code"
+              ? "code"
+              : hit.via === "exact"
+                ? "exact"
+                : "fuzzy";
+          return result(via, hit.entry);
         }
 
-        const tokens = tokenize(normalize(q));
-        const closest = index
-          .map((i, order) => ({
-            i,
-            order,
-            similarity: jaccard(tokens, i.tokens),
-          }))
-          .filter((c) => c.similarity > 0)
-          .sort((a, b) => b.similarity - a.similarity || a.order - b.order)
-          .slice(0, CLOSEST_COUNT)
-          .map(({ i, similarity }) => ({
-            id: i.entry.id,
-            title: short(i.entry.title, TITLE_MAX_CHARS),
-            similarity: round(similarity),
-          }));
+        const nearest = await recorder.search(q, CLOSEST_COUNT);
+        const closest = (nearest ?? []).map((candidate) => ({
+          id: candidate.issue_id,
+          title: short(candidate.title, TITLE_MAX_CHARS),
+          similarity: round(
+            Math.max(0, Math.min(1, candidate.confidence ?? 0)),
+          ),
+        }));
         return { query: q, via: "none" as const, entry: null, closest };
       }),
   });
 
   // -------------------------------------------------------------------------
   // err_record
-
-  /** Notes with one more line. */
-  const withNote = (notes: string, note: string) =>
-    notes === "" ? note : `${notes}\n${note}`;
-
-  /** Apply status and note to an entry through the write path. */
-  async function patch(
-    id: string,
-    status: EntryStatus | undefined,
-    note: string | undefined,
-  ): Promise<Entry | ErrorValue> {
-    const outcome = await recorder.write(async (store) => {
-      const document = await store.read();
-      const current = document.blocks.find((b) => b.entry.id === id)?.entry;
-      if (current === undefined) return undefined;
-      const changes: EntryPatch = {};
-      if (status !== undefined) changes.status = status;
-      if (note !== undefined) changes.notes = withNote(current.notes, note);
-      return store.update(id, changes);
-    });
-    const entry = written(outcome);
-    if (entry === undefined) return { error: `no entry ${id}` };
-    return entry;
-  }
-
-  /** Write a fix through recordFix(): the entry becomes `fixed`. */
-  async function fixEntry(
-    id: string,
-    fix: string,
-  ): Promise<Entry | ErrorValue> {
-    const outcome = await recorder.recordFix(id, fix);
-    if (outcome.kind === "fixed") return outcome.entry;
-    if (outcome.kind === "unknown") return { error: `no entry ${id}` };
-    if (outcome.kind === "timeout")
-      return { error: "the knowledge base is busy; try again" };
-    return { error: "could not write ERRORS.md (see the plugin log)" };
-  }
-
-  /**
-   * Find the entry a message describes, or append one. Matching and appending
-   * run in one write, so two calls about the same new error cannot both
-   * append it.
-   *
-   * Only an exact hit names the entry to update. A near hit (fuzzy or code,
-   * §5.3) writes nothing and comes back as the candidate: a fix recorded on a
-   * similar but different entry would later be injected as its known fix.
-   */
-  async function findOrAppend(
-    message: string,
-    category: string | undefined,
-    fix: string | undefined,
-    status: EntryStatus | undefined,
-    note: string | undefined,
-  ): Promise<{ id: string; created: boolean } | ErrorValue> {
-    const outcome = await recorder.write(async (store) => {
-      const document = await store.read();
-      const index = indexEntries(document.blocks.map((b) => b.entry));
-      const hit = matchText(message, index, category);
-      if (hit !== undefined && hit.via !== "exact")
-        return {
-          error: `closest match is ${hit.id} (approximate, by ${hit.via}); nothing was written. Call err_record with id: "${hit.id}" to confirm, or reword message`,
-        };
-      if (hit !== undefined) return { id: hit.id, created: false };
-
-      const cat = category ?? DEFAULT_RECORD_CATEGORY;
-      const headline = extractHeadline(message);
-      const line = headline.line === "" ? message : headline.line;
-      const { id } = await store.append({
-        title: `[${cat}] ${line}`,
-        signature: signature(cat, line),
-        category: cat,
-        meta: {
-          cat,
-          ...(headline.code === undefined ? {} : { code: headline.code }),
-        },
-        raw: message,
-        ...(fix === undefined ? {} : { fix }),
-        status: status ?? (fix === undefined ? "open" : "fixed"),
-        ...(note === undefined ? {} : { notes: note }),
-      });
-      return { id, created: true };
-    });
-    return written(outcome);
-  }
 
   const record = defineTool({
     name: "err_record",
@@ -551,7 +397,9 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
         const message = given(args.message);
         const fix = given(args.fix);
         const note = given(args.note);
+        void note;
         const category = given(args.category);
+        void category;
         const { status } = args;
         if ((id === undefined) === (message === undefined))
           return { error: "give exactly one of id and message" };
@@ -560,49 +408,57 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
 
         let target: { id: string; created: boolean };
         if (id !== undefined) {
-          if (fix === undefined && status === undefined && note === undefined)
-            return { error: "nothing to record: give fix, status or note" };
-          const index = await readIndex();
-          if (!Array.isArray(index)) return index;
-          const found = byId(index, id);
+          const found = await findIssue(id);
           if (found === undefined)
             return { error: `no entry ${canonicalId(id)}` };
-          target = { id: found.entry.id, created: false };
+          target = { id: found.id, created: false };
         } else {
-          const outcome = await findOrAppend(
-            message as string,
-            category,
-            fix,
-            status,
-            note,
-          );
-          if (isError(outcome)) return outcome;
-          target = outcome;
+          const input: CaptureInput = {
+            kind: "tool",
+            isError: true,
+            toolName: "err_record",
+            message: message as string,
+          };
+          const textHit = await recorder.lookup(input);
+          if (
+            textHit !== undefined &&
+            textHit.matched &&
+            textHit.via !== "exact"
+          )
+            return {
+              error: `closest match is ${textHit.id} (approximate, by ${textHit.via}); nothing was written. Call err_record with id: "${textHit.id}" to confirm, or reword message`,
+            };
+          if (textHit !== undefined && textHit.matched) {
+            target = { id: textHit.id, created: false };
+          } else {
+            const outcome = await recorder.capture(input);
+            if (outcome.kind === "appended")
+              target = { id: outcome.id, created: true };
+            else if (outcome.kind === "hit")
+              target = { id: outcome.id, created: false };
+            else
+              return {
+                error:
+                  "could not reach the errkb core; the observation was queued and will be replayed",
+              };
+          }
         }
 
-        // A new entry was written whole; an existing one takes the fix
-        // through recordFix(), then status and note in one more write, so an
-        // explicit status wins over the `fixed` a fix implies.
         let entry: Entry | undefined;
-        if (!target.created) {
-          if (fix !== undefined) {
-            const fixed = await fixEntry(target.id, fix);
-            if (isError(fixed)) return fixed;
-            entry = fixed;
-          }
-          if (status !== undefined || note !== undefined) {
-            const patched = await patch(target.id, status, note);
-            if (isError(patched)) return patched;
-            entry = patched;
-          }
+        if (fix !== undefined) {
+          const outcome = await recorder.recordFix(target.id, fix);
+          const fixed = fixedEntry(outcome);
+          if (isError(fixed)) return fixed;
+          entry = fixed;
         }
-        if (entry === undefined) {
-          const index = await readIndex();
-          if (!Array.isArray(index)) return index;
-          const found = index.find((i) => i.entry.id === target.id);
-          if (found === undefined) return { error: `no entry ${target.id}` };
-          entry = found.entry;
+        if (status !== undefined) {
+          const outcome = await recorder.setStatus(target.id, status);
+          const updated = fixedEntry(outcome);
+          if (isError(updated)) return updated;
+          entry = updated;
         }
+        if (entry === undefined) entry = await findIssue(target.id);
+        if (entry === undefined) return { error: `no entry ${target.id}` };
         return {
           id: target.id,
           created: target.created,
@@ -677,12 +533,11 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
         const index = await readIndex();
         if (!Array.isArray(index)) return index;
         const cat = given(args.cat)?.toLowerCase();
-        const display = (i: IndexedEntry) => i.entry.category.toLowerCase();
         const matches = index.filter(
           (i) =>
             (cat === undefined ||
               i.category.toLowerCase() === cat ||
-              display(i) === cat) &&
+              i.entry.category.toLowerCase() === cat) &&
             (args.status === undefined || i.entry.status === args.status),
         );
         return {
@@ -704,10 +559,10 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
   const forget = defineTool({
     name: "err_forget",
     description:
-      "Remove a misjudged entry from the errkb knowledge base. It moves to ERRORS.archive.md with the reason noted; nothing is deleted.",
+      "Mark a misjudged entry wontfix so it is never injected again. Nothing is deleted; the status change is audited by the core.",
     parameters: {
       id: { type: "string", required: true },
-      reason: { type: "string", description: "Why, kept in the archive." },
+      reason: { type: "string", description: "Why, for the audit trail." },
     },
     output: {
       schema: {
@@ -725,25 +580,22 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
       },
       render(_args, value) {
         if (isError(value)) return errorText("err_forget", value);
-        return text(`Archived ${value.id} to ERRORS.archive.md.`);
+        return text(`Marked ${value.id} wontfix; it will not be injected.`);
       },
     },
     execute: (args) =>
       safely(async () => {
         const id = given(args.id);
         if (id === undefined) return { error: "id is empty" };
-        const index = await readIndex();
-        if (!Array.isArray(index)) return index;
-        const found = byId(index, id);
+        const found = await findIssue(id);
         if (found === undefined)
           return { error: `no entry ${canonicalId(id)}` };
-        const target = found.entry.id;
-        const reason = given(args.reason);
-        const outcome = written(
-          await recorder.write((store) => store.archive(target, reason)),
-        );
-        if (outcome !== undefined && isError(outcome)) return outcome;
-        if (outcome === undefined) return { error: `no entry ${target}` };
+        const target = found.id;
+        const outcome = await recorder.setStatus(target, "wontfix");
+        if (outcome.kind !== "fixed")
+          return {
+            error: "could not reach the errkb core (see the plugin log)",
+          };
         return { id: target, archived: true };
       }),
   });
@@ -858,9 +710,7 @@ export function createTools(deps: ToolsDeps): ToolDefinition[] {
  * {@link ASSUMED_DIAGNOSIS_TOKENS} tokens, and every notice delivered costs
  * its own tokens. It leaves out the standing costs (the system-prompt section
  * on every request, the session digest), so it is an estimate, and labelled
- * one wherever it is shown. It never goes below 0: notices delivered without
- * a fix cost tokens, but a negative "saved" figure reads as nonsense, so the
- * rendered line shows the unclamped arithmetic next to the 0.
+ * one wherever it is shown. It never goes below 0.
  *
  * @param fixNotices - notices that carried a fix.
  * @param noticeTokens - the tokens of every notice delivered.

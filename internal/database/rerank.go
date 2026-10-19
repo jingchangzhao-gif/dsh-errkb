@@ -75,6 +75,7 @@ type RetrievalCandidate struct {
 	Approximate     bool
 	EnvironmentDiff []core.EnvironmentDifference
 	Solution        *RetrievalSolution
+	Hits            int
 }
 
 // AutoReusable reports whether this candidate may be reused without asking the
@@ -232,6 +233,7 @@ func Retrieve(ctx context.Context, conn *pgx.Conn, request RetrievalRequest) (Re
 			Approximate:     rankedCandidate.Approximate,
 			EnvironmentDiff: rankedCandidate.EnvironmentDiff,
 			Solution:        stored.Solution,
+			Hits:            stored.Hits,
 		})
 	}
 	if err := persistRetrievals(ctx, conn, request.SessionID, retrievalQueryText(normalized, errorCode, command, toolName, issueID), candidates); err != nil {
@@ -264,6 +266,7 @@ type storedRetrievalCandidate struct {
 	Title      string
 	ProjectKey string
 	Solution   *RetrievalSolution
+	Hits       int
 }
 
 func (d retrievalDetails) rankCandidates() []core.RerankCandidate {
@@ -294,7 +297,8 @@ func loadRetrievalCandidates(ctx context.Context, conn *pgx.Conn, issueIDs []str
 		       coalesce(fix.body, ''),
 		       coalesce(fix.source, ''),
 		       coalesce(fix.applies_to, '{}'::jsonb)::text,
-		       coalesce(fix.trust, 0)
+		       coalesce(fix.trust, 0),
+		       i.hits
 		from issues i
 		left join lateral (
 			select e.normalized_message, e.error_code, e.command, e.tool_name, o.environment
@@ -339,9 +343,10 @@ func loadRetrievalCandidates(ctx context.Context, conn *pgx.Conn, issueIDs []str
 			fixSource    string
 			fixAppliesTo string
 			fixTrust     float64
+			hits         int
 		)
 		if err := rows.Scan(&issueID, &fingerprint, &title, &projectKey, &message, &code, &command, &toolName, &environment,
-			&fixVersionID, &fixBody, &fixSource, &fixAppliesTo, &fixTrust); err != nil {
+			&fixVersionID, &fixBody, &fixSource, &fixAppliesTo, &fixTrust, &hits); err != nil {
 			return retrievalDetails{}, fmt.Errorf("scan candidate: %w", err)
 		}
 		stored := storedRetrievalCandidate{
@@ -356,6 +361,7 @@ func loadRetrievalCandidates(ctx context.Context, conn *pgx.Conn, issueIDs []str
 			},
 			Title:      title,
 			ProjectKey: projectKey,
+			Hits:       hits,
 		}
 		if fixVersionID != "" {
 			stored.Solution = &RetrievalSolution{

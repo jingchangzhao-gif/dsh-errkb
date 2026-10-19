@@ -89,6 +89,8 @@ export interface CoreCandidate {
   match_detail: string;
   approximate: boolean;
   confidence?: number | null;
+  /** How many times this issue was seen (EKB-038d additive contract field). */
+  hits?: number;
   solution?: {
     solution_version_id: string;
     body: string;
@@ -96,6 +98,28 @@ export interface CoreCandidate {
     applies_to: string;
     trust: number;
   };
+}
+
+/** One row as the core's `list` returns it (spec/mcp-tools.cue #ListItem). */
+export interface CoreListItem {
+  id: string;
+  title: string;
+  updated_at: string;
+  hits?: number;
+  status?: string;
+  fix?: string;
+}
+
+/** The `lookup` result. */
+export interface CoreLookupResponse {
+  candidates?: CoreCandidate[];
+}
+
+/** The `list` result. */
+export interface CoreListResponse {
+  items?: CoreListItem[];
+  next_cursor?: string;
+  total?: number;
 }
 
 /** One problem the connector answers locally: the reason and its wording. */
@@ -341,7 +365,7 @@ export interface ConnectorIdentity {
 /** The adapter the host uses: capture, replay and the read/write calls. */
 export interface Connector {
   readonly core: Core;
-  readonly queue: ObservationQueue;
+  readonly queue?: ObservationQueue;
   /** Capture one observation, queueing it when the daemon is down. */
   capture(observation: RawObservation): Promise<CaptureOutcome>;
   /** Replay queued observations in order; stops at the first failure. */
@@ -356,8 +380,8 @@ export interface Connector {
 export interface ConnectorOptions extends ConnectorIdentity {
   /** The core; defaults to a pipe transport over {@link DEFAULT_PIPE}. */
   core?: Core;
-  /** The queue; defaults to one over `files.state` with the default caps. */
-  queue: ObservationQueue;
+  /** The offline queue; without one a daemon outage fails the capture. */
+  queue?: ObservationQueue;
   /** Where the runtime versions in an observation come from. */
   runtimeVersions?: Record<string, string>;
 }
@@ -408,6 +432,12 @@ export function createConnector(options: ConnectorOptions): Connector {
         return await send(request);
       } catch (error) {
         if (error instanceof CoreError && error.unavailable) {
+          if (queue === undefined)
+            throw new CoreError(
+              "unavailable",
+              "the errkb daemon is down and no offline queue is configured",
+              true,
+            );
           await queue.enqueue(request, now());
           return { queued: true };
         }
@@ -416,6 +446,7 @@ export function createConnector(options: ConnectorOptions): Connector {
     },
 
     async replay() {
+      if (queue === undefined) return { replayed: 0, remaining: 0 };
       const pending = await queue.list();
       let replayed = 0;
       for (const item of pending) {
@@ -434,7 +465,10 @@ export function createConnector(options: ConnectorOptions): Connector {
       return { replayed, remaining: 0 };
     },
 
-    pending: () => queue.stats(),
+    pending: () =>
+      queue === undefined
+        ? Promise.resolve({ pending: 0, bytes: 0, dropped: 0 })
+        : queue.stats(),
 
     notice(candidates) {
       const best = candidates[0];

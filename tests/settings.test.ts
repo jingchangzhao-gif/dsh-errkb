@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
@@ -8,8 +8,10 @@ import {
   ID_PREFIX_PATTERN,
   SETTING_BOUNDS,
   apply,
+  injectionOptions,
   normalizeSettings,
 } from "../src/index";
+import { DEFAULT_INJECTION_OPTIONS } from "../src/plugin";
 import { effectiveTransientThreshold } from "../src/capture";
 
 /** normalizeSettings() on the defaults plus `over`, with its warnings. */
@@ -123,8 +125,24 @@ describe("normalizeSettings", () => {
       idWidth: { min: 1, max: 9, integer: true },
       maxEntries: { min: 1, max: Infinity, integer: true },
       maxSampleChars: { min: 0, max: Infinity, integer: true },
+      pipeTimeoutMs: { min: 1, max: 600_000, integer: true },
+      offlineMaxEvents: { min: 1, max: 100_000, integer: true },
+      offlineMaxBytes: { min: 1, max: 1024 * 1024 * 1024, integer: true },
     });
     expect(ID_PREFIX_PATTERN.test(Config({}).idPrefix)).toBe(true);
+  });
+
+  it.each([
+    ["pipeTimeoutMs", 0, 1],
+    ["pipeTimeoutMs", 10.9, 10],
+    ["pipeTimeoutMs", 1e9, 600_000],
+    ["offlineMaxEvents", 0, 1],
+    ["offlineMaxEvents", 1e9, 100_000],
+    ["offlineMaxBytes", 0, 1],
+    ["offlineMaxBytes", 1e12, 1024 * 1024 * 1024],
+  ] as const)("clamps %s: %s becomes %s", (key, given, used) => {
+    const { config } = normalize({ [key]: given });
+    expect(config[key]).toBe(used);
   });
 });
 
@@ -170,5 +188,63 @@ describe("apply with out-of-range settings", () => {
       "err-kb: setting maxSampleChars=-5 is out of range; using 0",
       'err-kb: setting idPrefix="" is out of range; using "E-"',
     ]);
+  });
+});
+
+describe("injectionOptions fallbacks", () => {
+  it("uses the defaults for unknown mode strings", () => {
+    const options = injectionOptions(
+      Config({
+        inject: "bogus" as never,
+        captureFix: "bogus" as never,
+        sessionDigest: "bogus" as never,
+      }),
+    );
+    expect(options).toEqual(DEFAULT_INJECTION_OPTIONS);
+  });
+});
+
+describe("apply wiring", () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), "errkb-wiring-"));
+  });
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("queues a captured failure on the offline queue", async () => {
+    const listeners = new Map<string, Function[]>();
+    const sink = {
+      info: () => undefined,
+      warn: () => undefined,
+      error: () => undefined,
+      debug: () => undefined,
+    };
+    const ctx = {
+      on: (name: string, fn: Function) => {
+        listeners.set(name, [...(listeners.get(name) ?? []), fn]);
+        return () => true;
+      },
+      tools: { register: () => () => undefined },
+      systemPrompt: { section: () => () => undefined },
+      logger: sink,
+    } as unknown as Context;
+    apply(ctx, Config({ kbDir: dir }));
+    for (const fn of listeners.get("agent/error") ?? []) {
+      fn({ agent: { id: "s1" }, turn: 1, step: 1, error: new Error("EPERM") });
+    }
+    const statePath = join(dir, "state.json");
+    let document: { queue: Record<string, unknown>[] } | undefined;
+    for (let i = 0; i < 40 && document === undefined; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      document = await readFile(statePath, "utf8")
+        .then(
+          (text) => JSON.parse(text) as { queue: Record<string, unknown>[] },
+        )
+        .catch(() => undefined);
+    }
+    expect(document?.queue).toHaveLength(1);
+    expect(String(JSON.stringify(document?.queue[0]))).toContain("EPERM");
   });
 });
