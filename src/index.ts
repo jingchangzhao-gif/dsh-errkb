@@ -21,6 +21,11 @@ import type { InjectionOptions, RecorderOptions } from "./plugin";
 import { registerTools } from "./tools";
 import { effectiveTransientThreshold } from "./capture";
 
+// The thin connector (EKB-038c) is exported but not wired yet: the default path
+// still runs the local pipeline until EKB-038d swaps it. Re-exporting keeps the
+// module in the published bundle and the type surface discoverable.
+export * from "./connector";
+
 // The plugin's runtime name, matching `id` in cordis.patch.yml. The installed
 // harness plugins follow the same rule: dsh-spill-policy exports "spill-policy",
 // dsh-persona exports "persona", and the third-party dsh-pr-watch exports
