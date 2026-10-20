@@ -20,7 +20,7 @@ import (
 
 	"github.com/Microsoft/go-winio"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 )
 
 // ErrServiceUnavailable means the daemon could not be reached on its pipe.

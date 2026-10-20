@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // fakeClient stands in for the daemon; the CLI only ever sees this interface.

@@ -113,5 +113,5 @@ see the known fix next time.
 - The DSH plugin is pending the store review; installing it by hand is the
   supported path for now.
 
-[Unreleased]: https://github.com/jingchangzhao-gif/dsh-errkb/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/jingchangzhao-gif/dsh-errkb/releases/tag/v0.1.0
+[Unreleased]: https://github.com/jingchangzhao-gif/error-knowledge-base/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0

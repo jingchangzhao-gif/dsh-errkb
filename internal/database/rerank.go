@@ -11,7 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
 )
 
 // Retrieval orchestration (plan section 5). The five steps are visible in

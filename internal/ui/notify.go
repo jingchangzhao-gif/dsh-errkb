@@ -3,7 +3,7 @@ package ui
 import (
 	"fmt"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // Notification is the non-modal desktop notification model for one failure.

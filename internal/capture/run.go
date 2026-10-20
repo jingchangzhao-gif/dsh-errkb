@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/redact"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/redact"
 )
 
 // DefaultCaptureLimit bounds how many bytes of each stream are kept for the

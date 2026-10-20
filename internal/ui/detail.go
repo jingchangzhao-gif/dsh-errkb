@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // DetailRow is one painted line of the detail page. The model owns the text so

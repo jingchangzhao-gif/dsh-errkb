@@ -17,7 +17,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // dialClient can be replaced in tests; production talks to the real pipe.

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 func sampleDetail() service.IssueDetail {

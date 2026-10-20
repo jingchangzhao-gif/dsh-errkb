@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 func sampleCandidate(rank int) service.NoticeCandidate {

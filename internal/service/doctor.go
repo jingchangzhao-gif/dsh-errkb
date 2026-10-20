@@ -17,9 +17,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"golang.org/x/sys/windows"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/redact"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/redact"
 )
 
 // DoctorStatus is the three-level verdict a diagnosis reports. The binary

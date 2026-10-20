@@ -25,7 +25,7 @@ import (
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 )
 
 // fakeBackend answers every operation with a contract-valid payload and
@@ -862,7 +862,7 @@ func TestPipeLayerHasNoTCPLoggingOrBusinessLogic(t *testing.T) {
 			if path == "net/http" {
 				t.Fatalf("%s imports net/http; the local API must not offer TCP", fileName)
 			}
-			if path == "github.com/jingchangzhao-gif/dsh-errkb/internal/database" || strings.Contains(path, "pgx") {
+			if path == "github.com/jingchangzhao-gif/error-knowledge-base/internal/database" || strings.Contains(path, "pgx") {
 				t.Fatalf("%s imports the storage layer; the dispatcher must not carry business logic", fileName)
 			}
 		}

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // State is the coarse capture condition the tray shows. The P6 row promises

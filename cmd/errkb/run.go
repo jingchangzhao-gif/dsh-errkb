@@ -16,9 +16,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/capture"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/capture"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 )
 
 // runOutput is the --json shape of one wrapped run. It is a CLI envelope, not

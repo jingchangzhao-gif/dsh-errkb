@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/audit"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/audit"
 )
 
 // StatsPage is the read-only statistics and audit view model (EKB-049). It holds

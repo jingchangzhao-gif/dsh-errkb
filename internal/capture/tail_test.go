@@ -10,9 +10,9 @@ import (
 	"time"
 	"unicode/utf16"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/capture"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/capture"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 )
 
 // tailRecorder stores every event handed to it and validates it first, so a
