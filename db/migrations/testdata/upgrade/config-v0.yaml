@@ -1,0 +1,41 @@
+# config-v0.yaml — a configuration file written by the pre-EKB-042 contract.
+#
+# Generated 2026-10-21 by yaml.Marshal of internal/contract.Config at commit
+# 5ad354df8bfce6b9f7a9979d126198838701abc8 (the parent of the EKB-042 commit
+# dcb43ad, before the optional "templates" block existed). It is a genuine
+# old-format artifact: the field set below is exactly what the old contract
+# would write, and it has no "templates" key.
+database:
+    dsn: postgres://errkb@127.0.0.1:5433/errkb?sslmode=disable
+    max_connections: 8
+    connect_timeout_ms: 5000
+service:
+    pipe:
+        name: errkb
+        enabled: true
+    http:
+        enabled: false
+capture:
+    enabled: true
+    paused_connectors:
+        - legacy-connector
+    paused_projects:
+        - legacy-project
+notices:
+    before_diagnosis: true
+retention:
+    sample_days: 7
+    normalized_days: 30
+    audit_days: 365
+redaction:
+    extra_patterns:
+        - corp-id-[0-9]{6}
+search:
+    limit: 3
+timeout:
+    capture_ms: 2000
+    search_ms: 1500
+    mcp_ms: 5000
+offline:
+    replay_interval_ms: 5000
+
