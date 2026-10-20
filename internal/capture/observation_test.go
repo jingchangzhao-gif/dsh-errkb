@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/capture"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/capture"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 )
 
 // captureRequest is the shape the DSH adapter sends: the adapter names itself

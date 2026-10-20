@@ -1,4 +1,4 @@
-module github.com/jingchangzhao-gif/dsh-errkb
+module github.com/jingchangzhao-gif/error-knowledge-base
 
 go 1.26.4
 

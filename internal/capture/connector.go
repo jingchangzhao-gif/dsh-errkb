@@ -16,7 +16,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 )
 
 // ConnectorSDKVersion is the version on every SDK envelope.

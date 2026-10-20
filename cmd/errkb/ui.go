@@ -15,8 +15,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/ui"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/ui"
 )
 
 // uiShutdownTimeout bounds the final graceful stop when the tray closes.

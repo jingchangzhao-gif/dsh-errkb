@@ -17,7 +17,7 @@
 #define AppName "errkb"
 #define AppVersion "0.1.0"
 #define AppPublisher "jingchangzhao-gif"
-#define AppURL "https://github.com/jingchangzhao-gif/dsh-errkb"
+#define AppURL "https://github.com/jingchangzhao-gif/error-knowledge-base"
 #define DefaultPgPort "5433"
 #define ClusterChoiceNew "Create a dedicated cluster (recommended)"
 #define ClusterChoiceExisting "Reuse an existing PostgreSQL instance"

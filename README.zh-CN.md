@@ -6,7 +6,7 @@
 
 **状态：v0.1.0（2026-10-21）。** Windows 桌面构建，本地 PostgreSQL 16 知识库；已对 DSH 0.2.0-rc.2、Codex CLI 0.156.1、Claude Code 2.1.282 实测。干净虚拟机验收**阻塞**，记录在 [`docs/acceptance-vm.md`](docs/acceptance-vm.md)；发布流水线在没有该验收记录时拒绝发布版本。
 
-**错误知识库**（`error-knowledge-base`）是同一产品的多种形态：命令行客户端、本地后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件，以及面向 Codex CLI、Claude Code 的宿主连接器。所有形态共用同一个本地核心和同一个知识库：分类、脱敏、规范化、指纹、存储、检索和解法可信度都只在核心里实现一次，不在各宿主里重复实现。仓库名仍为 `dsh-errkb`，命令仍是 `errkb`，两者继续可用。
+**错误知识库**（`error-knowledge-base`）是同一产品的多种形态：命令行客户端、本地后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件，以及面向 Codex CLI、Claude Code 的宿主连接器。所有形态共用同一个本地核心和同一个知识库：分类、脱敏、规范化、指纹、存储、检索和解法可信度都只在核心里实现一次，不在各宿主里重复实现。项目和仓库已改名为 `error-knowledge-base`；命令仍是 `errkb`，DSH 插件包沿用 `dsh-errkb`。
 
 ## 目录
 

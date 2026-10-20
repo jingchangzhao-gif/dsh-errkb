@@ -15,7 +15,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 )
 
 // Backend is the business surface the local API routes to. Every method

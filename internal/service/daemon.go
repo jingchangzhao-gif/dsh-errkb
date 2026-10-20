@@ -27,8 +27,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/redact"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/redact"
 )
 
 const (

@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
 )
 
 // Share is the redaction policy. Public text may leave the machine and loses

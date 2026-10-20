@@ -12,8 +12,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 )
 
 // candidateSeed is one synthetic event with an optional command. Each seed

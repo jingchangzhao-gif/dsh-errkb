@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/redact"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/redact"
 )
 
 // The queue buffers events while PostgreSQL is unreachable. It is deliberately

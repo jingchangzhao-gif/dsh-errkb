@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // runDaemon implements the `errkb daemon` subcommand: flag parsing, the signal

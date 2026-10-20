@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // fakeService is a Service whose health document the test controls.

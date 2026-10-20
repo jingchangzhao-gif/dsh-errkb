@@ -33,8 +33,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/redact"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/redact"
 )
 
 // divergence is one registered gap between the two implementations.

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 )
 
 func TestEstimateNoticeTokens(t *testing.T) {

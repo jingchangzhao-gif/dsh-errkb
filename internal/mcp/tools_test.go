@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/mcp"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/mcp"
 )
 
 const testVersion = "0.1.0-test"

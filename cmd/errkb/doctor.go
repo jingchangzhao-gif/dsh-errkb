@@ -10,7 +10,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // runDoctor implements the `errkb doctor` subcommand. The checks themselves

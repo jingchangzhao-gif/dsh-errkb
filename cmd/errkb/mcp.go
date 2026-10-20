@@ -10,8 +10,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/mcp"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/mcp"
 )
 
 // pipeBackend answers the MCP tools over the local daemon pipe. It dials per

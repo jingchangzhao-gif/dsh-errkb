@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // doctorTestArguments points the diagnosis at a closed port so the CLI tests

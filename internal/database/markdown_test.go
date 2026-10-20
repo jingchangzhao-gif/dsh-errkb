@@ -14,8 +14,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 )
 
 // seedMarkdown reads the read-only compatibility sample. The file never

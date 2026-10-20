@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // Exit codes are part of the CLI contract (card EKB-030): callers must be able

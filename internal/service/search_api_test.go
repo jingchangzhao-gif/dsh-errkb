@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/core"
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/core"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 )
 
 func TestClassifySearchInput(t *testing.T) {

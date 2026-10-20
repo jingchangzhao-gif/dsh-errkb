@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/audit"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/audit"
 )
 
 func TestStatsPageAlwaysShowsTheFalseMergeTarget(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 )
 
 func TestClientFailsFastWithoutDaemon(t *testing.T) {

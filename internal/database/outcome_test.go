@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/database"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 )
 
 // newIssueAndSolution creates one issue through the real recording path, then a

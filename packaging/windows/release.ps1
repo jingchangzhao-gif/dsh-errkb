@@ -318,7 +318,7 @@ function Write-Sbom([string]$TargetPath, [string]$ResolvedVersion, [string]$Reso
         $goVersion = $Matches[0]
     }
     $packages = @()
-    $packages += New-SbomPackage "errkb" $ResolvedVersion "MIT" "this release" $true "https://github.com/jingchangzhao-gif/dsh-errkb"
+    $packages += New-SbomPackage "errkb" $ResolvedVersion "MIT" "this release" $true "https://github.com/jingchangzhao-gif/error-knowledge-base"
     foreach ($module in ($modules.modules | Sort-Object { $_.path })) {
         $license = $licenseById[$module.path]
         if (-not $license) {
@@ -343,7 +343,7 @@ function Write-Sbom([string]$TargetPath, [string]$ResolvedVersion, [string]$Reso
         dataLicense       = "CC0-1.0"
         SPDXID            = "SPDXRef-DOCUMENT"
         name              = "errkb-$ResolvedVersion"
-        documentNamespace = "https://github.com/jingchangzhao-gif/dsh-errkb/sbom/$ResolvedVersion-$ResolvedCommit"
+        documentNamespace = "https://github.com/jingchangzhao-gif/error-knowledge-base/sbom/$ResolvedVersion-$ResolvedCommit"
         creationInfo      = [ordered]@{
             created  = $ResolvedBuildTime
             creators = @("Tool: packaging/windows/release.ps1")

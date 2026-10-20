@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
-	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
 )
 
 // OmniboxSearcher is how the window gets answers. The command layer supplies
