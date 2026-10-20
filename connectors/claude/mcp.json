@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "errkb": {
+      "type": "stdio",
+      "command": "errkb.exe",
+      "args": ["mcp"],
+      "env": {
+        "ERRKB_PIPE": "\\\\.\\pipe\\errkb"
+      }
+    }
+  }
+}
