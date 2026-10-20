@@ -427,7 +427,7 @@ P5 门槛：通用 CLI、DSH、Codex 和 Claude Code 各有一次真实的“错
 
 | 状态 | ID | 任务 | 前置 | 产出和验收 |
 | --- | --- | --- | --- | --- |
-| ☐ | EKB-044 | 实现托盘和采集状态 | 028、034 | 运行、暂停、数据库故障和队列积压状态；退出能干净停止服务 |
+| ☑ | EKB-044 | 实现托盘和采集状态 | 028、034 | 已完成（2026-10-20）：`internal/ui/status.go` 复用 EKB-028 健康文档（`service.Health`），不另建判定；`classify` 按优先级映射四态（数据库未连接→故障、`queue.backlog > 0`→积压、否则运行），暂停意图与探测结果分开记录。`internal/ui/tray.go`（Windows）注册消息窗口与 `Shell_NotifyIconW` 16×16 圆点图标（绿/灰/红/琥珀），`SetTimer` 每秒重新探测并刷新 Tooltip；菜单含暂停/恢复/重试（故障态显示 Retry）、禁用中的搜索（EKB-045）与设置（EKB-047）、退出；窗口回调 `recover` 隔离 panic，UI 异常不退出守护进程。`cmd/errkb/ui.go` 让 `errkb ui` 同进程托管守护进程：暂停调用 EKB-028 `Daemon.Shutdown`（耗尽在途请求、关闭连接池、释放实例互斥），恢复重新 `StartDaemon`，退出在 10 秒超时内优雅停止。实测（Windows 11 26200 / PostgreSQL 16.15，真实守护进程）：运行 `state=running detail="capturing failures · 1 connection(s) · 0 in flight · queue 0"` 且 Named Pipe 可连；暂停后 `state=paused`，Pipe 报 “the system cannot find the file specified”，采集确实停止；恢复后回到 running 且 Pipe 可连；积压 `state=queue-backlog detail="3 event(s) waiting to replay…"`；数据库故障 `state=database-fault`，详情含 “actively refused”；`RunTray` 在 3 秒后返回 `err=<nil>`，退出无残留锁。测试：`internal/ui/status_test.go` 覆盖四态、暂停停服务、恢复、故障原因、探针 panic 降级、从不缓存；`internal/ui/tray_test.go` 覆盖四态菜单、颜色、图标创建；`cmd/errkb/ui_test.go` 覆盖 spool 计数；`go test ./...` 全绿（database 78.0s）。偏差：新增两个测试文件、`cmd/errkb/ui_test.go` 和 `cmd/errkb/main.go` 的一行分派/用法（§11.1 严格三文件不含测试与子命令接线） |
 | ☐ | EKB-045 | 实现浏览器式 omnibox | 024、044 | 输入编号、错误描述、错误码或命令均可查；键盘导航、匹配原因、近似标识和空态 |
 | ☐ | EKB-046 | 实现问题详情和解法编辑 | 021、045 | 查看 occurrence、环境、解法版本和 outcome；所有修改写审计 |
 | ☐ | EKB-047 | 实现连接器和隐私设置 | 007、043-046 | 每个连接器可启停；采集范围、保留期限和删除操作明确 |
@@ -501,7 +501,7 @@ P7 门槛：干净 Windows 虚拟机可以安装、升级、备份、卸载并�
 | EKB-041 | `connectors/claude/probe.md` → `connectors/claude/{README.md,capability.json,hooks.json,mcp.json,errkb-claude-hook.ps1,errkb-session-hint.ps1,errkb-claude.ps1}`；回填 `cmd/errkb/run.go`（capture 的 `channel: B`） |
 | EKB-042 | `connectors/templates/cli-log/config.yaml` → `connectors/templates/cli-log/README.md`（回填：`spec/config.cue` → `internal/contract/config.go` → `internal/contract/config_test.go` → `spec/compat.cue` → `.github/workflows/ci.yml`） |
 | EKB-043 | `docs/connector-matrix.md` → `docs/connector-matrix.zh-CN.md`（同构同步） |
-| EKB-044 | `internal/ui/tray.go` → `internal/ui/status.go` → `cmd/errkb/ui.go` |
+| EKB-044 | `internal/ui/tray.go` → `internal/ui/status.go` → `cmd/errkb/ui.go` → 测试（`internal/ui/status_test.go`、`internal/ui/tray_test.go`、`cmd/errkb/ui_test.go`）；`cmd/errkb/main.go` 加一行分派 |
 | EKB-045 | `internal/ui/omnibox.go` → `internal/service/search_api.go` → 空态与键盘导航测试 |
 | EKB-046 | `internal/ui/detail.go` → `internal/service/edit_api.go` → 审计断言 |
 | EKB-047 | `internal/ui/settings.go` → 复用 `internal/contract/config.go`（不新造配置模型） |

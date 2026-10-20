@@ -49,6 +49,7 @@ Commands:
   mcp                    serve MCP over stdio for LLM hosts
   daemon                 run the local daemon
   doctor                 diagnose the runtime and connector state
+  ui                     show the tray icon and capture state
   version                print the version
 
 Global:
@@ -90,6 +91,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return exitOK
 	case "daemon":
 		return runDaemon(rest)
+	case "ui":
+		return runUI(rest)
 	case "doctor":
 		return runDoctor(rest, jsonMode, stdout, stderr)
 	case "run":
