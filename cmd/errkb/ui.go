@@ -9,8 +9,11 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
 	"github.com/jingchangzhao-gif/dsh-errkb/internal/ui"
@@ -48,12 +51,15 @@ func runUI(args []string) int {
 		},
 	}
 
+	search := &searchBridge{}
 	host := ui.NewHost(ui.HostOptions{Start: func(ctx context.Context) (ui.Service, error) {
 		daemon, err := service.StartDaemon(ctx, config)
 		if err != nil {
+			search.clear()
 			return nil, err
 		}
-		return daemonService{daemon: daemon}, nil
+		search.set(daemon.Pool())
+		return daemonService{daemon: daemon, search: search}, nil
 	}})
 
 	// A failed start must not close the tray: the icon is exactly how the user
@@ -65,7 +71,7 @@ func runUI(args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	trayErr := ui.RunTray(ctx, host, *interval)
+	trayErr := ui.RunTray(ctx, host, ui.TrayOptions{Interval: *interval, Search: search.search})
 
 	exitCtx, cancel := context.WithTimeout(context.Background(), uiShutdownTimeout)
 	defer cancel()
@@ -83,6 +89,7 @@ func runUI(args []string) int {
 // daemonService adapts the concrete daemon to the tray's Service interface.
 type daemonService struct {
 	daemon *service.Daemon
+	search *searchBridge
 }
 
 // Health probes PostgreSQL and the ledger on every tray tick; the tray never
@@ -94,7 +101,41 @@ func (s daemonService) Health(ctx context.Context) service.Health {
 // Shutdown drains in-flight requests, closes the pool and releases the instance
 // mutex, so a paused tray leaves nothing running behind the icon.
 func (s daemonService) Shutdown(ctx context.Context) error {
-	return s.daemon.Shutdown(ctx)
+	err := s.daemon.Shutdown(ctx)
+	if s.search != nil {
+		s.search.clear()
+	}
+	return err
+}
+
+// searchBridge owns the address bar's borrow of the daemon pool. It is nil
+// between a failed start and the next resume, which turns into a readable
+// "daemon is not running" answer instead of a panic.
+type searchBridge struct {
+	mu      sync.Mutex
+	service *service.SearchService
+}
+
+func (b *searchBridge) set(pool *pgxpool.Pool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.service = service.NewSearchService(pool)
+}
+
+func (b *searchBridge) clear() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.service = nil
+}
+
+func (b *searchBridge) search(ctx context.Context, query string) (service.SearchResults, error) {
+	b.mu.Lock()
+	searcher := b.service
+	b.mu.Unlock()
+	if searcher == nil {
+		return service.SearchResults{}, service.ErrSearchUnavailable
+	}
+	return searcher.Search(ctx, query)
 }
 
 // spoolBacklog counts the queued event files. It reads the directory instead of

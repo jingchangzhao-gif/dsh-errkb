@@ -164,12 +164,15 @@ type bitmapInfo struct {
 // because Win32 callbacks cannot carry a Go pointer.
 type tray struct {
 	hwnd     windows.Handle
+	instance windows.Handle
 	host     Controller
+	options  TrayOptions
 	ctx      context.Context
 	interval time.Duration
 	icons    map[State]windows.Handle
 	snapshot Snapshot
 	added    bool
+	omnibox  *omniboxWindow
 }
 
 var (
@@ -205,15 +208,16 @@ type menuItem struct {
 }
 
 // menuFor renders the menu for a snapshot. Pause/resume is always reachable
-// (acceptance 8); search and settings stay disabled until EKB-045/EKB-047.
-func menuFor(snapshot Snapshot) []menuItem {
+// (acceptance 8); search opens the address bar once EKB-045 is wired; settings
+// stays disabled until EKB-047.
+func menuFor(snapshot Snapshot, searchEnabled bool) []menuItem {
 	action := pauseAction(snapshot)
 	return []menuItem{
 		{Label: snapshot.Title, Enabled: false},
 		{Label: shorten(snapshot.Detail, 64), Enabled: false},
 		{Separator: true},
 		{Label: action.label, Enabled: true, Command: action.command},
-		{Label: "Open search (EKB-045)", Enabled: false},
+		{Label: "Search…", Enabled: searchEnabled, Command: menuSearch},
 		{Label: "Settings (EKB-047)", Enabled: false},
 		{Separator: true},
 		{Label: "Exit", Enabled: true, Command: menuExit},
@@ -247,18 +251,6 @@ func trayTip(snapshot Snapshot) string {
 	return tip
 }
 
-// shorten cuts a string to at most n runes.
-func shorten(text string, n int) string {
-	runes := []rune(text)
-	if len(runes) <= n {
-		return text
-	}
-	if n <= 1 {
-		return string(runes[:n])
-	}
-	return string(runes[:n-1]) + "…"
-}
-
 // stateColor is the icon color for a state: green, grey, red, amber.
 func stateColor(state State) uint32 {
 	switch state {
@@ -279,7 +271,8 @@ func rgb(r, g, b uint32) uint32 {
 
 // RunTray shows the icon and blocks until the user exits or ctx is cancelled.
 // The caller owes the host a final Exit; RunTray only closes the UI.
-func RunTray(ctx context.Context, host Controller, interval time.Duration) error {
+func RunTray(ctx context.Context, host Controller, options TrayOptions) error {
+	interval := options.Interval
 	if interval <= 0 {
 		interval = time.Second
 	}
@@ -319,7 +312,9 @@ func RunTray(ctx context.Context, host Controller, interval time.Duration) error
 
 	t := &tray{
 		hwnd:     windows.Handle(hwnd),
+		instance: windows.Handle(instance),
 		host:     host,
+		options:  options,
 		ctx:      ctx,
 		interval: interval,
 		icons:    map[State]windows.Handle{},
@@ -384,6 +379,10 @@ func trayWindowProc(hwnd, msg, wparam, lparam uintptr) uintptr {
 		case wmDestroy:
 			t.removeIcon()
 			t.destroyIcons()
+			if t.omnibox != nil {
+				t.omnibox.destroy()
+				t.omnibox = nil
+			}
 			unregisterTray(windows.Handle(hwnd))
 			procPostQuitMessage.Call(0)
 			return 0
@@ -407,7 +406,7 @@ func (t *tray) showMenu() {
 	if menu == 0 {
 		return
 	}
-	for _, item := range menuFor(snapshot) {
+	for _, item := range menuFor(snapshot, t.options.Search != nil) {
 		if item.Separator {
 			procAppendMenuW.Call(menu, mfSeparator, 0, 0)
 			continue
@@ -437,10 +436,30 @@ func (t *tray) showMenu() {
 			_ = t.host.Resume(t.ctx)
 		}
 		t.refresh(t.ctx)
+	case menuSearch:
+		t.openSearch()
 	case menuExit:
 		_ = t.host.Exit(t.ctx)
 		procDestroyWindow.Call(uintptr(t.hwnd))
 	}
+}
+
+// openSearch lazily creates the address bar. A creation failure becomes a
+// readable menu item the next time the menu opens, never a process exit.
+func (t *tray) openSearch() {
+	if t.options.Search == nil {
+		return
+	}
+	if t.omnibox == nil {
+		window, err := newOmniboxWindow(t.ctx, t.instance, t.options.Search)
+		if err != nil {
+			t.snapshot.Detail = shorten(err.Error(), 100)
+			t.modifyIcon(t.snapshot)
+			return
+		}
+		t.omnibox = window
+	}
+	t.omnibox.show()
 }
 
 func (t *tray) addIcon() {

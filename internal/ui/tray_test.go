@@ -8,15 +8,15 @@ import (
 )
 
 func TestMenuForRunning(t *testing.T) {
-	items := menuFor(Snapshot{State: StateRunning, Title: "errkb: running", Detail: "capturing"})
+	items := menuFor(Snapshot{State: StateRunning, Title: "errkb: running", Detail: "capturing"}, true)
 	if len(items) != 8 {
 		t.Fatalf("items = %d, want 8", len(items))
 	}
 	if items[3].Label != "Pause capture" || !items[3].Enabled {
 		t.Fatalf("pause row = %+v", items[3])
 	}
-	if items[4].Label != "Open search (EKB-045)" || items[4].Enabled {
-		t.Fatalf("search row = %+v, want disabled", items[4])
+	if items[4].Label != "Search…" || !items[4].Enabled || items[4].Command != menuSearch {
+		t.Fatalf("search row = %+v, want an enabled search command", items[4])
 	}
 	if items[5].Label != "Settings (EKB-047)" || items[5].Enabled {
 		t.Fatalf("settings row = %+v, want disabled", items[5])
@@ -27,16 +27,19 @@ func TestMenuForRunning(t *testing.T) {
 }
 
 func TestMenuForPaused(t *testing.T) {
-	items := menuFor(Snapshot{State: StatePaused, Title: "errkb: capture paused"})
+	items := menuFor(Snapshot{State: StatePaused, Title: "errkb: capture paused"}, true)
 	if items[3].Label != "Resume capture" || items[3].Command != menuPause {
 		t.Fatalf("pause row = %+v, want resume", items[3])
 	}
 }
 
 func TestMenuForFaultOffersRetry(t *testing.T) {
-	items := menuFor(Snapshot{State: StateDatabaseFault, Detail: "connection refused"})
+	items := menuFor(Snapshot{State: StateDatabaseFault, Detail: "connection refused"}, false)
 	if items[3].Label != "Retry" {
 		t.Fatalf("pause row = %+v, want retry", items[3])
+	}
+	if items[4].Enabled {
+		t.Fatalf("search row = %+v, want disabled without a backend", items[4])
 	}
 	if !strings.Contains(items[1].Label, "connection refused") {
 		t.Fatalf("detail row = %q, want the reason", items[1].Label)
