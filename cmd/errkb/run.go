@@ -83,6 +83,9 @@ func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Rea
 			SchemaVersion: contract.ConnectorSDKVersion,
 			ConnectorID:   event.ConnectorID,
 			SessionID:     event.SessionID,
+			// The wrapper is capture channel B (§3.1); the capture operation would
+			// otherwise default to the hook channel A.
+			Channel: "B",
 			Observation: contract.ConnectorObservation{
 				ObservedAt:      event.ObservedAt,
 				Source:          "command-exit",

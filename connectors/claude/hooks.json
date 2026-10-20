@@ -1,0 +1,28 @@
+{
+  "$schema": "https://claude.com/schemas/settings.json",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File <REPO>/connectors/claude/errkb-session-hint.ps1",
+            "timeout": 20
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File <REPO>/connectors/claude/errkb-claude-hook.ps1",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}
