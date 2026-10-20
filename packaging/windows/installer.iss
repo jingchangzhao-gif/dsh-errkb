@@ -35,7 +35,7 @@ DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 DisableWelcomePage=no
 PrivilegesRequired=lowest
-OutputDir=dist
+OutputDir=..\..\dist
 OutputBaseFilename=errkb-{#AppVersion}-setup
 Compression=lzma2
 SolidCompression=yes
@@ -43,7 +43,7 @@ WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Files]
-Source: "dist\errkb.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\dist\errkb.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "postgres.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
