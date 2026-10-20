@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -363,5 +365,73 @@ func TestLoadConnectorCapabilityRejectsInvalidDeclarations(t *testing.T) {
 				t.Errorf("LoadConnectorCapability() error = %q, want it to mention %q", err, testCase.want)
 			}
 		})
+	}
+}
+
+// TestLoadConfigAcceptsGenericHostTemplates proves the EKB-042 template block
+// is a real configuration, not a sketch.
+func TestLoadConfigAcceptsGenericHostTemplates(t *testing.T) {
+	document := validConfigYAML + `
+templates:
+  cli:
+    command: ["kimi", "--print"]
+    capture_exit_codes: true
+  log:
+    path: C:/logs/kimi.log
+    encoding: utf-16le
+    rotation:
+      max_bytes: 1048576
+      keep: 2
+  manual:
+    note: "pass the error text through errkb run"
+`
+	if _, err := LoadConfig([]byte(document)); err != nil {
+		t.Fatalf("LoadConfig() error = %v, want the template block accepted", err)
+	}
+}
+
+func TestLoadConfigRejectsInvalidTemplates(t *testing.T) {
+	cases := map[string]string{
+		// Raw string literals keep the YAML readable and avoid escape sequences
+		// that the repository privacy guard reads as a drive path.
+		"unknown encoding": `templates:
+  log:
+    path: C:/x.log
+    encoding: latin-1
+`,
+		"log enabled, no path": `templates:
+  log:
+    enabled: true
+`,
+		"negative rotation keep": `templates:
+  log:
+    path: C:/x.log
+    rotation:
+      keep: -1
+`,
+		"empty command part": `templates:
+  cli:
+    command: ["ok", ""]
+`,
+	}
+	for name, extra := range cases {
+		t.Run(name, func(t *testing.T) {
+			if _, err := LoadConfig([]byte(validConfigYAML + extra)); err == nil {
+				t.Fatal("LoadConfig() error = nil, want the template block rejected")
+			}
+		})
+	}
+}
+
+// TestShippedGenericTemplateIsValid keeps connectors/templates/cli-log/config.yaml
+// honest: the file users copy must load through the real contract.
+func TestShippedGenericTemplateIsValid(t *testing.T) {
+	path := filepath.Join("..", "..", "connectors", "templates", "cli-log", "config.yaml")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	if _, err := LoadConfig(data); err != nil {
+		t.Fatalf("LoadConfig(%s) error = %v", path, err)
 	}
 }

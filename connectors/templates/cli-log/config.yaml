@@ -1,0 +1,75 @@
+# Generic host template: CLI wrapper (B), log tail (C) and manual entry (E).
+#
+# This is NOT a named adapter. It describes how to connect a host that has no
+# stable, testable interface (plan §3.2) through the generic channels. Copy the
+# file, change the marked VALUES, and keep the structure; errkb validates the
+# whole document with `spec/config.cue` (and `errkb doctor --config <file>`).
+#
+# Channel levels used here:
+#   B - CLI wrapper:     errkb run -- <host command>
+#   C - log tail:        follows a text log; no exit code, weaker fingerprints
+#   E - manual entry:    a human pastes a failure (interim route: wrapper text)
+
+database:
+  # CHANGE: point at your PostgreSQL 16 instance.
+  dsn: "postgres://postgres:postgres@127.0.0.1:5432/errkb?sslmode=disable"
+  max_connections: 4
+  connect_timeout_ms: 3000
+
+service:
+  pipe:
+    name: "\\\\.\\pipe\\errkb"
+    enabled: true
+  http:
+    enabled: false
+
+capture:
+  enabled: true
+  # Pause noisy hosts or projects here; names match the connector/project keys
+  # you pass to `errkb run --connector ... --project ...`.
+  paused_connectors: []
+  paused_projects: []
+
+notices:
+  before_diagnosis: true
+
+retention:
+  sample_days: 7
+  normalized_days: 90
+  audit_days: 365
+
+search:
+  limit: 3
+
+timeout:
+  capture_ms: 2000
+  search_ms: 1500
+  mcp_ms: 5000
+
+offline:
+  replay_interval_ms: 5000
+
+# The three generic channels. Change the values in this block; the daemon
+# validates them today, and the README shows how to exercise each one.
+templates:
+  cli:
+    # Level B: the command a user wraps. Illustrative only - the wrapper
+    # itself takes the real command on its own command line.
+    enabled: true
+    command: ["<host-cli>", "<arguments>"]
+    capture_exit_codes: true
+
+  log:
+    # Level C: the file the tailer should follow once it is wired to the
+    # daemon. Encoding must be utf-8, utf-16le or utf-16be.
+    enabled: false
+    path: "<host-log>"
+    encoding: utf-8
+    rotation:
+      max_bytes: 10485760
+      keep: 3
+
+  manual:
+    # Level E: what a human should do when nothing can be wrapped or tailed.
+    enabled: true
+    note: 'Run: errkb run --connector manual --project <project> -- powershell -Command "Write-Output ''<error text>''; exit 1"'

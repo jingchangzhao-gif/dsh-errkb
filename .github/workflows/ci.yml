@@ -509,6 +509,7 @@ jobs:
                   base_required = set(base.get("required") or ())
                   head_required = set(head.get("required") or ())
                   added_definitions = set(head.get("definitions") or ()) - set(base.get("definitions") or ())
+                  added_optional = {name for name in head_fields - base_fields if name not in head_required}
 
                   for name in sorted(base_fields - head_fields):
                       local.append(("R3", f"field removed: {name}", "breaking"))
@@ -519,7 +520,25 @@ jobs:
                           # producer can become invalid; the R17 entry records the shape.
                           local.append(("R17", f"required field added inside a new definition: {name}", "compatible"))
                       elif name in head_required:
-                          local.append(("R2", f"required field added: {name}", "breaking"))
+                          parent = next(
+                              (added for added in sorted(added_optional) if name.startswith(added + ".")),
+                              None,
+                          )
+                          if parent is not None:
+                              # A required field added inside a brand-new optional
+                              # subtree (for example config.templates.log.rotation)
+                              # is reachable only through the new optional parent,
+                              # so no existing document becomes invalid; R19 records
+                              # the addition.
+                              local.append(
+                                  (
+                                      "R19",
+                                      f"required field added under a new optional parent: {name}",
+                                      "compatible",
+                                  )
+                              )
+                          else:
+                              local.append(("R2", f"required field added: {name}", "breaking"))
                       else:
                           local.append(("R1", f"optional field added: {name}", "compatible"))
                   for name in sorted(base_fields & head_fields):
@@ -622,6 +641,7 @@ jobs:
 
               expect("R1", base, {"thing": make_contract(fields=["a", "b", "c"])}, False, "R1")
               expect("R2", base, {"thing": make_contract(fields=["a", "b", "c"], required=["a", "c"])}, True, "R2")
+              expect("R19", base, {"thing": make_contract(fields=["a", "b", "c", "c.d"], required=["a", "c.d"])}, False, "R19")
               expect("R3", base, {"thing": make_contract(fields=["a"])}, True, "R3")
               expect("R4", base, {"thing": make_contract(required=["a", "b"])}, True, "R4")
               expect("R5", {"thing": make_contract(enums={"kind": ["x"]})}, {"thing": make_contract(enums={"kind": ["x", "y"]})}, False, "R5")
