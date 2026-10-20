@@ -3,6 +3,10 @@
   "version": "0.0.0",
   "description": "DSH connector for errkb: recycle errors - diagnose once, inject the known fix next time.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jingchangzhao-gif/dsh-errkb.git"
+  },
   "type": "module",
   "exports": {
     ".": {
