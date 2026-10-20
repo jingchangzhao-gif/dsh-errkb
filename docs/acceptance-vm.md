@@ -149,3 +149,50 @@ and "standard user" checks are real.
   passes `--connector/--session` first.
 - The installer is currently unsigned; a SmartScreen warning is expected and must be documented in
   the release card (EKB-054) rather than worked around here.
+
+## Rehearsal on the development host (2026-10-21)
+
+The clean-VM run itself cannot happen here (no hypervisor, not a clean machine, shell not
+elevated), so this section records what could be rehearsed and the defects that surfaced.
+
+### Installer defects found by the rehearsal
+
+1. `packaging/windows/installer.iss` created its cluster page with `CreateInputOptionPage(wpInfoBefore, ...)`.
+   In silent mode Setup advances the wizard before the directory page has initialised `{app}`, and
+   `NextButtonClick` on that page calls `ClusterDataPresent()`, which expands `{app}`:
+   `Runtime error (at 7:84): Internal error: An attempt was made to expand the "app" constant before it was initialized.`
+   Fixed by creating the page after the directory page (`wpSelectDir`), which is where `{app}` first exists.
+2. `packaging/windows/postgres.ps1` generated the cluster password with
+   `[System.Security.Cryptography.RandomNumberGenerator]::Fill(...)` — a .NET 6+ API. The installer runs
+   the script under Windows PowerShell 5.1, where it throws
+   `does not contain a method named 'Fill'`, so the `[Run]` install step exited 1 and no cluster was created.
+   Fixed with the classic `RandomNumberGenerator.Create()` + `GetBytes()` form.
+
+After both fixes the silent install finishes with exit code 0: `errkb.exe`, `postgres.ps1`, `README.md`
+and the uninstaller land in `%LOCALAPPDATA%\errkb`, the dedicated cluster listens on 5433, and
+`pg\credentials.json` exists. This is the first time the EKB-051 installer was actually compiled and
+executed (EKB-051 left it to this card).
+
+### What the rehearsal proved once the schema exists
+
+On the same cluster, applying the eight migrations with a throwaway `database.Migrate` probe (there is no
+`errkb db migrate` command) let the whole loop run with the installed binary and a daemon on a named pipe:
+
+- `errkb run --connector cli --session ekb052 --project probe -- cmd /c "exit 9"` recorded the failure
+  (`issue a2a91bd8-a30c-4c64-b353-020a8696a52e`, fingerprint `4202fb44db19`).
+- `errkb search "command exited with status 9"` returned the issue (exact fingerprint before the second run,
+  `jaccard_rerank` afterwards).
+- MCP `err_record_solution` created solution version `16374da4-a2f1-4a23-8938-83661786bfe7`.
+- The second `errkb run` of the same command printed the fix with `source cli`, `trust 0.50` and the version id.
+- MCP `err_feedback success` recorded an outcome; `errkb stats` reported `events=2 issues=1 solutions=1 outcomes=1`.
+
+### Remaining blockers (unchanged)
+
+1. **No schema on a fresh install**: the installer only creates and starts the cluster; `errkb` has no
+   `db migrate` subcommand, and the daemon refuses to start without the ledger
+   (`schema migration check failed: ... relation "schema_migrations" does not exist`). First run therefore
+   fails until migrations are applied by hand.
+2. **No autostart**: neither the cluster nor the daemon is registered to start after a reboot.
+
+Both need their own cards before a clean-VM run can pass; this card stays `⚠ blocked`. The two installer
+fixes are recorded here because the rehearsal cannot get past `install` without them.

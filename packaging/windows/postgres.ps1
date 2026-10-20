@@ -79,7 +79,10 @@ function Test-PortOpen {
 
 function New-ClusterPassword {
     $bytes = New-Object byte[] 24
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
+    # RandomNumberGenerator.Fill is .NET 6+ only; the installer runs the
+    # script under Windows PowerShell 5.1, so use the classic instance API.
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
     return [Convert]::ToBase64String($bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')
 }
 
