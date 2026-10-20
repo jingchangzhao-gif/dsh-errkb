@@ -1,6 +1,6 @@
-# Installing, upgrading and uninstalling errkb
+# Installing, upgrading and uninstalling the Error Knowledge Base
 
-This page describes the Windows installation path for errkb 0.1.0 and what it actually does today. Where the release is incomplete, it says so instead of describing the intended behavior.
+This page describes the Windows installation path for version 0.1.0 of the Error Knowledge Base (the `errkb` command) and what it actually does today. Where the release is incomplete, it says so instead of describing the intended behavior.
 
 > **Status note.** The clean-VM acceptance is blocked: no hypervisor is available in the
 > environment the release was built in, and the installer does not yet apply schema

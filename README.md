@@ -1,4 +1,4 @@
-# dsh-errkb
+# Error Knowledge Base
 
 [简体中文](README.zh-CN.md) · [License](LICENSE)
 
@@ -6,11 +6,11 @@
 
 **Status: v0.1.0 (2026-10-21).** Windows desktop build with a local PostgreSQL 16 knowledge base, measured against DSH 0.2.0-rc.2, Codex CLI 0.156.1 and Claude Code 2.1.282. The clean-VM acceptance is **blocked** and recorded in [`docs/acceptance-vm.md`](docs/acceptance-vm.md); the release pipeline refuses to publish a version without that record.
 
-`dsh-errkb` is one product in several shapes: a command-line client, a local background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, and host connectors for Codex CLI and Claude Code. Every shape talks to the same local core and the same knowledge base: the classification, redaction, normalisation, fingerprinting, storage, retrieval and fix-trust logic lives in the core and is not reimplemented per host.
+The **Error Knowledge Base** (`error-knowledge-base`) is one product in several shapes: a command-line client, a local background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, and host connectors for Codex CLI and Claude Code. Every shape talks to the same local core and the same knowledge base: the classification, redaction, normalisation, fingerprinting, storage, retrieval and fix-trust logic lives in the core and is not reimplemented per host. The repository is still named `dsh-errkb` and the command is `errkb`; both keep working.
 
 ## Contents
 
-- [What errkb is](#what-errkb-is)
+- [What the Error Knowledge Base is](#what-the-error-knowledge-base-is)
 - [How it works](#how-it-works)
 - [Supported hosts (measured)](#supported-hosts-measured)
 - [What the core guarantees](#what-the-core-guarantees)
@@ -27,9 +27,9 @@
 - [Contributing](#contributing)
 - [License](#license)
 
-## What errkb is
+## What the Error Knowledge Base is
 
-A local error knowledge base for LLM tools and command-line workflows. When something fails, errkb records the failure once — redacted, normalised and fingerprinted — in a local PostgreSQL database. The next time the same failure appears, it hands back the recorded fix, with the match reason, the applicability warning when the environment differs, and the fix's measured trust.
+A local error knowledge base for LLM tools and command-line workflows. When something fails, it records the failure once — redacted, normalised and fingerprinted — in a local PostgreSQL database. The next time the same failure appears, it hands back the recorded fix, with the match reason, the applicability warning when the environment differs, and the fix's measured trust.
 
 It is deliberately **not**:
 
