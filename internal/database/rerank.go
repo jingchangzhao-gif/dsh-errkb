@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -103,6 +104,7 @@ type RetrievalResult struct {
 
 // Retrieve runs the five-step retrieval and persists the explanation.
 func Retrieve(ctx context.Context, conn *pgx.Conn, request RetrievalRequest) (RetrievalResult, error) {
+	started := time.Now()
 	normalized := core.Normalize(request.Message)
 	category := strings.TrimSpace(request.Category)
 	issueID := strings.TrimSpace(request.IssueID)
@@ -236,7 +238,7 @@ func Retrieve(ctx context.Context, conn *pgx.Conn, request RetrievalRequest) (Re
 			Hits:            stored.Hits,
 		})
 	}
-	if err := persistRetrievals(ctx, conn, request.SessionID, retrievalQueryText(normalized, errorCode, command, toolName, issueID), candidates); err != nil {
+	if err := persistRetrievals(ctx, conn, request.SessionID, retrievalQueryText(normalized, errorCode, command, toolName, issueID), candidates, time.Since(started).Milliseconds()); err != nil {
 		return RetrievalResult{}, fmt.Errorf("retrieve: %w", err)
 	}
 	result.Candidates = candidates
@@ -437,7 +439,7 @@ func formatAppliesTo(raw []byte) string {
 // "what a search matched and why"). It is part of the search: a failure to
 // record the explanation fails the search instead of silently dropping audit
 // data.
-func persistRetrievals(ctx context.Context, conn *pgx.Conn, sessionID, query string, candidates []RetrievalCandidate) error {
+func persistRetrievals(ctx context.Context, conn *pgx.Conn, sessionID, query string, candidates []RetrievalCandidate, durationMS int64) error {
 	if len(candidates) == 0 {
 		return nil
 	}
@@ -461,10 +463,10 @@ func persistRetrievals(ctx context.Context, conn *pgx.Conn, sessionID, query str
 		if _, err := conn.Exec(ctx, `
 			insert into retrievals (
 				session_id, query, candidate_issue_id, candidate_rank,
-				score, match_fields, approximate, environment_diff
-			) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+				score, match_fields, approximate, environment_diff, duration_ms
+			) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 			session, query, candidate.IssueID, index+1, candidate.Score,
-			matchedFields, candidate.Approximate, encodedDifferences); err != nil {
+			matchedFields, candidate.Approximate, encodedDifferences, durationMS); err != nil {
 			return fmt.Errorf("record retrieval: %w", err)
 		}
 	}
