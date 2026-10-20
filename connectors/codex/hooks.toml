@@ -1,0 +1,30 @@
+# Sample Codex lifecycle hooks, measured against Codex CLI 0.156.1 (EKB-040).
+#
+# This file is a copy-ready fragment for ~/.codex/config.toml, not the adapter's
+# capture path: the probe found no hook that carries an LLM failure code/message,
+# so the supported capture path is the CLI wrapper (`errkb run -- codex exec …`).
+#
+# Command hooks are trust-gated. A non-managed command hook requires review with
+# `/hooks`, or Codex must run with `--dangerously-bypass-hook-trust`. The Stop
+# payload measured during the probe carries: session_id, turn_id,
+# transcript_path, cwd, hook_event_name, model, permission_mode, stop_hook_active
+# and last_assistant_message.
+
+# Fires after a turn completes; the probe used exactly this block to capture the
+# payload above. A future channel-C capture can read transcript_path and record
+# failed tool items without scraping the UI.
+[[hooks.Stop]]
+[[hooks.Stop.hooks]]
+type = "command"
+command = 'powershell -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\.codex\errkb-stop.ps1"'
+timeout = 15
+
+# Fires after a tool call; never fired during the probe because neither the
+# hosted model (quota exhausted) nor the local Ollama model (no tool support)
+# made a tool call. Kept so a machine with quota can measure it.
+[[hooks.PostToolUse]]
+matcher = ""
+[[hooks.PostToolUse.hooks]]
+type = "command"
+command = 'powershell -NoProfile -ExecutionPolicy Bypass -File "%USERPROFILE%\.codex\errkb-post-tool.ps1"'
+timeout = 15

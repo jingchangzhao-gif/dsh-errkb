@@ -75,9 +75,29 @@ func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Rea
 	defer func() { _ = client.Close() }()
 
 	record := func(ctx context.Context, event contract.ErrorEvent) (database.RecordResult, error) {
-		response, err := client.Record(ctx, contract.RecordRequest{
-			SchemaVersion: contract.ToolSchemaVersion,
-			Event:         event,
+		// The wrapper speaks the connector capture operation (EKB-038a): connector
+		// and session are identities the core creates on first use, and the core
+		// owns the redaction/fingerprint pipeline. Sending the finished event over
+		// `record` would require the CLI to know UUIDs it never has.
+		response, err := client.Capture(ctx, contract.CaptureRequest{
+			SchemaVersion: contract.ConnectorSDKVersion,
+			ConnectorID:   event.ConnectorID,
+			SessionID:     event.SessionID,
+			Observation: contract.ConnectorObservation{
+				ObservedAt:      event.ObservedAt,
+				Source:          "command-exit",
+				Message:         event.NormalizedMessage,
+				ErrorCode:       event.ErrorCode,
+				Command:         event.Command,
+				ExitCode:        event.ExitCode,
+				ToolName:        event.ToolName,
+				OS:              event.OS,
+				Shell:           event.Shell,
+				RuntimeVersions: event.RuntimeVersions,
+				ProjectKey:      event.ProjectKey,
+				Evidence:        event.Evidence,
+				Confidence:      event.Confidence,
+			},
 		})
 		if err != nil {
 			return database.RecordResult{}, err

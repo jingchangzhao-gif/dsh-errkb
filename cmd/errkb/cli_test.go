@@ -73,6 +73,21 @@ func (f *fakeClient) Record(context.Context, contract.RecordRequest) (contract.R
 	}, nil
 }
 
+func (f *fakeClient) Capture(context.Context, contract.CaptureRequest) (contract.CaptureResponse, error) {
+	f.note("capture")
+	if f.err != nil {
+		return contract.CaptureResponse{}, f.err
+	}
+	return contract.CaptureResponse{
+		SchemaVersion: contract.ConnectorSDKVersion,
+		EventID:       "11111111-1111-4111-8111-111111111111",
+		OccurrenceID:  "22222222-2222-4222-8222-222222222222",
+		IssueID:       "00000000-0000-4000-8000-000000000001",
+		Fingerprint:   "0123456789ab",
+		Created:       true,
+	}, nil
+}
+
 func (f *fakeClient) Feedback(context.Context, contract.FeedbackRequest) (contract.FeedbackResponse, error) {
 	f.note("feedback")
 	if f.err != nil {

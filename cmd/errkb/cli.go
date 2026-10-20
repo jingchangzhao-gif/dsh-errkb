@@ -39,6 +39,7 @@ type apiClient interface {
 	Lookup(context.Context, contract.LookupRequest) (contract.LookupResponse, error)
 	Search(context.Context, contract.SearchRequest) (contract.SearchResponse, error)
 	Record(context.Context, contract.RecordRequest) (contract.RecordResponse, error)
+	Capture(context.Context, contract.CaptureRequest) (contract.CaptureResponse, error)
 	Feedback(context.Context, contract.FeedbackRequest) (contract.FeedbackResponse, error)
 	List(context.Context, contract.ListRequest) (contract.ListResponse, error)
 	Stats(context.Context, contract.StatsRequest) (contract.StatsResponse, error)

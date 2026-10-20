@@ -1,0 +1,40 @@
+{
+  "connector": "codex-cli",
+  "host_version": "0.156.1",
+  "channel": "B",
+  "captures": [
+    "schema_version",
+    "connector_id",
+    "session_id",
+    "observed_at",
+    "channel",
+    "category",
+    "severity",
+    "transient",
+    "headline",
+    "normalized_message",
+    "redacted_sample",
+    "error_code",
+    "command",
+    "exit_code",
+    "os",
+    "shell",
+    "runtime_versions",
+    "project_key",
+    "fingerprint",
+    "evidence",
+    "confidence"
+  ],
+  "notice_before_diagnosis": false,
+  "fallback": {
+    "channel": "C",
+    "missing": ["tool_name"],
+    "note": "The Stop hook exposes the session transcript path; parsing it for failed tool items is the documented fallback, not implemented yet."
+  },
+  "probe": {
+    "probed_at": "2026-10-20T14:15:07Z",
+    "host_version": "0.156.1",
+    "ok": true,
+    "missing": ["tool_name"]
+  }
+}
