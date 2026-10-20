@@ -20,9 +20,6 @@ import (
 	"github.com/jingchangzhao-gif/dsh-errkb/internal/service"
 )
 
-// version is stamped by packaging/windows/build.ps1; "dev" is a local build.
-var version = "dev"
-
 // dialClient can be replaced in tests; production talks to the real pipe.
 var dialClient = func(ctx context.Context) (apiClient, error) {
 	return service.Dial(ctx)
@@ -87,7 +84,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		usage(stdout)
 		return exitOK
 	case "version", "--version", "-v":
-		fmt.Fprintf(stdout, "errkb %s %s/%s\n", version, runtime.GOOS, runtime.GOARCH)
+		printVersion(stdout)
 		return exitOK
 	case "daemon":
 		return runDaemon(rest)

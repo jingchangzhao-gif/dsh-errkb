@@ -440,7 +440,7 @@ P6 门槛：用户不需要打开数据库或终端，就能暂停采集、搜�
 
 | 状态 | ID | 任务 | 前置 | 产出和验收 |
 | --- | --- | --- | --- | --- |
-| ☐ | EKB-050 | 构建 Windows 发布二进制 | 035、049 | 没有 Go 环境的干净机器可以启动 `errkb.exe`；资源和版本信息可重复生成 |
+| ☑ | EKB-050 | 构建 Windows 发布二进制 | 035、049 | ✅ 已完成（2026-10-21）：`cmd/errkb/version.go` 定义 `version`/`commit`/`buildTime` 三个可由 `-ldflags -X` 注入的变量，并输出与 `versioninfo.json` 对应的版本行；`packaging/windows/versioninfo.json` 是产品元数据的唯一来源（product/description/copyright）；`packaging/windows/build.ps1` 做真实构建：`go-winres simply` 按该元数据生成资源（版本信息 + CLI manifest），`go build -trimpath -buildvcs=false` 配空 build id 的 `-ldflags` 注入版本、提交和构建时间（构建时间取 HEAD 的提交时间戳，不取墙钟），`CGO_ENABLED=0`（纯 Go、目标机不需要 C 运行时；但发布物仍需 PostgreSQL 和连接器，不承诺免依赖），产物为 `dist/errkb.exe`、`dist/errkb.exe.sha256` 和解析后的 `dist/versioninfo.json`，任何步骤失败脚本非零退出。实测：同参数连续两次构建的 SHA256 完全一致（`0634561e…`）；`errkb version` 输出 `errkb 0.1.0` / `commit abc1234` / `built 2026-10-21T00:00:00Z` / `go go1.26.4 windows/amd64`，与 `dist/versioninfo.json` 的 version/commit/build_time 逐项一致；PE 资源读回 `ProductVersion/FileVersion = 0.1.0`，FileDescription/OriginalFilename/LegalCopyright 与元数据一致；把 PATH 缩到只有 System32 后同一二进制仍能启动并打印版本，运行不依赖 Go 工具链。偏差：`cmd/errkb/main.go` 只改 `version` 分支为调用 `printVersion` 并删掉重复的版本变量（§11.1 只列三个文件，按 EKB-034/046/049 先例记录）；构建期依赖 `go-winres`（`go install github.com/tc-hib/go-winres@latest`），运行期不需要。边界：可复现范围是“相同源码 + 相同参数 + 相同 Go/go-winres 版本”，两者版本需在 EKB-054 流水线中钉住；安装器、签名、SBOM 归 EKB-051/054；`doctor` 的退出码语义不在本卡范围 |
 | ☐ | EKB-051 | 实现 PostgreSQL 安装和生命周期 | 004、027、050 | 安装、启动、升级、备份、停止和卸载均有明确数据保留选择；无孤儿服务 |
 | ☐ | EKB-052 | 完成干净虚拟机验收 | 050-051 | 首次向导到真实命令错误闭环全部通过；普通用户权限和重启后自启动均验证 |
 | ☐ | EKB-053 | 建立升级和兼容测试 | 011、052 | 旧配置、旧 schema、旧 Markdown 和旧连接器升级不丢数据；失败可回滚 |
@@ -507,7 +507,7 @@ P7 门槛：干净 Windows 虚拟机可以安装、升级、备份、卸载并�
 | EKB-047 | `internal/ui/settings.go` → 复用 `internal/contract/config.go`（不新造配置模型）→ `internal/ui/settings_test.go`（设置页模型 + 真实 PostgreSQL 数据源测试；卡内作用域外，记录为偏差） |
 | EKB-048 | `internal/ui/notify.go` → `internal/ui/notify_test.go` → `internal/service/notice.go` → `internal/service/notice_test.go` |
 | EKB-049 | `internal/audit/log.go` → `internal/audit/stats.go` → `internal/ui/stats.go` → `internal/audit/stats_test.go` → `internal/ui/stats_test.go`；回填 `db/migrations/0008_retrieval_latency.sql` → `internal/database/rerank.go`（写入实测 `duration_ms`） |
-| EKB-050 | `cmd/errkb/version.go` → `packaging/windows/versioninfo.json` → `packaging/windows/build.ps1`（真实构建） |
+| EKB-050 | `cmd/errkb/version.go` → `packaging/windows/versioninfo.json` → `packaging/windows/build.ps1`（真实构建）；`cmd/errkb/main.go` 只改版本分发一行 |
 | EKB-051 | `packaging/windows/postgres.ps1` → `packaging/windows/installer.iss` → `internal/service/pg_manage.go` |
 | EKB-052 | `docs/acceptance-vm.md` → `packaging/windows/vm-acceptance.ps1` |
 | EKB-053 | `spec/compat.cue`（扩展）→ `db/migrations/testdata/upgrade/` → `internal/database/upgrade_test.go` |
