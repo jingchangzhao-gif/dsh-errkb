@@ -150,10 +150,11 @@ jobs:
           command -v psql >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client; }
 
       # Filename order is the migration order: each file is applied once and a
-      # failure stops the job.
+      # failure stops the job. Only the top level counts: db/migrations/testdata
+      # holds historical fixtures (EKB-053), not migrations.
       - name: Apply migrations
         run: |
-          for file in $(find db/migrations -name '*.sql' | sort); do
+          for file in $(find db/migrations -maxdepth 1 -name '*.sql' | sort); do
             echo "applying $file"
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$file"
           done

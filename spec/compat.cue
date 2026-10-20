@@ -655,4 +655,66 @@ compat: {
 			]
 		}
 	}
+	// Upgrade guarantees (EKB-053).
+	//
+	// The upgrade tests in internal/database/upgrade_test.go load artifacts that
+	// were produced by an earlier release and check that the current build keeps
+	// them working:
+	//   - a real PostgreSQL 16.15 schema dump at migration 0007 is migrated to
+	//     0008 with the data intact;
+	//   - a configuration file written before the optional templates block existed
+	//     loads unchanged and still validates;
+	//   - the TypeScript-era ERRORS.md imports without loss, and a document with
+	//     two solution versions keeps its history;
+	//   - a capability file from the first connector release loads, and its missing
+	//     fields remain an explicit degradation.
+	//
+	// Every fixture is committed, so the checks are reproducible from the repo and
+	// do not depend on a machine created in the past.
+	upgrade: {
+		schema: {
+			ledger:    "schema_migrations"
+			from:      "0007"
+			to:        "0008"
+			mode:      "forward only, one transaction per migration"
+			direct:    true
+			data:      "existing rows are preserved; a new column is nullable or carries a default"
+			downgrade: "unsupported: a database migrated past a release must not be opened by an older binary"
+			future:    "a ledger version the binary does not know stops startup with an explicit schema migration error"
+		}
+		config: {
+			format:         "yaml"
+			unknown_fields: "reject (yaml KnownFields): an unknown key is a typo or a newer file, never silently ignored"
+			old_files:      "a file written before an optional block was added loads unchanged and leaves that block at its defaults"
+			new_fields:     "an added field must be optional with a default and must not repurpose an existing key"
+		}
+		markdown: {
+			format:        "ERRORS.md v1 (parser and renderer in internal/database/markdown.go)"
+			old_files:     "files written by the TypeScript exporter and by older errkb binaries import without loss"
+			multi_version: "the newest body renders inline and older versions follow the history comment, replayed on first import"
+			redaction:     "import redacts before every write; stored text never keeps a raw credential"
+			idempotent:    "re-importing the same document does not duplicate issues, events or versions"
+		}
+		connector: {
+			protocol:      "v1 (spec/connector.cue #ConnectorSDKVersion)"
+			old_artifacts: "capability files from earlier releases load and validate; missing fields stay explicit"
+			mismatch:      "a schema_version or channel the core does not know is rejected with an error, never downgraded silently"
+			degradation:   "a connector that cannot capture a field declares the fallback channel and the exact field loss"
+		}
+		matrix: [
+			{from: "0001-0006", to: "0008", path: "direct", note: "the migrator applies every missing file in version order"},
+			{from: "0007", to: "0008", path: "direct", note: "nullable duration_ms; rows written before the upgrade stay valid and are excluded from the percentile"},
+			{from: "config v1 before templates", to: "config v1 with templates", path: "direct", note: "templates is optional, so the old file loads with it unset"},
+			{from: "ERRORS.md v1 single version", to: "ERRORS.md v1 multi version", path: "direct", note: "an imported issue gains its versions in the order the document lists them"},
+			{from: "connector v1 with a partial capability", to: "connector v1", path: "direct", note: "missing fields stay declared and the fallback carries the loss"},
+			{from: "a newer schema or protocol version", to: "this binary", path: "rejected", note: "refuse what is not understood instead of guessing"},
+		]
+		fixtures: [
+			{path: "db/migrations/testdata/upgrade/schema-0007.sql", kind: "schema dump", source: "pg_dump --schema-only of a PostgreSQL 16.15 database migrated to 0007, ledger rows included", commit: "84f8895"},
+			{path: "db/migrations/testdata/upgrade/config-v0.yaml", kind: "configuration", source: "yaml.Marshal of internal/contract.Config before the templates block existed", commit: "5ad354d"},
+			{path: "db/migrations/testdata/upgrade/ERRORS-v0.md", kind: "markdown", source: "seeds/ERRORS.seed.md written by the TypeScript exporter", commit: "aad0835"},
+			{path: "db/migrations/testdata/upgrade/ERRORS-history.md", kind: "markdown", source: "internal/database.ExportMarkdown with two solution versions", commit: "84f8895"},
+			{path: "db/migrations/testdata/upgrade/capability-v0.json", kind: "capability", source: "connectors/claude/capability.json from the first connector release", commit: "fcc01eb"},
+		]
+	}
 }

@@ -24,3 +24,8 @@ errors/
 
 # Local working notes. They are not part of the published package.
 dsh-errkb/
+
+# Upgrade fixtures (EKB-053) are historical artifacts: the schema dump, the old
+# configuration file and the Markdown documents must stay byte-for-byte as the
+# old releases wrote them, so a formatter must not touch them.
+db/migrations/testdata/

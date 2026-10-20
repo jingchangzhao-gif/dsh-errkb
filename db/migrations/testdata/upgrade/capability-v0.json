@@ -1,0 +1,25 @@
+{
+  "connector": "claude-code",
+  "host_version": "2.1.282",
+  "channel": "A",
+  "captures": [
+    "observed_at",
+    "normalized_message",
+    "command",
+    "exit_code",
+    "tool_name",
+    "evidence"
+  ],
+  "notice_before_diagnosis": true,
+  "fallback": {
+    "channel": "B",
+    "missing": ["tool_name"],
+    "note": "Without hooks only CLI/API failures are captured through the errkb run wrapper."
+  },
+  "probe": {
+    "probed_at": "2026-10-20T15:55:00Z",
+    "host_version": "2.1.282",
+    "ok": true,
+    "missing": ["error_code", "os", "shell", "runtime_versions"]
+  }
+}
