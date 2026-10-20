@@ -1,6 +1,6 @@
 # Privacy and data handling
 
-errkb is built to keep a failure history on the machine that produced it. This page describes what is stored, where, for how long, and what is explicitly **not** done.
+The Error Knowledge Base is built to keep a failure history on the machine that produced it. This page describes what is stored, where, for how long, and what is explicitly **not** done.
 
 ## Summary
 

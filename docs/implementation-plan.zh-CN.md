@@ -1,4 +1,4 @@
-# errkb 技术错误复用工具箱实施计划
+# 错误知识库（Error Knowledge Base）实施计划
 
 [English](implementation-plan.md)
 

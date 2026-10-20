@@ -1,4 +1,4 @@
-# errkb Technical Error Reuse Toolbox Implementation Plan
+# Error Knowledge Base Implementation Plan
 
 [中文](implementation-plan.zh-CN.md)
 

@@ -1,4 +1,4 @@
-# dsh-errkb · 报错回收再利用
+# 错误知识库（Error Knowledge Base）
 
 [English](README.md) · [许可证](LICENSE)
 
@@ -6,7 +6,7 @@
 
 **状态：v0.1.0（2026-10-21）。** Windows 桌面构建，本地 PostgreSQL 16 知识库；已对 DSH 0.2.0-rc.2、Codex CLI 0.156.1、Claude Code 2.1.282 实测。干净虚拟机验收**阻塞**，记录在 [`docs/acceptance-vm.md`](docs/acceptance-vm.md)；发布流水线在没有该验收记录时拒绝发布版本。
 
-`dsh-errkb` 是同一产品的多种形态：命令行客户端、本地后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件，以及面向 Codex CLI、Claude Code 的宿主连接器。所有形态共用同一个本地核心和同一个知识库：分类、脱敏、规范化、指纹、存储、检索和解法可信度都只在核心里实现一次，不在各宿主里重复实现。
+**错误知识库**（`error-knowledge-base`）是同一产品的多种形态：命令行客户端、本地后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件，以及面向 Codex CLI、Claude Code 的宿主连接器。所有形态共用同一个本地核心和同一个知识库：分类、脱敏、规范化、指纹、存储、检索和解法可信度都只在核心里实现一次，不在各宿主里重复实现。仓库名仍为 `dsh-errkb`，命令仍是 `errkb`，两者继续可用。
 
 ## 目录
 
@@ -29,7 +29,7 @@
 
 ## 这是什么
 
-一个面向 LLM 工具与命令行工作流的本地报错知识库。某个操作失败时，errkb 把这次失败记录一次 —— 脱敏、规范化、指纹化 —— 存进本地 PostgreSQL 数据库。同一失败下次出现时，它交回已记录的解法，并附上匹配原因、环境不一致时的适用性警告，以及该解法实测出的可信度。
+一个面向 LLM 工具与命令行工作流的本地报错知识库。某个操作失败时，它把这次失败记录一次 —— 脱敏、规范化、指纹化 —— 存进本地 PostgreSQL 数据库。同一失败下次出现时，它交回已记录的解法，并附上匹配原因、环境不一致时的适用性警告，以及该解法实测出的可信度。
 
 它刻意**不是**：
 
