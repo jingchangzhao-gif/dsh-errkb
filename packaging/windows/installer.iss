@@ -108,7 +108,7 @@ end;
 
 procedure InitializeWizard();
 begin
-  ClusterPage := CreateInputOptionPage(wpInfoBefore,
+  ClusterPage := CreateInputOptionPage(wpSelectDir,
     'Local database', 'How should errkb use PostgreSQL?',
     'errkb needs PostgreSQL 16. It is an explicit dependency; this installer can manage a dedicated local cluster for you.',
     False, False);
