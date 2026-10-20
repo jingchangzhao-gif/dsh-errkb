@@ -1,7 +1,10 @@
 # Dependencies and build output
 node_modules/
-lib/
 *.tsbuildinfo
+
+# The DSH connector bundle is committed so the store can review a fixed source
+# commit; its sourcemap stays local.
+lib/*.map
 
 # Coverage output from `vitest run --coverage`
 coverage/
