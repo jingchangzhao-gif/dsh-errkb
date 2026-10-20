@@ -66,6 +66,7 @@ compat: {
 		{id: "R16", change_class: "breaking", verdict: "fail", why: "Moving or renaming a contract changes where clients find it, so it is a breaking change."},
 		{id: "R17", change_class: "compatible", verdict: "allow", why: "Adding a definition that only optional fields reference (for example a nested solution object) accepts more payloads and invalidates no existing writer."},
 		{id: "R18", change_class: "compatible", verdict: "allow", why: "An enum set introduced by a new definition is reachable only through that definition, so it adds accepted payloads without invalidating an existing writer."},
+		{id: "R19", change_class: "compatible", verdict: "allow", why: "A required field added underneath a brand-new optional parent (for example config.templates.log.rotation) is reachable only through that new parent, so no existing document becomes invalid."},
 	]
 	contracts: {
 		error_event: {
@@ -173,6 +174,21 @@ compat: {
 				"offline",
 				"offline.spool_dir",
 				"offline.replay_interval_ms",
+				"templates",
+				"templates.cli",
+				"templates.cli.enabled",
+				"templates.cli.command",
+				"templates.cli.capture_exit_codes",
+				"templates.log",
+				"templates.log.enabled",
+				"templates.log.path",
+				"templates.log.encoding",
+				"templates.log.rotation",
+				"templates.log.rotation.max_bytes",
+				"templates.log.rotation.keep",
+				"templates.manual",
+				"templates.manual.enabled",
+				"templates.manual.note",
 			]
 			required: [
 				"database",
@@ -199,6 +215,15 @@ compat: {
 				"timeout.mcp_ms",
 				"offline",
 				"offline.replay_interval_ms",
+				"templates.cli.enabled",
+				"templates.cli.command",
+				"templates.cli.capture_exit_codes",
+				"templates.log.enabled",
+				"templates.log.path",
+				"templates.log.encoding",
+				"templates.log.rotation.max_bytes",
+				"templates.log.rotation.keep",
+				"templates.manual.enabled",
 			]
 		}
 		connector: {

@@ -37,6 +37,10 @@ type Config struct {
 	Search    SearchConfig    `yaml:"search"`
 	Timeout   TimeoutConfig   `yaml:"timeout"`
 	Offline   OfflineConfig   `yaml:"offline"`
+	// Templates carries the generic CLI/log/manual channel settings (EKB-042).
+	// No daemon behaviour reads them today; they exist so a generic-host file
+	// can be validated and shipped as a usable template rather than a sketch.
+	Templates *TemplatesConfig `yaml:"templates,omitempty"`
 }
 
 // DatabaseConfig points at the development PostgreSQL 16 instance.
@@ -106,6 +110,78 @@ type TimeoutConfig struct {
 type OfflineConfig struct {
 	SpoolDir         string `yaml:"spool_dir,omitempty"`
 	ReplayIntervalMS *int   `yaml:"replay_interval_ms,omitempty"`
+}
+
+// TemplatesConfig holds the generic host template settings (EKB-042). They are
+// documentation-grade settings: the validation in this file is the contract,
+// and the daemon does not consume them yet. Keeping them in the config file
+// means the template a user copies is a real configuration, not a snippet.
+type TemplatesConfig struct {
+	CLI    *TemplateCLI    `yaml:"cli,omitempty"`
+	Log    *TemplateLog    `yaml:"log,omitempty"`
+	Manual *TemplateManual `yaml:"manual,omitempty"`
+}
+
+// TemplateCLI is the level B (CLI wrapper) template.
+type TemplateCLI struct {
+	Enabled          *bool    `yaml:"enabled,omitempty"`
+	Command          []string `yaml:"command,omitempty"`
+	CaptureExitCodes *bool    `yaml:"capture_exit_codes,omitempty"`
+}
+
+// TemplateLog is the level C (log tail) template.
+type TemplateLog struct {
+	Enabled  *bool             `yaml:"enabled,omitempty"`
+	Path     string            `yaml:"path,omitempty"`
+	Encoding string            `yaml:"encoding,omitempty"`
+	Rotation *TemplateRotation `yaml:"rotation,omitempty"`
+}
+
+// TemplateRotation bounds the log file size the tailer follows.
+type TemplateRotation struct {
+	MaxBytes *int64 `yaml:"max_bytes,omitempty"`
+	Keep     *int   `yaml:"keep,omitempty"`
+}
+
+// TemplateManual is the level E (manual entry) template.
+type TemplateManual struct {
+	Enabled *bool  `yaml:"enabled,omitempty"`
+	Note    string `yaml:"note,omitempty"`
+}
+
+// Validate checks the template block. Empty optional blocks are fine; a block
+// that is present must be meaningful.
+func (t *TemplatesConfig) Validate() error {
+	if t.CLI != nil {
+		for i, part := range t.CLI.Command {
+			if part == "" {
+				return fmt.Errorf("templates.cli.command: part %d is empty", i)
+			}
+		}
+	}
+	if t.Log != nil {
+		switch t.Log.Encoding {
+		case "", "utf-8", "utf-16le", "utf-16be":
+		default:
+			return fmt.Errorf("templates.log.encoding: want utf-8, utf-16le or utf-16be, got %q", t.Log.Encoding)
+		}
+		enabled := t.Log.Enabled == nil || *t.Log.Enabled
+		if enabled && t.Log.Path == "" {
+			return errors.New("templates.log.path: required when the log template is enabled")
+		}
+		if t.Log.Rotation != nil {
+			if t.Log.Rotation.MaxBytes != nil && *t.Log.Rotation.MaxBytes <= 0 {
+				return errors.New("templates.log.rotation.max_bytes: must be positive")
+			}
+			if t.Log.Rotation.Keep != nil && *t.Log.Rotation.Keep < 0 {
+				return errors.New("templates.log.rotation.keep: must not be negative")
+			}
+		}
+	}
+	if t.Manual != nil && t.Manual.Enabled != nil && !*t.Manual.Enabled && t.Manual.Note == "" {
+		return errors.New("templates.manual: disabled without a note")
+	}
+	return nil
 }
 
 // ConnectorCapability is what one host connector declares.
@@ -247,6 +323,11 @@ func (c Config) Validate() error {
 	}
 	if *c.Offline.ReplayIntervalMS <= 0 {
 		return errors.New("offline.replay_interval_ms: must be positive")
+	}
+	if c.Templates != nil {
+		if err := c.Templates.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
