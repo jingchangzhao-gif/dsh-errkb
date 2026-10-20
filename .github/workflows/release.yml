@@ -1,0 +1,83 @@
+name: Release
+
+# A tag is the only release trigger. The pipeline refuses to publish when the
+# version, the changelog section or the clean-VM acceptance record disagrees
+# with the tag, and it rebuilds the same artifacts for the same tag.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      VM_ACCEPTANCE_VERSION: ${{ vars.VM_ACCEPTANCE_VERSION }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install the packaging tools
+        run: |
+          go install github.com/tc-hib/go-winres@v0.3.3
+          choco install innosetup --yes --no-progress
+
+      - name: Check the release inputs
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          ./packaging/windows/release.ps1 -Mode check -Version $tag.TrimStart("v") -Tag $tag -IncludeInstaller
+
+      - name: Build and package the release
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          ./packaging/windows/release.ps1 -Mode package -Version $tag.TrimStart("v") -Tag $tag -IncludeInstaller
+
+      - name: Describe the bundle
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.TrimStart("v")
+          $bundle = "dist\release\errkb-$version"
+          Get-ChildItem $bundle | Format-Table Name, Length
+          Get-Content (Join-Path $bundle "SHA256SUMS")
+
+      - name: Publish the GitHub release
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.TrimStart("v")
+          $bundle = "dist\release\errkb-$version"
+          $files = Get-ChildItem $bundle -File | ForEach-Object { $_.FullName }
+          $notes = Join-Path $bundle "RELEASE-NOTES.md"
+          $existing = gh release view $tag --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0 -and $existing) {
+            # Rerunning the same tag must not fork the release: replace the
+            # assets with the identical bytes this run rebuilt.
+            gh release upload $tag $files --clobber
+          }
+          else {
+            gh release create $tag $files --title "errkb $version" --notes-file $notes
+          }
+
+      - name: Keep the bundle for the build record
+        uses: actions/upload-artifact@v4
+        with:
+          name: errkb-${{ github.ref_name }}-release
+          path: dist/release/**
+          if-no-files-found: error
