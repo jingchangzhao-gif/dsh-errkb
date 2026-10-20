@@ -171,6 +171,20 @@ func (c *Client) Record(ctx context.Context, request contract.RecordRequest) (co
 	return response, nil
 }
 
+// Capture hands a connector observation to the core (EKB-038a). The core owns
+// classification, redaction and fingerprinting, so adapters never do that work.
+func (c *Client) Capture(ctx context.Context, request contract.CaptureRequest) (contract.CaptureResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationCapture, request)
+	if err != nil {
+		return contract.CaptureResponse{}, err
+	}
+	var response contract.CaptureResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.CaptureResponse{}, fmt.Errorf("decode the capture result: %w", err)
+	}
+	return response, nil
+}
+
 // Feedback submits one outcome; it cannot set trust.
 func (c *Client) Feedback(ctx context.Context, request contract.FeedbackRequest) (contract.FeedbackResponse, error) {
 	payload, err := c.Call(ctx, contract.OperationFeedback, request)
