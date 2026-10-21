@@ -1,11 +1,17 @@
 # Clean-VM acceptance (EKB-052)
 
-> **Status: blocked** — the acceptance harness and the installer are built and dry-run, but the
-> clean-VM run itself **has not been executed**. No hypervisor, VM or snapshot tooling is available
-> in the environment this card was implemented in (no `vmrun`, `qemu`, `VBoxManage`; Hyper-V queries
-> are blocked for a non-administrator), so the checks that matter here — a fresh Windows install, a
-> standard user, a reboot and an uninstall — cannot be performed. The harness below is the script the
-> run must execute; the card stays `⚠ 阻塞` until the evidence directory exists.
+> **Status: blocked, retest pending** — the acceptance harness and the installer are built and
+> dry-run, but the clean-VM run itself **has not been executed**. No hypervisor, VM or snapshot
+> tooling is available in the environment this card was implemented in (no `vmrun`, `qemu`,
+> `VBoxManage`; Hyper-V queries are blocked for a non-administrator), so the checks that matter
+> here — a fresh Windows install, a standard user, a reboot and an uninstall — cannot be
+> performed. The harness below is the script the run must execute; the card stays `⚠ 阻塞` until
+> the evidence directory exists.
+>
+> The two blocking findings below (a fresh install had no migrations, nothing restarted after a
+> reboot) were implemented in **EKB-056**: `errkb db migrate`, the installer migration step, and the
+> logon-task autostart (`packaging/windows/autostart.ps1`). This file still says `blocked` because
+> the clean-VM evidence has not been produced yet; re-run the phases below to close the card.
 
 This file is the *report* side of §11.1: `packaging/windows/vm-acceptance.ps1` is the executable
 half. The script exits non-zero when any automatic check fails, writes `results.json` plus one
@@ -15,11 +21,11 @@ evidence file per check, and marks the clicks it cannot automate as `MANUAL`.
 
 | Artifact | Value |
 | --- | --- |
-| installer | `dist\errkb-0.1.0-setup.exe`, 4,950,820 bytes |
-| installer SHA256 | `703B535C540BD99D0B3C2ED1FEB6E706404C130DEF6CB2970E0818196077717F` |
+| installer | `dist\errkb-0.1.0-setup.exe`, 4,961,033 bytes |
+| installer SHA256 | `19518D1DE0AC0CFCF9AD68E8B9E3783D70CCBA499889ECB6107B4551C38B5448` |
 | installer toolchain | Inno Setup 6.7.3 (`ISCC.exe`, user-scope install) |
-| binary | `dist\errkb.exe`, 10,897,408 bytes |
-| binary SHA256 | `f9942ff0cedb3352a59f57dff8633d8fd89fc0832c93313032fce5eb620d002d` |
+| binary | `dist\errkb.exe`, 10,937,344 bytes |
+| binary SHA256 | `eb0d5148eb86d6a540a815a6f2cb3e5a3f3c12cb6179fef03aac0b06e6286143` |
 | binary version | `errkb 0.1.0`, `commit local`, `built 2026-10-21T00:00:00Z`, `go go1.26.4 windows/amd64` |
 | database | PostgreSQL 16.15, dedicated cluster on the chosen port (default 5433) |
 
@@ -36,23 +42,23 @@ Rebuild both before a real run and update this table in the same commit.
 - A standard (non-administrator) user account; the installer elevates itself through UAC.
 - Two snapshots available: one "clean", one after reboot.
 
-## Findings that block the acceptance even before the VM run
+## Findings recorded before the VM run
 
 These were found while building the artifacts and are reported here rather than patched around,
 as the card requires (`docs/` + the script are the only landed files).
 
-1. **A fresh install cannot record an error.** `packaging/windows/installer.iss:53-57` creates and
-   starts the cluster and offers `errkb version`, but nothing applies the schema migrations, and
-   `cmd/errkb/main.go` has no `db migrate` subcommand (dispatch: `help/version/daemon/ui/doctor/run/mcp`).
-   The daemon refuses to start when the ledger is empty
-   (`errkb daemon: schema migration check failed: applied version "", expected "0008" (run `errkb db
-   migrate` first)`). Consequence: on a real fresh install, acceptance steps 3–5 (record → reuse fix →
-   trust 0.6) fail at the first `errkb run`. Fix belongs to a follow-up card (either `db migrate` in
-   the CLI or a migration step in the installer).
-2. **Nothing restarts after a reboot.** The installer never registers a Windows service for the
-   cluster (`PGManager.RegisterService` exists but is unused) and there is no daemon/tray autostart.
-   After reboot the port is closed and `errkb doctor` reports `database: connection refused`.
-   Acceptance step 6 fails as-is; this is an EKB-051 follow-up.
+1. ~~**A fresh install cannot record an error.**~~ **Addressed by EKB-056.** `packaging/windows/installer.iss`
+   creates and starts the cluster, then runs `errkb db migrate --credentials …` before the success
+   page; `cmd/errkb/db.go` exposes `db status` / `db migrate` over `database.Migrate` (same advisory
+   lock, checksum validation and higher-ledger rejection). Local evidence: a freshly `initdb`-ed
+   cluster received all eight migrations (`applied: [0001 … 0008]`), a second run printed
+   `already up to date`, and the daemon started against it. The clean-VM first run remains the
+   acceptance gate.
+2. ~~**Nothing restarts after a reboot.**~~ **Addressed by EKB-056.** `packaging/windows/autostart.ps1`
+   registers a per-user logon task (cluster → daemon, idempotent `start`), installer registers it and
+   the uninstaller removes it, so no task is left behind. Local evidence is limited to
+   script parsing and the start path; registering the task itself is denied by the implementation
+   host's sandbox, so the reboot check stays in the clean VM.
 3. **Silent install cannot answer the cluster question.** `installer.iss` asks create / reuse / other
    port interactively; `/VERYSILENT` takes the default (create a dedicated cluster on 5433). The
    automated run therefore exercises one branch only; the interactive standard-user click-through is
@@ -126,12 +132,12 @@ and "standard user" checks are real.
 
 | # | Check | Status here |
 | --- | --- | --- |
-| 1 | Fresh install runs and records | harness ready; blocked by finding 1 |
-| 2 | Reuse inside the same install | harness ready (`loop`), blocked by finding 1 |
+| 1 | Fresh install runs and records | harness ready; migrations wired in EKB-056, retest pending |
+| 2 | Reuse inside the same install | harness ready (`loop`); migrations wired in EKB-056 |
 | 3 | Standard user completes install and first run | manual gate; not run (no VM) |
-| 4 | No manual step on a clean machine | blocked by finding 1 (migrations) |
-| 5 | Second run shows the fix with no model call | blocked by finding 1 |
-| 6 | Autostart after reboot | **fails as-is** (finding 2) |
+| 4 | No manual step on a clean machine | migrations wired in EKB-056; retest pending |
+| 5 | Second run shows the fix with no model call | harness ready; retest pending |
+| 6 | Autostart after reboot | logon task implemented in EKB-056; retest pending |
 | 7 | Uninstall keeps data on request | harness ready (`uninstall -KeepData`); not run (no VM) |
 | 8 | Uninstall deletes everything | harness ready; not run (no VM) |
 | 9 | Machine residue check | harness encodes it (service/port/process/files); not run (no VM) |
@@ -145,8 +151,9 @@ and "standard user" checks are real.
 - The automated run cannot answer the interactive three-way cluster question; that path stays manual.
 - The MCP half of the loop uses a one-shot `initialize` + `tools/call` session; a full client
   (Claude Code / Codex) is exercised by their own adapter cards, not here.
-- `errkb run -- cmd` without flags before `--` hits the known EKB-031 parsing bug; the harness always
-  passes `--connector/--session` first.
+- The `errkb run -- cmd` first-argument parsing bug (`the command must follow --` even when `--`
+  leads) was fixed in EKB-056 (`cmd/errkb/run.go`); the harness still passes
+  `--connector/--session` first, so both paths are covered.
 - The installer is currently unsigned; a SmartScreen warning is expected and must be documented in
   the release card (EKB-054) rather than worked around here.
 
@@ -186,13 +193,21 @@ On the same cluster, applying the eight migrations with a throwaway `database.Mi
 - The second `errkb run` of the same command printed the fix with `source cli`, `trust 0.50` and the version id.
 - MCP `err_feedback success` recorded an outcome; `errkb stats` reported `events=2 issues=1 solutions=1 outcomes=1`.
 
-### Remaining blockers (unchanged)
+### Blockers addressed by EKB-056 (2026-10-22)
 
-1. **No schema on a fresh install**: the installer only creates and starts the cluster; `errkb` has no
-   `db migrate` subcommand, and the daemon refuses to start without the ledger
-   (`schema migration check failed: ... relation "schema_migrations" does not exist`). First run therefore
-   fails until migrations are applied by hand.
-2. **No autostart**: neither the cluster nor the daemon is registered to start after a reboot.
+The throwaway `database.Migrate` probe and the missing autostart described in the rehearsal above
+are superseded by the EKB-056 deliverables:
 
-Both need their own cards before a clean-VM run can pass; this card stays `⚠ blocked`. The two installer
-fixes are recorded here because the rehearsal cannot get past `install` without them.
+1. **Migrations run as part of the install and through the CLI.** `errkb db status` prints the
+   ledger position; `errkb db migrate --credentials <app>\pg\credentials.json --migrations <app>\migrations`
+   applies every pending migration (`applied: [0001 … 0008]`), is idempotent (`already up to date`,
+   exit 0), and maps failures to the documented exit codes (2 usage, 4 unavailable, 1 internal).
+   The installer calls it after the cluster is up and before the success page; a failure aborts the
+   install instead of leaving a half-installed cluster.
+2. **Logon-task autostart.** `packaging/windows/autostart.ps1` registers a per-user task that starts
+   the cluster and the daemon after sign-in, `start` is idempotent, and the uninstaller removes the
+   task. Registering the task could not be executed on the implementation host (its sandbox denies
+   `Register-ScheduledTask`), so the reboot assertion itself remains a clean-VM check.
+
+Rebuild the installer and the binary after EKB-056 (their hashes changed), update the artifact table
+above in the same commit, and re-run the phases to turn this report into evidence.

@@ -31,22 +31,31 @@ type runOutput struct {
 	RecordError string                   `json:"record_error,omitempty"`
 }
 
-// runRun implements `errkb run [flags] -- <command> [args...]`.
-func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Reader, env *cliEnv) int {
-	split := 0
+// splitRunArgs splits `run` arguments at the first `--`. The command may start
+// at index 0 (`errkb run -- cmd`), so the split is -1 until the separator is
+// actually found; treating 0 as "missing" used to reject the bare form (EKB-056).
+func splitRunArgs(args []string) (flagArgs, command []string, err error) {
+	split := -1
 	for index, arg := range args {
 		if arg == "--" {
 			split = index
 			break
 		}
 	}
-	if split == 0 {
-		fmt.Fprintln(stderr, "errkb run: the command must follow `--`, e.g. errkb run -- pnpm build")
-		return exitUsage
+	if split < 0 {
+		return nil, nil, fmt.Errorf("the command must follow `--`, e.g. errkb run -- pnpm build")
 	}
-	flagArgs, command := args[:split], args[split+1:]
-	if len(command) == 0 {
-		fmt.Fprintln(stderr, "errkb run: a command is required after `--`")
+	if split+1 >= len(args) {
+		return nil, nil, fmt.Errorf("a command is required after `--`")
+	}
+	return args[:split], args[split+1:], nil
+}
+
+// runRun implements `errkb run [flags] -- <command> [args...]`.
+func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Reader, env *cliEnv) int {
+	flagArgs, command, err := splitRunArgs(args)
+	if err != nil {
+		fmt.Fprintf(stderr, "errkb run: %v\n", err)
 		return exitUsage
 	}
 
