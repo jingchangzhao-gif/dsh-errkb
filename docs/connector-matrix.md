@@ -36,15 +36,16 @@ supply them; the required fields are always filled by the core pipeline.
 
 | Host | Measured version | Channel | Pre-diagnosis return | Fallback | Acceptance record |
 | --- | --- | --- | --- | --- | --- |
-| Generic CLI (`errkb run --`) | errkb built from this tree; witness run `errkb dev` (2026-10-19) | **B** wrapper | No — the known fix is printed after the failure | 1) wrap the command; 2) take one line from the host log and send it through the wrapper (C intent, no tailer CLI yet); 3) manual pipe (E) | `docs/e2e-cli-loop.md`; EKB-042 live `generic-cli` issue `f1b0ec03…` |
+| Generic CLI (`errkb run --`) | errkb built from this tree; witness run `errkb dev` (2026-10-19) | **B** wrapper | No — the known fix is printed after the failure | 1) wrap the command; 2) tail the host log with `errkb tail --file <path>` (channel C, wired 2026-10-22), or copy one line through the wrapper; 3) manual pipe (E) | `docs/e2e-cli-loop.md`; EKB-042 live `generic-cli` issue `f1b0ec03…` |
 | DSH (plugin adapter) | DSH 0.2.0-rc.2 + `dsh-errkb` 0.0.0 (this tree) | **A** plugin hooks | Yes — standing system-prompt hint plus post-execute notices; verified in the headless session log | Wrap the agent command with `errkb run --` (loses the host session and tool events), or manual E | EKB-039 plan row, PR #66 |
 | Codex CLI | 0.156.1 | **B** wrapper for capture; **MCP** eight tools for query/record | No — `capability.json` records `notice_before_diagnosis: false` | Parse the `Stop` hook transcript for failed tool items (documented, not implemented); interim: scan one log line through the wrapper | `connectors/codex/probe.md` (probe 2026-10-20T14:15:07Z), PR #67 |
 | Claude Code | 2.1.282 | **A** `PostToolUseFailure` hook; **B** wrapper for model-API failures; **MCP** eight tools | Yes — `SessionStart` hint script and MCP tools are available before diagnosis | Wrap `claude -p` with `errkb run --` (loses `tool_name`, keeps command/exit code/text) | `connectors/claude/probe.md` (probe 2026-10-20T15:55:00Z), PR #68 |
 
 Template categories (EKB-042) are not hosts: `connectors/templates/cli-log`
-documents level B (copy of the generic CLI row), level C (log intent only, the
-tailer has no CLI entry point yet) and level E (a human-selected message). C and
-E are **not measured live** — see the gaps below.
+documents level B (copy of the generic CLI row), level C (`errkb tail --file`
+follows a log file and records through the daemon) and level E (a human-selected
+message). C is covered by `tests/e2e/tail_capture_test.go` on the development
+host (clean-VM run pending); E is **not measured live** — see the gaps below.
 
 ## Field coverage per host
 
@@ -121,7 +122,7 @@ failure is repeated:
 | `tool_name` not a host tool name | CLI, Codex | Tool-scoped rerank (`tool_name` weight 0.05) contributes less on these hosts. |
 | DSH `tools/result` path not exercised live | DSH | The capture path is unit-tested, but the live acceptance used `agent/request-error`; a real tool failure in a DSH session is **unverified**. |
 | Codex `PostToolUse` not measured | Codex | Hidden tool failures inside Codex are invisible to the wrapper; the Stop-transcript fallback is documented, not built (**unverified**). |
-| Template C not wired | Template hosts | Log-channel capture cannot run today; the template records the intended settings only (**unverified**). |
+| Template C measured on the development host only | Template hosts | `errkb tail --file` follows a log file and records classified failures through the daemon (`tests/e2e/tail_capture_test.go`); no clean-VM run yet (**unverified on a clean machine**). |
 | Template E not measured | Manual hosts | Manual entry is the wrapper path with a human-chosen line; no separate acceptance run exists (**unverified**). |
 | Text-derived headlines in B/C | CLI, Codex, Claude wrapper | Same failure with different timestamps, pids or temp paths may not merge; the normalizer removes known noise but long-tail variance remains. This is the documented cost of channels B and C. |
 
@@ -134,13 +135,14 @@ failure is repeated:
 | `connectors/codex/probe.md` + `connectors/codex/capability.json` (probe 2026-10-20T14:15:07Z) | Codex CLI 0.156.1: hooks/plugins/MCP surfaces, `Stop` payload, unmeasured `PostToolUse`, wrapper closure. |
 | `connectors/claude/probe.md` + `connectors/claude/capability.json` (probe 2026-10-20T15:55:00Z) | Claude Code 2.1.282: hook shell rules, measured `SessionStart`/`PostToolUseFailure`/`Stop` payloads, JSON output, MCP registration, hook closure. |
 | `connectors/templates/cli-log/README.md` + live `errkb doctor` run (EKB-042) | Template levels B/C/E, `generic-cli` channel-B failure and doctor output. |
+| `tests/e2e/tail_capture_test.go` (2026-10-22) | Template C: `errkb tail --file` records a permission-denied line through the daemon, the connector row is channel C, and a replay reuses the issue (`issues=1 events=2 hits=2`). |
 
 ## Unverified list
 
 - Codex `PostToolUse` hook payload and tool-level capture (local OSS model has no
   tool calling; hosted-model quota was exhausted during the probe).
 - DSH `tools/result` capture in a real session (unit tests only).
-- Template C log channel end to end (tailer not exposed on the CLI).
+- Template C on a clean machine (the development-host e2e test exists; clean-VM run pending).
 - Template E manual channel as its own acceptance run.
 - Any host version other than the pinned ones in the header.
 

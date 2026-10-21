@@ -92,7 +92,7 @@ C 与 E **没有实测**——见下方缺口。
 | Claude Code | **是。** `SessionStart` 钩子打印提示，八个 MCP 工具（`mcp__errkb__err_*`）在任何命令执行前即可用；已用本地 mock API 驱动工具调用实测。 |
 | Codex CLI | **否。** 包装器只能在命令失败后打印解法；MCP 工具可手工/由 agent 查询，但没有失败前触发的钩子。 |
 | 通用 CLI | **否。** 与 Codex 相同：只有包装器，失败后才看到解法。 |
-| 模板 C/E | **否。** C 尚无 CLI 入口；E 是人选的错误文本。 |
+| 模板 C/E | **否。** C 由 `errkb tail --file` 跟随日志，失败后才记录；E 是人选的错误文本。 |
 
 ## 降级方式与字段损失
 
@@ -113,7 +113,7 @@ C 与 E **没有实测**——见下方缺口。
 | `tool_name` 不是宿主工具名 | CLI、Codex | 工具重排（`tool_name` 权重 0.05）在这两类宿主上作用变小。 |
 | DSH `tools/result` 路径未在真实会话中跑过 | DSH | 该采集路径有单测，但真实验收用的是 `agent/request-error`；真实 DSH 工具失败**未验证**。 |
 | Codex `PostToolUse` 未测 | Codex | Codex 内部的隐藏工具失败对包装器不可见；Stop 会话记录回退方案只记录、未实现（**未验证**）。 |
-| 模板 C 未接线 | 模板宿主 | 日志通道今天跑不起来；模板只记录预期设置（**未验证**）。 |
+| 模板 C 仅开发机实测 | 模板宿主 | `errkb tail --file` 跟随日志并经守护进程记录分类后的失败（`tests/e2e/tail_capture_test.go`）；尚无干净机运行（**干净机上未验证**）。 |
 | 模板 E 未单独验收 | 手工宿主 | 手工通道本质是"人选的文本走包装器"，没有独立验收运行（**未验证**）。 |
 | B/C 通道的文本派生标题 | CLI、Codex、Claude 包装器 | 同一失败带不同时间戳、pid、临时路径时可能不合并；规范化能去已知噪声，但长尾差异仍在。这是 B、C 通道记录的代价。 |
 
@@ -126,12 +126,13 @@ C 与 E **没有实测**——见下方缺口。
 | `connectors/codex/probe.md` + `connectors/codex/capability.json`（探针 2026-10-20T14:15:07Z） | Codex CLI 0.156.1：钩子/插件/MCP 界面、`Stop` 载荷、`PostToolUse` 未测、包装器闭环。 |
 | `connectors/claude/probe.md` + `connectors/claude/capability.json`（探针 2026-10-20T15:55:00Z） | Claude Code 2.1.282：钩子 shell 规则、`SessionStart`/`PostToolUseFailure`/`Stop` 载荷实测、JSON 输出、MCP 注册、钩子闭环。 |
 | `connectors/templates/cli-log/README.md` + 实测 `errkb doctor`（EKB-042） | 模板 B/C/E 等级、`generic-cli` 的 B 通道失败与 doctor 输出。 |
+| `tests/e2e/tail_capture_test.go`（2026-10-22） | 模板 C：`errkb tail --file` 把 permission-denied 行经守护进程记录，连接器为 C 通道，重放复用同一 issue（`issues=1 events=2 hits=2`）。 |
 
 ## 未验证清单
 
 - Codex `PostToolUse` 钩子载荷与工具级采集（本地 OSS 模型无工具调用；宿主模型配额在探针期间耗尽）。
 - 真实 DSH 会话中的 `tools/result` 采集（仅单测）。
-- 模板 C 日志通道端到端（尾随尚未暴露成 CLI 命令）。
+- 模板 C 在干净机上的端到端（开发机 e2e 测试已就绪，干净机运行待做）。
 - 模板 E 手工通道的独立验收。
 - 头部所列版本之外的任何宿主版本。
 

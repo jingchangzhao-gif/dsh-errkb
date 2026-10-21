@@ -25,6 +25,13 @@ They never claim more than the acceptance records in this repository prove.
 - The installer registers a Start-menu shortcut for the toolbox and ships the
   launcher.
 
+- `errkb tail --file <path>` follows a log file (rotation, truncation,
+  UTF-8/UTF-16 detection, bounded duplicate bursts) and records the classified
+  failures through the daemon as channel C; `--once` and `--timeout` keep
+  rehearsals deterministic.
+- The trust-formula test counts its own schema instead of the whole database,
+  so parallel test packages no longer race on a shared function count.
+
 ### Fixed
 
 - The installed product now applies database migrations during setup

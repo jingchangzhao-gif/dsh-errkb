@@ -374,11 +374,14 @@ func TestTrustIsDatabaseOnly(t *testing.T) {
 		t.Fatalf("%d trust-shaped columns exist, want none; trust must be derived only", columns)
 	}
 
+	// Parallel test packages run against the same database, so count only this
+	// schema; a database-wide count sees other packages' throwaway schemas.
 	var functions int
 	if err := conn.QueryRow(ctx, `
 		select count(*)
 		from pg_proc
 		where proname = 'errkb_trust'
+			and pronamespace = current_schema()::regnamespace
 	`).Scan(&functions); err != nil {
 		t.Fatalf("inspect functions: %v", err)
 	}
