@@ -247,12 +247,12 @@ begin
     { A dialog answer cannot travel to the second uninstaller phase that runs
       the uninstall commands, so the choice is written as a marker file next
       to the database and postgres.ps1 reads it. }
-    if UninstallParam('/delete_data') then
+    if UninstallParam('/delete_data') or UninstallParam('/delete_data=1') then
     begin
       SetDeleteDataMarker(False);
       Exit;
     end;
-    if UninstallParam('/keep_data') then
+    if UninstallParam('/keep_data') or UninstallParam('/keep_data=1') then
     begin
       SetDeleteDataMarker(True);
       Exit;
