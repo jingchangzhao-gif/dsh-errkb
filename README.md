@@ -160,6 +160,8 @@ One binary, several subcommands:
 | `errkb stats` | Counts, hit rate, latency percentiles and estimated savings |
 | `errkb run -- <command>` | Run a command, keep its output visible, record failures only |
 | `errkb db migrate\|status` | Apply migrations or inspect the schema ledger |
+| `errkb tail --file <path>` | Follow a log file and record its failures (channel C) |
+| `errkb markdown import\|export` | Exchange the legacy `ERRORS.md` format |
 | `errkb daemon` | Local background service: Named Pipe API, health document, redacted log |
 | `errkb ui` | Native tray/search host from the source tree; not the released Web toolbox |
 | `errkb ui --web` | In-progress local Web search shell; not present in current release artifacts |

@@ -38,10 +38,8 @@ There is intentionally no `DONE` state in this file. Resolved problems are delet
 
 | ID | Status | Remaining problem | Evidence now | Completion condition |
 | --- | --- | --- | --- | --- |
-| WF-009 | `NEXT` | Markdown compatibility has no supported user command | Import/export implementation and fixtures exist only through tests | Add an explicit import/export CLI/API path, or formally retire the compatibility promise and remove implementation plus fixtures |
-| WF-010 | `BLOCKED` | Database-backed gates have not been rerun for the current final workspace | Tests requiring `ERRKB_TEST_DATABASE_URL` skip without a live disposable PostgreSQL database | Run all database, retrieval, crash and CLI-loop tests against a permitted PostgreSQL 16 instance and save the results |
 | WF-011 | `BLOCKED` | Clean standard-user Windows acceptance is missing | No recorded clean install, real reboot, toolbox launch and both uninstall modes for one coherent artifact | Complete `vm-acceptance.ps1` plus manual gates on a clean VM and attach its evidence directory |
-| WF-012 | `OPEN` | No coherent release artifact exists | Existing `dist` executables came from different revisions and do not expose the same command surface | Build EXE, installer, portable toolbox, manifest, SBOM and hashes once from one accepted tag; installed binary must report that same identity |
+| WF-012 | `NEXT` | No coherent release artifact exists | Existing `dist` executables came from different revisions and do not expose the same command surface | Build EXE, installer, portable toolbox, manifest, SBOM and hashes once from one accepted tag; installed binary must report that same identity |
 
 ## Per-item update format
 

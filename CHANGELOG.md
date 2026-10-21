@@ -29,6 +29,7 @@ They never claim more than the acceptance records in this repository prove.
   UTF-8/UTF-16 detection, bounded duplicate bursts) and records the classified
   failures through the daemon as channel C; `--once` and `--timeout` keep
   rehearsals deterministic.
+- `errkb markdown import --file <path>` and `errkb markdown export [--out <path>]` expose the legacy `ERRORS.md` exchange through the CLI; an import/export/re-import round trip adds no issues.
 - The trust-formula test counts its own schema instead of the whole database,
   so parallel test packages no longer race on a shared function count.
 

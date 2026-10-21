@@ -44,6 +44,7 @@ Commands:
   stats                  knowledge-base totals and timings
   run -- <command>       run a command and look up its known fix
   tail --file <path>     follow a log file and record its failures
+  markdown import|export exchange the legacy ERRORS.md format
   db migrate|status      create or inspect the database schema
   pg install|start|stop|uninstall|status|discover
                          manage the local PostgreSQL cluster
@@ -100,6 +101,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runDB(rest, jsonMode, stdout, stderr)
 	case "pg":
 		return runPG(rest, stdout, stderr)
+	case "markdown":
+		return runMarkdown(rest, jsonMode, stdout, stderr)
 	case "tail":
 		return runTail(rest, stdout, stderr)
 	case "run":

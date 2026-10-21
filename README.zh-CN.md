@@ -160,6 +160,8 @@
 | `errkb stats` | 计数、命中率、延迟百分位与估算节省 |
 | `errkb run -- <command>` | 运行命令、保持输出可见、只记录失败 |
 | `errkb db migrate\|status` | 应用迁移或查看 schema 账本 |
+| `errkb tail --file <path>` | 跟随日志文件并记录其中的失败（通道 C） |
+| `errkb markdown import\|export` | 导入或导出旧版 `ERRORS.md` 格式 |
 | `errkb daemon` | 本地后台服务：Named Pipe API、健康文档、脱敏日志 |
 | `errkb ui` | 源码树中的原生托盘/搜索宿主；不是已发布的 Web 工具箱 |
 | `errkb ui --web` | 本地开发中的 Web 搜索壳；当前发布物不包含 |
