@@ -136,3 +136,95 @@ main {
   color: #f0b74c;
 }
 
+/* EKB-059: statistics, audit trail and settings. */
+nav {
+  display: flex;
+  gap: 16px;
+  margin: 6px 0 10px;
+}
+nav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+}
+nav a:hover {
+  color: var(--text);
+}
+table.metrics,
+table.connectors,
+table.trail {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10px 0 16px;
+  font-size: 13px;
+}
+table.metrics th,
+table.metrics td,
+table.connectors th,
+table.connectors td,
+table.trail th,
+table.trail td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #2a2d33;
+  text-align: left;
+  vertical-align: top;
+}
+table.metrics th {
+  width: 30%;
+  color: var(--muted);
+  font-weight: 500;
+}
+table.metrics td:first-of-type {
+  font-weight: 600;
+  white-space: nowrap;
+}
+table.trail td.detail {
+  font:
+    12px/1.4 Consolas,
+    "Cascadia Mono",
+    monospace;
+  color: var(--muted);
+  word-break: break-all;
+}
+.danger,
+td.danger {
+  color: var(--warn);
+  font-weight: 600;
+}
+.measured {
+  color: var(--exact);
+}
+.estimated {
+  color: #f0b74c;
+}
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: end;
+  margin: 10px 0;
+}
+.filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.filters input {
+  min-width: 140px;
+}
+section.settings h2 {
+  margin: 22px 0 6px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+section.settings p {
+  margin: 6px 0;
+}
+button.toggle {
+  padding: 3px 10px;
+  font-size: 12px;
+}

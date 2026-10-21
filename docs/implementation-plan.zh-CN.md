@@ -458,10 +458,10 @@ P7 门槛：干净 Windows 虚拟机可以安装、升级、备份、卸载并�
 
 | 状态 | ID | 任务 | 前置 | 产出和验收 |
 | --- | --- | --- | --- | --- |
-| ◐ | EKB-057 | Web 工具箱基础 | 045、056 | 本地独有的部分实现：已有嵌入式回环 Web 壳、启动 token、CSP 和搜索路由。仍需把修改恢复进 Git、将 `ui --web` 做成受测启动路径、用安装凭据恢复 daemon、增加真实 UI 冒烟测试，并让启动器/资源进入同一个一致产物。现有发布二进制和 GitHub `main` 都拒绝 `--web`。 |
-| ☐ | EKB-058 | 问题详情与解法编辑 | 046、057 | 增加详情、版本历史、追加编辑、状态转换、误判和删除的 Web 路由/页面；保持确认、审计和可信度只读规则。 |
-| ☐ | EKB-059 | 统计、审计与设置 | 047、049、057-058 | 增加实测统计、审计过滤、连接器/采集设置、保留期和预览确认删除的 Web 路由/页面；复用现有服务和配置契约。 |
-| ☐ | EKB-060 | 安装器与开始菜单 UI 集成 | 052、057-059 | 打包启动器与工具箱 ZIP，创建指向 `errkb.exe ui --web` 的开始菜单快捷方式，从一个 tag 只构建一次，并记录干净 VM 的 UI/安装/重启/卸载证据。 |
+| ☑ | EKB-057 | Web 工具箱基础 | 045、056 | ☑ 已完成（2026-10-22）：嵌入式回环 Web 壳 —— `internal/webshell/server.go` + `//go:embed assets`（搜索页、每次启动的 token、CSP、静态资源、`POST /api/search`），`cmd/errkb/web.go` 解析安装目录 `pg/credentials.json` 与 `migrations/`，daemon 不可达时拉起并等待管道，`cmd/errkb/ui.go` 分派 `--web`；`packaging/windows/release.ps1` 产出 `errkb-toolbox.zip`（errkb.exe、start-errkb.cmd、README、CHANGELOG、LICENSE，无凭据/日志/数据），`SHA256SUMS` 与 manifest 覆盖它并说明 ZIP 非字节可复现；`go test ./internal/webshell/` 与 `tests/e2e/ui_stats_test.go`（真实进程）全绿。偏差：后续卡片在本分支追加了详情/编辑与统计/设置页面；安装器快捷方式见 EKB-060 |
+| ☑ | EKB-058 | 问题详情与解法编辑 | 046、057 | ☑ 已完成（2026-10-22）：`get_issue` 契约与命名管道操作复用 `DetailService`，`/issues/{id}` 页面展示摘要、occurrences、版本历史、outcomes、只读信任；`/api/issues/{id}/versions`、`/api/issues/{id}/status`、`/api/solutions/{id}/status`、`/api/solutions/{id}/delete` 安装后走 daemon；追加版本与 `record_solution`/`set_status` 写回在同一数据库事务内写 `solution.version.added`、`issue.status.changed`、`solution.status.changed`、`solution.deleted` 审计；未确认删除返回 409 且零写入，未知 id 返回 404；`tests/e2e/ui_detail_test.go` 覆盖详情、追加、状态、确认语义与审计计数 |
+| ☑ | EKB-059 | 统计、审计与设置 | 047、049、057-058 | ☑ 已完成（2026-10-22）：`/stats` 与 `/settings` 页面消费 `/api/stats`（真实数据库聚合：假合并、延迟分位、节省的实测/估算拆分与假设文本）、`/api/audit`（时间/动作/对象过滤与分页）、`/api/settings`（连接器、采集与项目、保留期、HTTP）；删除走预览→确认（漂移警告），取消零写入；设置保存先校验再原子写入，失败回滚；过滤与设置响应不含 DSN/密码；`tests/e2e/ui_stats_test.go` 真实进程验证统计、审计、设置与预览后取消的问题数不变 |
+| ◐ | EKB-060 | 安装器与开始菜单 UI 集成 | 052、057-059 | ◐ 部分完成（2026-10-22）：安装器 `[Icons]` 创建「Start Error Knowledge Base」开始菜单快捷方式（隐藏 PowerShell 启动 `errkb.exe ui --web`）与卸载快捷方式，`[Files]` 携带 `start-errkb.cmd`；`release.ps1` 产出 `errkb-toolbox.zip`（白名单 5 文件、哈希进 `SHA256SUMS`/manifest、ZIP 非字节可复现已记录）；开发机静默安装 exit 0、快捷方式与启动器存在。未完成：`vm-acceptance.ps1` 的 ui 阶段、干净 VM 四页与复制证据（EKB-052 阻塞）、发布纪律（未过 052 前仅预发布） |
 
 P8 门槛：标准用户安装一个可追踪产物，从开始菜单打开工具箱，通过本地 pipe 使用四类页面，真实重启后仍可用，并能选择保留或删除数据完成卸载。
 
@@ -530,10 +530,10 @@ P8 门槛：标准用户安装一个可追踪产物，从开始菜单打开工�
 | EKB-054 | `packaging/windows/release.ps1` → `.github/workflows/release.yml` → `CHANGELOG.md`（发布前读取 `docs/acceptance-vm.md` 的验收结论）|
 | EKB-055 | `README.md` → `README.zh-CN.md` → 删除 `README.toolbox.md`、`README.toolbox.zh-CN.md` → `docs/install.md`、`docs/privacy.md` → 本文件与英文版逐节同步 |
 | EKB-056 | `cmd/errkb/db.go` → `cmd/errkb/main.go`（`db` 分发与用法）→ `cmd/errkb/run.go`（`--` 切分）→ `internal/service/pg_manage.go`（导出 `ReadCredentials`）→ `packaging/windows/autostart.ps1` → `packaging/windows/installer.iss`（迁移与自启接线）→ `docs/acceptance-vm.md` → 本文件与英文版计划行 |
-| EKB-057 | `internal/webshell/server.go` → 嵌入资源 → `cmd/errkb/web.go` → `cmd/errkb/ui.go` 分派 → 基于安装凭据的 daemon 启动 → Web 壳/e2e 测试 → `packaging/windows/start-errkb.cmd` → 中英文 `toolbox-ui` 文档 |
-| EKB-058 | Web 详情处理器与资源 → 路由/服务测试 → 详情 UI e2e → 中英文计划与状态文档 |
-| EKB-059 | Web 统计/审计/设置处理器与资源 → 路由/服务测试 → 设置 UI e2e → 中英文计划与状态文档 |
-| EKB-060 | `packaging/windows/installer.iss` → `packaging/windows/release.ps1` → 工具箱 ZIP/manifest/校验和 → `packaging/windows/vm-acceptance.ps1` → 中英文安装/验收/状态文档 |
+| EKB-057 | `internal/webshell/server.go` → `internal/webshell/assets/` → `internal/webshell/server_test.go` → `cmd/errkb/web.go` → `cmd/errkb/ui.go` 分派 → `packaging/windows/start-errkb.cmd` → `packaging/windows/release.ps1`（工具箱 ZIP） |
+| EKB-058 | `internal/contract/detail_view.go` → `internal/service/{api,backend,client,backend_solution_ops,client_solution_ops}.go` → `internal/webshell/detail.go` → `internal/webshell/writes.go` → `internal/webshell/assets/app.js` → `tests/e2e/ui_detail_test.go` |
+| EKB-059 | `internal/webshell/stats.go` → `internal/webshell/server.go` 路由 → `internal/webshell/assets/{app.js,app.css}` → `tests/e2e/ui_stats_test.go` → 中英文计划与状态文档 |
+| EKB-060 | `packaging/windows/installer.iss` → `packaging/windows/release.ps1`（`errkb-toolbox.zip`、manifest 可复现说明、`SHA256SUMS`）→ `packaging/windows/vm-acceptance.ps1` 的 ui 阶段 → 干净 VM 证据 |
 
 ## 12 公共质量门
 

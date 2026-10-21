@@ -2,24 +2,26 @@
 
 [简体中文](toolbox-ui.zh-CN.md)
 
-Status: **implementation in progress; not included in a releasable artifact**. The local
-working copy contains the EKB-057 search shell, but the current GitHub `main`, installed
-binary and release bundle do not expose its `ui --web` route. EKB-058–060 remain open.
-The target is still an interactive UI embedded in `errkb.exe`, without Chromium,
-Electron or NW.js.
+Status: **implemented on the local branch; not yet reviewed, merged or released**. The
+working copy carries the EKB-057 search shell, the EKB-058 detail and editing screens, and
+the EKB-059 statistics, audit and settings screens, all served by `errkb.exe ui --web`;
+`packaging/windows/release.ps1` writes `errkb-toolbox.zip` and the installer ships the
+launcher and shortcuts. EKB-060 still needs the clean-VM UI evidence and the release
+discipline gate (EKB-052). The target remains an interactive UI embedded in `errkb.exe`,
+without Chromium, Electron or NW.js.
 
 ## Current state
 
 | Item | State | Evidence / gap |
 | --- | --- | --- |
-| Embedded HTML/CSS/JS and loopback server | Implemented locally | `internal/webshell/`; not present in the current remote revision |
-| Token, CSP, loopback bind and search API | Implemented locally and unit-tested | Only `POST /api/search` exists |
-| `ui --web` command dispatch | Implemented locally | Existing `dist` and GitHub `main` reject `--web` |
-| Start a missing daemon | Incomplete | Does not read installed credentials; fails after the 20-second wait when DSN is absent |
-| Detail/edit pages | Not started | EKB-058 |
-| Statistics/audit/settings pages | Not started | EKB-059 |
-| Launcher, Start-menu shortcut and toolbox ZIP | Not started | EKB-060 |
-| Clean-VM UI acceptance | Blocked | Requires the completed EKB-057–060 artifact |
+| Embedded HTML/CSS/JS and loopback server | Implemented | `internal/webshell/` with a token-protected HTTP surface |
+| Token, CSP, loopback bind and APIs | Implemented and tested | search, issue detail, issue/solution writes, stats, audit, settings, deletion preview/confirm |
+| `ui --web` command dispatch | Implemented | `cmd/errkb/ui.go` hands `--web` to `cmd/errkb/web.go` |
+| Start a missing daemon | Implemented | resolves `pg/credentials.json` and migrations, spawns the daemon and waits for the pipe |
+| Detail/edit pages | Implemented | `/issues/{id}` page; appending a version, issue status, solution status and confirmed deletion are audited in the daemon transaction |
+| Statistics/audit/settings pages | Implemented | `/stats` and `/settings` pages over `/api/stats`, `/api/audit`, `/api/settings` |
+| Launcher, Start-menu shortcut and toolbox ZIP | Implemented locally | `start-errkb.cmd`, installer `[Icons]`, `errkb-toolbox.zip` in `release.ps1`; clean-VM acceptance pending |
+| Clean-VM UI acceptance | Blocked | Requires the EKB-052/EKB-060 clean Windows machine |
 
 ## Decisions
 
@@ -108,11 +110,19 @@ the installer has no `[Icons]` section, and existing binaries reject `ui --web`.
 
 ## Card split
 
-1. `EKB-057` web shell foundation: **in progress locally** — server, embedded assets,
-   token and search page exist; remote integration, credential-aware daemon startup,
-   e2e coverage and release packaging remain.
-2. `EKB-058` detail and editor screens (reuses `DetailService`).
-3. `EKB-059` stats, audit and settings screens.
-4. `EKB-060` installer/Start-menu integration and clean-VM UI evidence.
+1. `EKB-057` web shell foundation: **implemented locally** — server, embedded assets,
+   token, search page, detail-page navigation, credential-aware daemon startup, e2e
+   coverage and the toolbox ZIP in the release script; remote merge and owner review
+   remain.
+2. `EKB-058` detail and editor screens: **implemented locally** — the detail read,
+   version append, issue-status and solution-status writes, and confirmation-gated
+   deletion; every edit leaves an audit row in the same daemon transaction, and the e2e
+   test exercises the write path.
+3. `EKB-059` stats, audit and settings screens: **implemented locally** — measured
+   statistics, filtered audit page, and the settings page with a deletion preview and
+   cancel; the e2e test checks the preview leaves the rows untouched.
+4. `EKB-060` installer/Start-menu integration and clean-VM UI evidence: **partially
+   implemented** — launcher, shortcut and toolbox ZIP exist; clean-VM UI evidence and the
+   release discipline gate remain.
 
 All land in the existing release pipeline; no new runtime is introduced.

@@ -128,7 +128,8 @@ func writeCoreError(w http.ResponseWriter, err error) {
 	switch {
 	case strings.Contains(message, "not_found") || strings.Contains(message, "not found"):
 		writeError(w, http.StatusNotFound, "not_found", "no such row")
-	case strings.Contains(message, "confirmation") || strings.Contains(message, "conflict"):
+	case strings.Contains(message, "confirmation") || strings.Contains(message, "conflict") ||
+		strings.Contains(message, "preview") || strings.Contains(message, "confirm"):
 		writeError(w, http.StatusConflict, "conflict", message)
 	case strings.Contains(message, "invalid") || strings.Contains(message, "required") || strings.Contains(message, "unknown") || strings.Contains(message, "bad "):
 		writeError(w, http.StatusBadRequest, "invalid_request", message)

@@ -3,10 +3,15 @@ package webshell
 import (
 	"context"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 )
+
+// issueIDPattern keeps a path that is plainly not an id from reaching the
+// database, where it would only produce a driver error instead of a 404.
+var issueIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 // GetIssueFunc performs the daemon-side detail read. The Web layer only renders
 // the answer; every rule (confirmation, state machine, audit, trust) stays in
@@ -26,6 +31,10 @@ func (s *Server) serveIssue(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.detail == nil {
 		writeError(w, http.StatusServiceUnavailable, "unavailable", "the detail view is not available in this launch")
+		return
+	}
+	if !issueIDPattern.MatchString(issueID) {
+		writeError(w, http.StatusNotFound, "not_found", "no issue has that id")
 		return
 	}
 	response, err := s.detail(r.Context(), contract.GetIssueRequest{SchemaVersion: "v1", IssueID: issueID})

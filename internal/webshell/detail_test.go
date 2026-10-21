@@ -35,13 +35,14 @@ func TestDetailRequiresTheToken(t *testing.T) {
 }
 
 func TestDetailReturnsTheStoredIssue(t *testing.T) {
+	const issue = "11111111-1111-4111-8111-111111111111"
 	var seen string
 	server := detailServer(t, func(ctx context.Context, request contract.GetIssueRequest) (contract.GetIssueResponse, error) {
 		seen = request.IssueID
 		return contract.GetIssueResponse{
 			SchemaVersion: "v1",
 			Issue: contract.IssueDetailV{
-				ID:          "issue-1",
+				ID:          issue,
 				Fingerprint: "4202fb44db19",
 				Title:       "pnpm build failed",
 				Status:      "resolved",
@@ -60,14 +61,14 @@ func TestDetailReturnsTheStoredIssue(t *testing.T) {
 			},
 		}, nil
 	})
-	request := httptest.NewRequest(http.MethodGet, "/api/issues/issue-1", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/issues/11111111-1111-4111-8111-111111111111", nil)
 	request.Header.Set("x-errkb-token", server.Token())
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
 		t.Fatalf("got %d, want 200: %s", response.Code, response.Body.String())
 	}
-	if seen != "issue-1" {
+	if seen != "11111111-1111-4111-8111-111111111111" {
 		t.Fatalf("the daemon saw issue %q", seen)
 	}
 	body := response.Body.String()
@@ -82,7 +83,7 @@ func TestDetailReportsAMissingIssue(t *testing.T) {
 	server := detailServer(t, func(ctx context.Context, request contract.GetIssueRequest) (contract.GetIssueResponse, error) {
 		return contract.GetIssueResponse{}, errors.New("not_found: no issue has that id")
 	})
-	request := httptest.NewRequest(http.MethodGet, "/api/issues/nope", nil)
+	request := httptest.NewRequest(http.MethodGet, "/api/issues/22222222-2222-4222-8222-222222222222", nil)
 	request.Header.Set("x-errkb-token", server.Token())
 	response := httptest.NewRecorder()
 	server.Handler().ServeHTTP(response, request)

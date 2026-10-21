@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/ui"
 )
 
 //go:embed assets
@@ -38,6 +39,9 @@ type Server struct {
 	setStatus         SetStatusFunc
 	setSolutionStatus SetSolutionStatusFunc
 	deleteSolution    DeleteSolutionFunc
+	stats             StatsFunc
+	audit             AuditFunc
+	settings          *ui.SettingsPage
 }
 
 // New builds the shell with a fresh per-launch token and search only.
@@ -93,10 +97,24 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/search", s.serveSearch)
 	mux.HandleFunc("GET /api/issues/{id}", s.serveIssue)
 	mux.HandleFunc("GET /issues/{id}", s.servePage)
+	mux.HandleFunc("GET /stats", s.servePage)
+	mux.HandleFunc("GET /settings", s.servePage)
 	mux.HandleFunc("POST /api/issues/{id}/versions", s.serveVersion)
 	mux.HandleFunc("POST /api/issues/{id}/status", s.serveIssueStatus)
 	mux.HandleFunc("POST /api/solutions/{id}/status", s.serveSolutionStatus)
 	mux.HandleFunc("POST /api/solutions/{id}/delete", s.serveSolutionDelete)
+	mux.HandleFunc("GET /api/stats", s.serveStats)
+	mux.HandleFunc("GET /api/audit", s.serveAudit)
+	mux.HandleFunc("GET /api/settings", s.serveSettings)
+	mux.HandleFunc("POST /api/settings/connectors", s.serveConnectorToggle)
+	mux.HandleFunc("POST /api/settings/capture", s.serveCaptureToggle)
+	mux.HandleFunc("POST /api/settings/projects", s.serveProjectToggle)
+	mux.HandleFunc("POST /api/settings/retention", s.serveRetention)
+	mux.HandleFunc("POST /api/settings/retention/apply", s.serveRetentionApply)
+	mux.HandleFunc("POST /api/settings/http", s.serveHTTPToggle)
+	mux.HandleFunc("POST /api/deletions/preview", s.serveDeletionPreview)
+	mux.HandleFunc("POST /api/deletions/confirm", s.serveDeletionConfirm)
+	mux.HandleFunc("POST /api/deletions/cancel", s.serveDeletionCancel)
 	return withHeaders(mux)
 }
 

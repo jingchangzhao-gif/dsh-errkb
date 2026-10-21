@@ -2,20 +2,20 @@
 
 [English](toolbox-ui.md)
 
-状态：**实施中，尚未进入可发布产物。** 本地工作副本包含 EKB-057 的搜索壳，但 GitHub 当前 `main`、已安装二进制与发布包都没有暴露 `ui --web` 路由。EKB-058～060 尚未完成。目标仍是在 `errkb.exe` 中嵌入交互式 UI，不引入 Chromium、Electron 或 NW.js。
+状态：**已在本地分支实现，尚未评审、合入或发布。** 工作副本包含 EKB-057 的搜索壳、EKB-058 的详情与编辑页面、EKB-059 的统计、审计与设置页面，统一由 `errkb.exe ui --web` 提供；`packaging/windows/release.ps1` 会产出 `errkb-toolbox.zip`，安装器随包携带启动器与快捷方式。EKB-060 仍缺干净 VM 的 UI 证据与发布纪律门槛（EKB-052）。目标仍是在 `errkb.exe` 中嵌入交互式 UI，不引入 Chromium、Electron 或 NW.js。
 
 ## 当前状态
 
 | 项目 | 状态 | 证据或缺口 |
 | --- | --- | --- |
-| 嵌入式 HTML/CSS/JS 与回环服务器 | 本地已实现 | 位于 `internal/webshell/`；远端当前修订中不存在 |
-| token、CSP、回环绑定与搜索 API | 本地已实现并通过单元测试 | 目前只有 `POST /api/search` |
-| `ui --web` 命令分派 | 本地已实现 | 现有 `dist` 与 GitHub `main` 都拒绝 `--web` |
-| daemon 不可达时自动启动 | 不完整 | 不读取安装凭据；没有 DSN 时等待 20 秒后失败 |
-| 详情与编辑页面 | 未开始 | EKB-058 |
-| 统计、审计与设置页面 | 未开始 | EKB-059 |
-| 启动器、开始菜单快捷方式与工具箱 ZIP | 未开始 | EKB-060 |
-| 干净 VM UI 验收 | 阻塞 | 依赖完成后的 EKB-057～060 产物 |
+| 嵌入式 HTML/CSS/JS 与回环服务器 | 已实现 | `internal/webshell/`，受 token 保护的 HTTP 面 |
+| token、CSP、回环绑定与 API | 已实现并通过测试 | 搜索、问题详情、问题/解法写入、统计、审计、设置、删除预览与确认 |
+| `ui --web` 命令分派 | 已实现 | `cmd/errkb/ui.go` 把 `--web` 交给 `cmd/errkb/web.go` |
+| daemon 不可达时自动启动 | 已实现 | 读取 `pg/credentials.json` 与 migrations，拉起 daemon 并等待管道 |
+| 详情与编辑页面 | 已实现 | `/issues/{id}` 页面；追加版本、问题状态、解法状态与确认删除都在 daemon 事务内写审计 |
+| 统计、审计与设置页面 | 已实现 | `/stats` 与 `/settings` 页面，分别消费 `/api/stats`、`/api/audit`、`/api/settings` |
+| 启动器、开始菜单快捷方式与工具箱 ZIP | 本地已实现 | `start-errkb.cmd`、安装器 `[Icons]`、`release.ps1` 产出 `errkb-toolbox.zip`；待干净 VM 验收 |
+| 干净 VM UI 验收 | 阻塞 | 需要 EKB-052/EKB-060 的干净 Windows 机器 |
 
 ## 架构决定
 
@@ -79,8 +79,8 @@ start-errkb.cmd / 开始菜单快捷方式
 
 ## 任务顺序
 
-1. **EKB-057：本地进行中。** 已有服务器、嵌入资源、token 和搜索页；仍需远端集成、安装凭据启动、e2e 和发布打包。
-2. **EKB-058：未开始。** 详情与解法编辑。
-3. **EKB-059：未开始。** 统计、审计和设置。
-4. **EKB-060：未开始。** 安装器、开始菜单、便携 ZIP 与干净 VM UI 验收。
+1. **EKB-057：本地已实现。** 服务器、嵌入资源、token、搜索页、详情页导航、凭据感知的 daemon 启动、e2e 与发布脚本中的工具箱 ZIP 都在；待评审与合入。
+2. **EKB-058：本地已实现。** 详情读取、追加版本、问题状态与解法状态写入、需确认的删除；每次编辑都在 daemon 事务内留下审计行，e2e 覆盖写入路径。
+3. **EKB-059：本地已实现。** 实测统计、可过滤的审计页，以及带删除预览与取消的设置页；e2e 验证预览不写数据。
+4. **EKB-060：部分实现。** 启动器、快捷方式与工具箱 ZIP 已有；干净 VM 的 UI 证据与发布纪律门槛仍缺。
 

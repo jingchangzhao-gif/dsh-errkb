@@ -131,7 +131,9 @@ function renderVersions(solutions) {
       versions.push({ status: solution.status, version });
     }
   }
-  versions.sort((left, right) => (right.version.version || 0) - (left.version.version || 0));
+  versions.sort(
+    (left, right) => (right.version.version || 0) - (left.version.version || 0),
+  );
   if (versions.length === 0) return "<p>no solution recorded yet</p>";
   return versions
     .map((entry) => {
@@ -142,21 +144,43 @@ function renderVersions(solutions) {
       if (version.risks) copy.push("risks: " + version.risks);
       return (
         '<article class="version">' +
-        "<h3>v" + version.version + " · " + escapeText(entry.status) + "</h3>" +
-        "<pre>" + escapeText(version.body) + "</pre>" +
+        "<h3>v" +
+        version.version +
+        " · " +
+        escapeText(entry.status) +
+        "</h3>" +
+        "<pre>" +
+        escapeText(version.body) +
+        "</pre>" +
         '<p class="meta">' +
-        (version.source ? "<span>source " + escapeText(version.source) + "</span>" : "") +
-        (version.applies_to ? "<span>applies to " + escapeText(version.applies_to) + "</span>" : "") +
-        (version.risks ? "<span>risks " + escapeText(version.risks) + "</span>" : "") +
+        (version.source
+          ? "<span>source " + escapeText(version.source) + "</span>"
+          : "") +
+        (version.applies_to
+          ? "<span>applies to " + escapeText(version.applies_to) + "</span>"
+          : "") +
+        (version.risks
+          ? "<span>risks " + escapeText(version.risks) + "</span>"
+          : "") +
         (version.preconditions
-          ? "<span>preconditions " + escapeText(version.preconditions) + "</span>"
+          ? "<span>preconditions " +
+            escapeText(version.preconditions) +
+            "</span>"
           : "") +
         "</p>" +
-        '<button type="button" data-copy="' + escapeText(copy.join("\n")) + '">Copy fix</button>' +
+        '<button type="button" data-copy="' +
+        escapeText(copy.join("\n")) +
+        '">Copy fix</button>' +
         "<p>" +
-        '<button type="button" data-solution="' + escapeText(entry.solution.id) + '" data-solution-action="status" data-solution-status="verified">Verify</button>' +
-        '<button type="button" data-solution="' + escapeText(entry.solution.id) + '" data-solution-action="status" data-solution-status="deprecated" data-confirmed="true">Deprecate</button>' +
-        '<button type="button" data-solution="' + escapeText(entry.solution.id) + '" data-solution-action="delete">Delete solution</button>' +
+        '<button type="button" data-solution="' +
+        escapeText(entry.solution.id) +
+        '" data-solution-action="status" data-solution-status="verified">Verify</button>' +
+        '<button type="button" data-solution="' +
+        escapeText(entry.solution.id) +
+        '" data-solution-action="status" data-solution-status="deprecated" data-confirmed="true">Deprecate</button>' +
+        '<button type="button" data-solution="' +
+        escapeText(entry.solution.id) +
+        '" data-solution-action="delete">Delete solution</button>' +
         "</p>" +
         "</article>"
       );
@@ -183,17 +207,38 @@ function renderDetail(detail) {
   const trust = detail.trust || {};
   return (
     '<p><a href="/">← back to search</a></p>' +
-    "<h2>" + escapeText(detail.title) + "</h2>" +
-    '<p class="meta"><span>issue ' + escapeText(detail.id) + "</span>" +
-    "<span>fingerprint " + escapeText(detail.fingerprint) + "</span>" +
-    "<span>" + escapeText(detail.status) + "</span>" +
-    "<span>" + detail.hits + " hit(s)</span></p>" +
-    '<p class="reason">trust ' + Number(trust.score || 0).toFixed(2) +
-    " (based on " + Number(trust.samples || 0) + " recorded outcome(s); read-only)</p>" +
-    "<h3>Environment</h3><ul>" + (environmentRows || "<li>not recorded</li>") + "</ul>" +
-    "<h3>Solution history (newest first)</h3>" + renderVersions(detail.solutions) +
-    "<h3>Outcomes</h3><p>success " + counts.success + " · failure " + counts.failure +
-    " · unknown " + counts.unknown + "</p>"
+    "<h2>" +
+    escapeText(detail.title) +
+    "</h2>" +
+    '<p class="meta"><span>issue ' +
+    escapeText(detail.id) +
+    "</span>" +
+    "<span>fingerprint " +
+    escapeText(detail.fingerprint) +
+    "</span>" +
+    "<span>" +
+    escapeText(detail.status) +
+    "</span>" +
+    "<span>" +
+    detail.hits +
+    " hit(s)</span></p>" +
+    '<p class="reason">trust ' +
+    Number(trust.score || 0).toFixed(2) +
+    " (based on " +
+    Number(trust.samples || 0) +
+    " recorded outcome(s); read-only)</p>" +
+    "<h3>Environment</h3><ul>" +
+    (environmentRows || "<li>not recorded</li>") +
+    "</ul>" +
+    "<h3>Solution history (newest first)</h3>" +
+    renderVersions(detail.solutions) +
+    "<h3>Outcomes</h3><p>success " +
+    counts.success +
+    " · failure " +
+    counts.failure +
+    " · unknown " +
+    counts.unknown +
+    "</p>"
   );
 }
 
@@ -210,7 +255,9 @@ async function loadDetail() {
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
       main.innerHTML =
-        '<p class="error">' + escapeText(payload.message || "could not load the issue") + "</p>" +
+        '<p class="error">' +
+        escapeText(payload.message || "could not load the issue") +
+        "</p>" +
         '<p><a href="/">back to search</a></p>';
       return;
     }
@@ -271,7 +318,10 @@ function wireEdit(issueID, main) {
           "/api/issues/" + encodeURIComponent(issueID) + "/versions",
           {
             method: "POST",
-            headers: { "content-type": "application/json", "x-errkb-token": token },
+            headers: {
+              "content-type": "application/json",
+              "x-errkb-token": token,
+            },
             body: JSON.stringify({
               body: main.querySelector("#version-body").value,
               preconditions: main.querySelector("#version-preconditions").value,
@@ -302,7 +352,8 @@ function wireEdit(issueID, main) {
           button.textContent = "Confirm delete";
           const note = document.createElement("p");
           note.className = "warning";
-          note.textContent = "This removes the solution and all of its version history. Click Confirm delete to continue.";
+          note.textContent =
+            "This removes the solution and all of its version history. Click Confirm delete to continue.";
           button.after(note);
           return;
         }
@@ -319,7 +370,10 @@ function wireEdit(issueID, main) {
       try {
         const response = await fetch(url, {
           method: "POST",
-          headers: { "content-type": "application/json", "x-errkb-token": token },
+          headers: {
+            "content-type": "application/json",
+            "x-errkb-token": token,
+          },
           body: body,
         });
         const payload = await response.json().catch(() => ({}));
@@ -341,8 +395,13 @@ function wireEdit(issueID, main) {
           "/api/issues/" + encodeURIComponent(issueID) + "/status",
           {
             method: "POST",
-            headers: { "content-type": "application/json", "x-errkb-token": token },
-            body: JSON.stringify({ status: button.getAttribute("data-status") }),
+            headers: {
+              "content-type": "application/json",
+              "x-errkb-token": token,
+            },
+            body: JSON.stringify({
+              status: button.getAttribute("data-status"),
+            }),
           },
         );
         const payload = await response.json().catch(() => ({}));
@@ -358,4 +417,541 @@ function wireEdit(issueID, main) {
   }
 }
 
-loadDetail();
+// ---- shared helpers (EKB-059) --------------------------------------------
+async function fetchJSON(url, options) {
+  const response = await fetch(
+    url,
+    Object.assign({ headers: { "x-errkb-token": token } }, options || {}),
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.message || "the errkb core refused the request");
+  }
+  return payload;
+}
+
+function postJSON(url, body) {
+  return fetchJSON(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-errkb-token": token },
+    body: JSON.stringify(body),
+  });
+}
+
+function number(value) {
+  return Number(value || 0);
+}
+
+function percent(part, whole) {
+  return whole ? ((number(part) / number(whole)) * 100).toFixed(1) + "%" : "–";
+}
+
+function milliseconds(value) {
+  return number(value).toFixed(1) + " ms";
+}
+
+function formatTime(value) {
+  if (!value) return "not recorded";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? escapeText(String(value))
+    : parsed.toLocaleString();
+}
+
+function mainElement() {
+  return document.querySelector("main");
+}
+
+// ---- statistics and audit (EKB-059) --------------------------------------
+function metricRow(label, value, note, isAlert) {
+  return (
+    '<tr class="' +
+    (isAlert ? "danger" : "") +
+    '">' +
+    "<th>" +
+    label +
+    "</th>" +
+    '<td class="' +
+    (isAlert ? "danger" : "") +
+    '">' +
+    escapeText(String(value)) +
+    "</td>" +
+    "<td>" +
+    escapeText(note || "") +
+    "</td>" +
+    "</tr>"
+  );
+}
+
+function renderStatsPage(stats) {
+  const retrieval = stats.Retrieval || {};
+  const solutions = stats.Solutions || {};
+  const injections = stats.Injections || {};
+  const repeats = stats.Repeats || {};
+  const latency = stats.Latency || {};
+  const corrections = stats.Corrections || {};
+  const faults = stats.Faults || {};
+  const savings = stats.Savings || {};
+  const falseMerges = number(retrieval.FalseMerges);
+  return (
+    '<p class="meta"><span>generated ' +
+    formatTime(stats.GeneratedAt) +
+    "</span></p>" +
+    "<h2>Core metrics</h2>" +
+    '<table class="metrics">' +
+    metricRow(
+      "False merges (target: 0)",
+      falseMerges,
+      falseMerges === 0
+        ? "no approximate row was reused as exact"
+        : "a wrong merge happened — investigate before trusting recall",
+      falseMerges > 0,
+    ) +
+    metricRow(
+      "Retrieval rounds",
+      number(retrieval.Rounds),
+      "grouped retrieval calls",
+    ) +
+    metricRow(
+      "Exact fingerprint hits",
+      number(retrieval.ExactTopOne),
+      "top-1 exact match",
+    ) +
+    metricRow(
+      "Approximate top-1 precision",
+      percent(retrieval.ApproximateTopOneHits, retrieval.ApproximateTopOneRuns),
+      "confirmed by a recorded success outcome; a lower bound",
+    ) +
+    metricRow(
+      "Approximate top-3 precision",
+      percent(
+        retrieval.ApproximateTopThreeHits,
+        retrieval.ApproximateTopThreeRuns,
+      ),
+      "confirmed by a recorded success outcome; a lower bound",
+    ) +
+    metricRow(
+      "Retrieval latency p50 / p95",
+      milliseconds(retrieval.P50Milliseconds) +
+        " / " +
+        milliseconds(retrieval.P95Milliseconds),
+      "measured over " +
+        number(retrieval.LatencySamples) +
+        " sample(s); the 150 ms gate applies on a 100k-issue dataset",
+    ) +
+    metricRow(
+      "Solution successes / failures",
+      number(solutions.Success) + " / " + number(solutions.Failure),
+      "unknown outcomes: " + number(solutions.Unknown),
+    ) +
+    metricRow(
+      "Success rate",
+      percent(
+        solutions.Success,
+        number(solutions.Success) + number(solutions.Failure),
+      ),
+      "successes over decided outcomes",
+    ) +
+    metricRow(
+      "Injected text",
+      number(injections.Characters) + " characters",
+      number(injections.Notices) + " notice(s) returned to the host",
+    ) +
+    metricRow(
+      "Repeated diagnoses",
+      number(repeats.RepeatedHits),
+      "across " +
+        number(repeats.RepeatedIssues) +
+        " issue(s) seen more than once",
+    ) +
+    metricRow(
+      "Capture-to-notice latency p50",
+      milliseconds(latency.P50Milliseconds),
+      "measured over " + number(latency.Samples) + " notice(s)",
+    ) +
+    metricRow(
+      "Manual corrections",
+      number(corrections.Total),
+      (corrections.ByAction || [])
+        .map((row) => row.Action + " " + row.Count)
+        .join(", ") || "none recorded",
+    ) +
+    metricRow(
+      "Persisted faults",
+      number(faults.Total),
+      (faults.ByAction || [])
+        .map((row) => row.Action + " " + row.Count)
+        .join(", ") || "none; queue and connector faults have no table yet",
+    ) +
+    "</table>" +
+    "<h2>Savings</h2>" +
+    '<p class="meta measured">measured · ' +
+    number(injections.Characters) +
+    " characters (" +
+    number(injections.EstimatedTokens) +
+    " tokens, estimated size) were handed back instead of re-explained</p>" +
+    '<p class="meta estimated">estimated · ~' +
+    number(savings.AvoidedTokens) +
+    " tokens across " +
+    number(savings.AvoidedDiagnoses) +
+    " avoided diagnosis(es)</p>" +
+    '<p class="reason">' +
+    escapeText(savings.Assumption || "assumption not recorded") +
+    "</p>" +
+    "<h2>Audit trail</h2>" +
+    '<form id="audit-filter" class="filters">' +
+    '<label>Action <input id="audit-action" placeholder="delete.scope" /></label>' +
+    '<label>From <input id="audit-from" type="datetime-local" /></label>' +
+    '<label>To <input id="audit-to" type="datetime-local" /></label>' +
+    '<label>Limit <input id="audit-limit" type="number" min="1" max="200" value="50" /></label>' +
+    '<button type="submit">Filter</button>' +
+    "</form>" +
+    '<p id="audit-status" role="status"></p>' +
+    '<table class="trail"><thead><tr><th>time</th><th>action</th><th>target</th><th>operator</th><th>detail</th></tr></thead><tbody id="audit-rows"></tbody></table>' +
+    '<p id="audit-page" class="meta"></p>'
+  );
+}
+
+function renderAuditPage(page) {
+  const rows = page.Records || [];
+  const tbody = document.querySelector("#audit-rows");
+  tbody.innerHTML =
+    rows
+      .map((row) => {
+        const detail = row.Detail ? JSON.stringify(row.Detail) : "";
+        return (
+          "<tr><td>" +
+          formatTime(row.OccurredAt) +
+          "</td>" +
+          "<td>" +
+          escapeText(row.Action) +
+          "</td>" +
+          "<td>" +
+          escapeText(row.Entity + " " + row.EntityID) +
+          "</td>" +
+          "<td>" +
+          escapeText(row.Operator || row.Source) +
+          "</td>" +
+          '<td class="detail">' +
+          escapeText(detail) +
+          "</td></tr>"
+        );
+      })
+      .join("") || '<tr><td colspan="5">no matching audit rows</td></tr>';
+  document.querySelector("#audit-page").textContent =
+    "showing " +
+    rows.length +
+    " of " +
+    number(page.Total) +
+    " row(s) · limit " +
+    number(page.Limit) +
+    " · offset " +
+    number(page.Offset);
+}
+
+async function loadAudit() {
+  const status = document.querySelector("#audit-status");
+  const params = new URLSearchParams();
+  const action = document.querySelector("#audit-action").value.trim();
+  const from = document.querySelector("#audit-from").value;
+  const to = document.querySelector("#audit-to").value;
+  const limit = document.querySelector("#audit-limit").value;
+  if (action) params.set("action", action);
+  if (from) params.set("from", new Date(from).toISOString());
+  if (to) params.set("to", new Date(to).toISOString());
+  if (limit) params.set("limit", limit);
+  status.textContent = "loading…";
+  status.className = "";
+  try {
+    renderAuditPage(await fetchJSON("/api/audit?" + params.toString()));
+    status.textContent = "";
+  } catch (error) {
+    status.textContent = error.message;
+    status.className = "error";
+  }
+}
+
+async function loadStatsPage() {
+  const main = mainElement();
+  main.innerHTML = '<p id="status" role="status">loading…</p>';
+  try {
+    const payload = await fetchJSON("/api/stats");
+    main.innerHTML = renderStatsPage(payload.stats || {});
+    const form = document.querySelector("#audit-filter");
+    if (form)
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        loadAudit();
+      });
+    await loadAudit();
+  } catch (error) {
+    main.innerHTML = '<p class="error">' + escapeText(error.message) + "</p>";
+  }
+}
+
+// ---- settings (EKB-059) --------------------------------------------------
+function renderSettingsPage(view) {
+  const capture = view.Capture || {};
+  const retention = view.Retention || {};
+  const http = view.HTTP || {};
+  const pipe = view.Pipe || {};
+  const connectors =
+    (view.connectors || [])
+      .map(
+        (connector) =>
+          "<tr><td>" +
+          escapeText(connector.name) +
+          "</td>" +
+          "<td>" +
+          escapeText(connector.channel) +
+          "</td>" +
+          "<td>" +
+          escapeText(connector.version || "unknown") +
+          "</td>" +
+          "<td>" +
+          formatTime(connector.last_active) +
+          "</td>" +
+          '<td><button type="button" class="toggle" data-connector="' +
+          escapeText(connector.name) +
+          '" data-enabled="' +
+          (connector.enabled ? "1" : "0") +
+          '">' +
+          (connector.enabled ? "Disable" : "Enable") +
+          "</button></td></tr>",
+      )
+      .join("") ||
+    '<tr><td colspan="5">no connector has recorded an event yet</td></tr>';
+  const pending = view.pending_deletion;
+  return (
+    '<p class="meta"><span>' +
+    escapeText(view.status || "") +
+    "</span></p>" +
+    '<section class="settings"><h2>Capture</h2>' +
+    "<p>Global capture is <strong>" +
+    (capture.enabled ? "on" : "off") +
+    "</strong>. " +
+    '<button type="button" id="capture-toggle" data-enabled="' +
+    (capture.enabled ? "1" : "0") +
+    '">' +
+    (capture.enabled ? "Pause capture" : "Resume capture") +
+    "</button></p>" +
+    "<p>Paused projects: " +
+    escapeText((capture.paused_projects || []).join(", ") || "none") +
+    "</p>" +
+    '<p><label>Pause a project <input id="project-pause" placeholder="project key" /></label> ' +
+    '<button type="button" id="project-pause-apply">Pause</button></p>' +
+    "<h2>Connectors</h2>" +
+    '<table class="connectors"><thead><tr><th>connector</th><th>channel</th><th>version</th><th>last active</th><th></th></tr></thead><tbody>' +
+    connectors +
+    "</tbody></table>" +
+    "<h2>Retention</h2>" +
+    '<p class="reason">Retention runs when you press the button; it is not scheduled. Delete previews never drop data until confirmed.</p>' +
+    '<form id="retention-form" class="filters">' +
+    '<label>Sample days <input id="retention-sample" type="number" min="0" value="' +
+    number(retention.sample_days) +
+    '" /></label>' +
+    '<label>Normalized days <input id="retention-normalized" type="number" min="0" value="' +
+    number(retention.normalized_days) +
+    '" /></label>' +
+    '<label>Audit days <input id="retention-audit" type="number" min="0" value="' +
+    number(retention.audit_days) +
+    '" /></label>' +
+    '<button type="submit">Save retention</button>' +
+    '<button type="button" id="retention-apply" class="danger">Apply retention now</button>' +
+    "</form>" +
+    "<h2>Loopback HTTP</h2>" +
+    "<p>Status: " +
+    (http.enabled ? "enabled" : "disabled") +
+    " · token " +
+    (http.token_set ? "set" : "missing") +
+    " · host " +
+    escapeText(http.host || "127.0.0.1") +
+    "</p>" +
+    '<p><label>Token <input id="http-token" type="password" placeholder="at least 32 characters" /></label> ' +
+    '<button type="button" id="http-enable">Enable HTTP</button> ' +
+    '<button type="button" id="http-disable">Disable HTTP</button></p>' +
+    "<h2>Names</h2><p>Pipe " +
+    (pipe.enabled ? "enabled" : "disabled") +
+    " as " +
+    escapeText(pipe.name) +
+    "</p>" +
+    "<h2>Deletion</h2>" +
+    '<p class="reason">Every deletion previews counts first; the second call records an audit row. Nothing is removed by the first click.</p>' +
+    '<form id="deletion-form" class="filters">' +
+    '<label>Project <input id="deletion-project" placeholder="project key" /></label>' +
+    '<button type="submit">Preview deletion</button>' +
+    "</form>" +
+    '<p id="deletion-summary" class="warning">' +
+    escapeText(pending ? pending.summary : "") +
+    "</p>" +
+    '<p id="deletion-actions" style="display:' +
+    (pending ? "block" : "none") +
+    '">' +
+    '<button type="button" id="deletion-confirm" class="danger">Confirm deletion</button> ' +
+    '<button type="button" id="deletion-cancel">Cancel</button></p>' +
+    '<p id="settings-status" role="status"></p>' +
+    "</section>"
+  );
+}
+
+async function refreshSettings(main) {
+  const view = await fetchJSON("/api/settings");
+  main.innerHTML = renderSettingsPage(view);
+  wireSettings(main);
+}
+
+function wireSettings(main) {
+  const status = main.querySelector("#settings-status");
+  const say = (text, isError) => {
+    status.textContent = text;
+    status.className = isError ? "error" : "";
+  };
+  const run = async (promise, message) => {
+    say("saving…");
+    try {
+      await promise;
+      say(message);
+      await refreshSettings(main);
+    } catch (error) {
+      say(error.message, true);
+    }
+  };
+  const capture = main.querySelector("#capture-toggle");
+  if (capture) {
+    capture.addEventListener("click", () => {
+      const enabled = capture.getAttribute("data-enabled") !== "1";
+      run(
+        postJSON("/api/settings/capture", { enabled }),
+        enabled ? "capture resumed" : "capture paused",
+      );
+    });
+  }
+  const pauseButton = main.querySelector("#project-pause-apply");
+  if (pauseButton) {
+    pauseButton.addEventListener("click", () => {
+      const project = main.querySelector("#project-pause").value.trim();
+      run(
+        postJSON("/api/settings/projects", { project, enabled: false }),
+        "project paused",
+      );
+    });
+  }
+  for (const button of main.querySelectorAll("[data-connector]")) {
+    button.addEventListener("click", () => {
+      const enabled = button.getAttribute("data-enabled") !== "1";
+      run(
+        postJSON("/api/settings/connectors", {
+          name: button.getAttribute("data-connector"),
+          enabled,
+        }),
+        enabled ? "connector enabled" : "connector disabled",
+      );
+    });
+  }
+  const retention = main.querySelector("#retention-form");
+  if (retention) {
+    retention.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const days = (id) => Number(main.querySelector(id).value);
+      run(
+        postJSON("/api/settings/retention", {
+          sample_days: days("#retention-sample"),
+          normalized_days: days("#retention-normalized"),
+          audit_days: days("#retention-audit"),
+        }),
+        "retention periods saved",
+      );
+    });
+  }
+  const apply = main.querySelector("#retention-apply");
+  if (apply) {
+    apply.addEventListener("click", () => {
+      if (
+        !window.confirm(
+          "Run one retention pass now? Rows older than the configured periods are removed.",
+        )
+      )
+        return;
+      run(
+        postJSON("/api/settings/retention/apply", { confirmed: true }),
+        "retention pass ran",
+      );
+    });
+  }
+  const httpEnable = main.querySelector("#http-enable");
+  if (httpEnable) {
+    httpEnable.addEventListener("click", () => {
+      run(
+        postJSON("/api/settings/http", {
+          enabled: true,
+          token: main.querySelector("#http-token").value,
+        }),
+        "HTTP listener enabled",
+      );
+    });
+  }
+  const httpDisable = main.querySelector("#http-disable");
+  if (httpDisable) {
+    httpDisable.addEventListener("click", () =>
+      run(
+        postJSON("/api/settings/http", { enabled: false }),
+        "HTTP listener disabled",
+      ),
+    );
+  }
+  const deletion = main.querySelector("#deletion-form");
+  if (deletion) {
+    deletion.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      say("previewing…");
+      try {
+        const counts = await postJSON("/api/deletions/preview", {
+          project_key: main.querySelector("#deletion-project").value.trim(),
+        });
+        main.querySelector("#deletion-summary").textContent = counts.summary;
+        main.querySelector("#deletion-actions").style.display = "block";
+        say("preview ready; nothing has been deleted yet");
+      } catch (error) {
+        say(error.message, true);
+      }
+    });
+  }
+  const confirm = main.querySelector("#deletion-confirm");
+  if (confirm) {
+    confirm.addEventListener("click", () => {
+      if (
+        !window.confirm(
+          "Delete what the preview counted? This recorded audit row cannot be reverted.",
+        )
+      )
+        return;
+      run(postJSON("/api/deletions/confirm", {}), "deletion done");
+    });
+  }
+  const cancel = main.querySelector("#deletion-cancel");
+  if (cancel) {
+    cancel.addEventListener("click", () =>
+      run(postJSON("/api/deletions/cancel", {}), "deletion cancelled"),
+    );
+  }
+}
+
+async function loadSettingsPage() {
+  const main = mainElement();
+  main.innerHTML = '<p id="status" role="status">loading…</p>';
+  try {
+    await refreshSettings(main);
+  } catch (error) {
+    main.innerHTML = '<p class="error">' + escapeText(error.message) + "</p>";
+  }
+}
+
+// ---- entry point ---------------------------------------------------------
+const route = location.pathname.replace(/\/$/, "") || "/";
+if (route === "/stats") {
+  loadStatsPage();
+} else if (route === "/settings") {
+  loadSettingsPage();
+} else {
+  loadDetail();
+}

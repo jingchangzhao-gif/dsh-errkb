@@ -10,6 +10,29 @@ They never claim more than the acceptance records in this repository prove.
 
 ## [Unreleased]
 
+### Added
+
+- Web toolbox (local branch, not yet released): `errkb ui --web` serves an
+  embedded loopback interface with a per-launch token and a strict content
+  security policy. It covers search, issue detail with version history and
+  outcome counts, appending a solution version, issue and solution status
+  changes, confirmation-gated deletion, measured statistics, the audit trail
+  with filters, and the connector/privacy settings page. Every edit goes
+  through the daemon and leaves an audit row in the same database transaction.
+- The release bundle now carries `errkb-toolbox.zip` (the binary plus the
+  launcher and documentation) next to the installer, with its hash in
+  `SHA256SUMS` and a documented ZIP reproducibility exception in the manifest.
+- The installer registers a Start-menu shortcut for the toolbox and ships the
+  launcher.
+
+### Fixed
+
+- The installed product now applies database migrations during setup
+  (`errkb db migrate`) instead of leaving the first run stuck on a missing
+  ledger.
+- Logon autostart uses the per-user Run key; registering a Scheduled Task
+  requires administrator rights and silently failed for standard users.
+
 ## [0.1.0] - 2026-10-21
 
 The first release. It is a local error knowledge base: capture the failure once,

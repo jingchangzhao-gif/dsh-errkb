@@ -16,8 +16,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/audit"
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/service"
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/ui"
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/webshell"
 )
 
@@ -32,6 +35,7 @@ func runWeb(args []string, stdout, stderr io.Writer) int {
 	dsn := flags.String("dsn", os.Getenv("ERRKB_DSN"), "connection string used only when the daemon must be started")
 	credentials := flags.String("credentials", "", "installer credentials.json (default: pg\\credentials.json next to errkb.exe)")
 	migrations := flags.String("migrations", "", "migration directory (default: migrations next to errkb.exe, then db/migrations)")
+	configPath := flags.String("config", "", "settings file (default: config.yaml next to errkb.exe)")
 	if err := flags.Parse(args); err != nil {
 		return exitUsage
 	}
@@ -42,6 +46,11 @@ func runWeb(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb ui: %v\n", err)
 		return exitUsage
+	}
+	if strings.TrimSpace(*configPath) == "" {
+		if executable, exeErr := os.Executable(); exeErr == nil {
+			*configPath = filepath.Join(filepath.Dir(executable), "config.yaml")
+		}
 	}
 	client, err := ensureDaemon(ctx, resolvedDSN, resolvedMigrations, stderr)
 	if err != nil {
@@ -63,6 +72,38 @@ func runWeb(args []string, stdout, stderr io.Writer) int {
 		return exitInternal
 	}
 	server.EnableWrites(client.RecordSolution, client.SetStatus, client.SetSolutionStatus, client.DeleteSolution)
+	// The statistics, audit and settings pages read PostgreSQL directly: they
+	// are local-UI features, not daemon operations, so the pipe contract stays
+	// unchanged. The first launch derives a settings document from the
+	// installer credentials; every later edit goes through the same
+	// contract.Config validation as the rest of the product.
+	if resolvedDSN != "" && *configPath != "" {
+		pool, poolErr := pgxpool.New(ctx, resolvedDSN)
+		if poolErr != nil {
+			fmt.Fprintf(stderr, "errkb ui: connect for stats and settings: %v\n", poolErr)
+		} else {
+			defer pool.Close()
+			store := ui.FileSettingsStore{Path: *configPath}
+			if settingsErr := ensureSettingsFile(store, resolvedDSN); settingsErr != nil {
+				fmt.Fprintf(stderr, "errkb ui: prepare the settings file: %v\n", settingsErr)
+			}
+			server.EnableSettings(ui.NewSettingsPage(store, &ui.PostgresSettings{Pool: pool}))
+			auditService := audit.NewService(pool)
+			server.EnableStatistics(
+				func(ctx context.Context) (audit.Stats, error) {
+					return auditService.Collect(ctx)
+				},
+				func(ctx context.Context, filter audit.Filter) (audit.Page, error) {
+					connection, acquireErr := pool.Acquire(ctx)
+					if acquireErr != nil {
+						return audit.Page{}, acquireErr
+					}
+					defer connection.Release()
+					return audit.Query(ctx, connection.Conn(), filter)
+				},
+			)
+		}
+	}
 	listener, err := server.Listen(*port)
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb ui: listen on loopback: %v\n", err)
@@ -175,4 +216,45 @@ func openToolboxWindow(url string) {
 		}
 	}
 	_ = exec.Command("cmd", "/c", "start", "", url).Start()
+}
+
+// ensureSettingsFile writes the first settings document when the file does not
+// exist yet. The DSN comes from the installer credentials so the document
+// validates as-is; the page redacts it on read and re-validates on every save.
+func ensureSettingsFile(store ui.FileSettingsStore, dsn string) error {
+	if store.Path == "" {
+		return nil
+	}
+	if _, err := os.Stat(store.Path); err == nil {
+		return nil
+	}
+	return store.Save(defaultSettingsConfig(dsn))
+}
+
+func defaultSettingsConfig(dsn string) contract.Config {
+	enabled := true
+	disabled := false
+	eight := 8
+	sample, normalized, retentionAudit := 7, 30, 365
+	limit := 3
+	captureTimeout, searchTimeout, mcpTimeout := 2000, 1500, 5000
+	replay := 5000
+	port := 0
+	return contract.Config{
+		Database: contract.DatabaseConfig{DSN: dsn, MaxConnections: &eight},
+		Service: contract.ServiceConfig{
+			Pipe: contract.PipeConfig{Name: "errkb", Enabled: &enabled},
+			HTTP: contract.HTTPConfig{Enabled: &disabled, Host: "127.0.0.1", Port: &port},
+		},
+		Capture: contract.CaptureConfig{Enabled: &enabled},
+		Notices: contract.NoticesConfig{BeforeDiagnosis: &enabled},
+		Retention: contract.RetentionConfig{
+			SampleDays: &sample, NormalizedDays: &normalized, AuditDays: &retentionAudit,
+		},
+		Search: contract.SearchConfig{Limit: &limit},
+		Timeout: contract.TimeoutConfig{
+			CaptureMS: &captureTimeout, SearchMS: &searchTimeout, MCPMS: &mcpTimeout,
+		},
+		Offline: contract.OfflineConfig{ReplayIntervalMS: &replay},
+	}
 }
