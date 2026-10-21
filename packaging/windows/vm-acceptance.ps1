@@ -32,7 +32,7 @@
 
 .PARAMETER UninstallData
     keep (default, what a silent uninstall chooses) or delete. The delete path
-    is a MANUAL step: the wizard's MsgBox cannot be answered non-interactively.
+    passes /DELETE_DATA=1 to the uninstaller so both choices are repeatable.
 
 .NOTES
     Run from an ordinary (non-elevated) PowerShell window on the clean VM.
@@ -449,7 +449,9 @@ function Step-Uninstall {
     if (-not (Test-Path $uninstaller)) { Assert-Step 'uninstaller present' 'unins000.exe exists' $false $uninstaller; return }
     $keep = ($UninstallData -eq 'keep')
     $log = Join-Path $EvidenceDir 'uninstall.log'
-    $run = Start-And-Wait -FilePath $uninstaller -Arguments @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="' + $log + '"')) -Name 'uninstall'
+    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="' + $log + '"'))
+    if (-not $keep) { $arguments += '/DELETE_DATA=1' }
+    $run = Start-And-Wait -FilePath $uninstaller -Arguments $arguments -Name 'uninstall'
     Assert-Step 'uninstaller exit code' '0' ($run.ExitCode -eq 0) ("exit {0}" -f $run.ExitCode) $run.Evidence
     Assert-Step 'port released' ("port {0} is free" -f $Port) (-not (Test-PortOpen -TargetPort $Port)) ('open=' + (Test-PortOpen -TargetPort $Port))
     Assert-Step 'no postgres process left' 'no postgres.exe serving the app data directory' (-not (Get-CimInstance Win32_Process -Filter "Name = 'postgres.exe'" | Where-Object { $_.CommandLine -like ('*' + $AppDir + '*') })) 'checked'
@@ -489,7 +491,9 @@ $skipped = @($script:Results | Where-Object { $_.Status -eq 'SKIP' })
 Write-Host "`n== summary ==" -ForegroundColor Cyan
 $script:Results | Format-Table -AutoSize Step, Status, Expected, Actual | Out-String -Width 220 | Write-Host
 Write-Host ('passed: {0}  failed: {1}  manual: {2}  skipped: {3}' -f (($script:Results.Count - $failures.Count - $manual.Count - $skipped.Count), $failures.Count, $manual.Count, $skipped.Count))
-$script:Results | ConvertTo-Json -Depth 4 | Out-File -FilePath (Join-Path $EvidenceDir 'results.json') -Encoding utf8
+$resultsJSON = $script:Results | ConvertTo-Json -Depth 4
+$resultsJSON | Out-File -FilePath (Join-Path $EvidenceDir ('results-{0}.json' -f $Phase)) -Encoding utf8
+$resultsJSON | Out-File -FilePath (Join-Path $EvidenceDir 'results.json') -Encoding utf8
 Write-Host ('evidence: {0}' -f $EvidenceDir)
 if ($failures.Count -gt 0) {
     Write-Host 'RESULT: FAIL -- fix or record each failure with its evidence before calling the card accepted' -ForegroundColor Red
