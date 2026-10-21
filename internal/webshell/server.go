@@ -29,11 +29,13 @@ type SearchFunc func(ctx context.Context, request contract.SearchRequest) (contr
 
 // Server is a loopback-only web shell for one process lifetime.
 type Server struct {
-	token  string
-	page   []byte
-	assets fs.FS
-	search SearchFunc
-	detail GetIssueFunc
+	token     string
+	page      []byte
+	assets    fs.FS
+	search    SearchFunc
+	detail    GetIssueFunc
+	record    RecordSolutionFunc
+	setStatus SetStatusFunc
 }
 
 // New builds the shell with a fresh per-launch token and search only.
@@ -89,6 +91,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/search", s.serveSearch)
 	mux.HandleFunc("GET /api/issues/{id}", s.serveIssue)
 	mux.HandleFunc("GET /issues/{id}", s.servePage)
+	mux.HandleFunc("POST /api/issues/{id}/versions", s.serveVersion)
+	mux.HandleFunc("POST /api/issues/{id}/status", s.serveIssueStatus)
 	return withHeaders(mux)
 }
 

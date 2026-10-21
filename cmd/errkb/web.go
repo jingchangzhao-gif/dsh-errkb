@@ -62,6 +62,7 @@ func runWeb(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "errkb ui: %v\n", err)
 		return exitInternal
 	}
+	server.EnableWrites(client.RecordSolution, client.SetStatus)
 	listener, err := server.Listen(*port)
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb ui: listen on loopback: %v\n", err)

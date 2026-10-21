@@ -221,8 +221,92 @@ async function loadDetail() {
         }
       });
     }
+    main.insertAdjacentHTML("beforeend", editSection());
+    wireEdit(issueID, main);
   } catch (error) {
     main.innerHTML = '<p class="error">the errkb core is not reachable</p>';
+  }
+}
+
+function editSection() {
+  return (
+    '<section class="edit">' +
+    "<h3>Record a fix</h3>" +
+    '<form id="version-form">' +
+    '<label>What fixes it? <textarea id="version-body" required></textarea></label>' +
+    '<label>Preconditions <input id="version-preconditions" /></label>' +
+    '<label>Source <input id="version-source" value="toolbox" /></label>' +
+    '<button type="submit">Add version</button>' +
+    "</form>" +
+    "<h3>Issue status</h3>" +
+    '<p class="status-buttons">' +
+    '<button type="button" data-status="resolved">Mark resolved</button>' +
+    '<button type="button" data-status="open">Mark open</button>' +
+    '<button type="button" data-status="wontfix">Mark wontfix</button>' +
+    '<button type="button" data-status="misjudged">Mark misjudged</button>' +
+    "</p>" +
+    '<p id="edit-status" role="status"></p>' +
+    "</section>"
+  );
+}
+
+function wireEdit(issueID, main) {
+  const status = main.querySelector("#edit-status");
+  const say = (text, isError) => {
+    status.textContent = text;
+    status.className = isError ? "error" : "";
+  };
+  const form = main.querySelector("#version-form");
+  if (form) {
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      say("saving…");
+      try {
+        const response = await fetch(
+          "/api/issues/" + encodeURIComponent(issueID) + "/versions",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-errkb-token": token },
+            body: JSON.stringify({
+              body: main.querySelector("#version-body").value,
+              preconditions: main.querySelector("#version-preconditions").value,
+              source: main.querySelector("#version-source").value,
+            }),
+          },
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          say(payload.message || "the daemon refused the write", true);
+          return;
+        }
+        location.reload();
+      } catch (error) {
+        say("the errkb core is not reachable", true);
+      }
+    });
+  }
+  for (const button of main.querySelectorAll("[data-status]")) {
+    button.addEventListener("click", async () => {
+      say("saving…");
+      try {
+        const response = await fetch(
+          "/api/issues/" + encodeURIComponent(issueID) + "/status",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-errkb-token": token },
+            body: JSON.stringify({ status: button.getAttribute("data-status") }),
+          },
+        );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          say(payload.message || "the daemon refused the write", true);
+          return;
+        }
+        location.reload();
+      } catch (error) {
+        say("the errkb core is not reachable", true);
+      }
+    });
   }
 }
 
