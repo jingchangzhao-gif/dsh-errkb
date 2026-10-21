@@ -797,19 +797,67 @@ func assertNoOrphanOccurrences(t *testing.T, conn *pgx.Conn) {
 	}
 }
 
-func assertNoAdvisoryLocks(t *testing.T, conn *pgx.Conn) {
+// assertNoCrashHelperAdvisoryLocks checks only locks owned by the process that
+// this test killed. Other packages legitimately run migrations in parallel and
+// may hold their own advisory locks in the same database; counting every lock
+// in the database would turn that unrelated work into a false crash leak.
+func assertNoCrashHelperAdvisoryLocks(t *testing.T, conn *pgx.Conn) {
+	t.Helper()
+	locks := crashHelperAdvisoryLockCount(t, conn)
+	if locks != 0 {
+		t.Fatalf("%d crash-helper advisory locks survived the crash", locks)
+	}
+}
+
+func crashHelperAdvisoryLockCount(t *testing.T, conn *pgx.Conn) int {
 	t.Helper()
 	var locks int
 	if err := conn.QueryRow(context.Background(),
 		`select count(*) from pg_locks l
-		   join pg_database d on d.oid = l.database
+		   join pg_stat_activity a on a.pid = l.pid
 		  where l.locktype = 'advisory'
-		    and d.datname = current_database()
-		    and l.pid <> pg_backend_pid()`).Scan(&locks); err != nil {
-		t.Fatalf("count advisory locks: %v", err)
+		    and a.datname = current_database()
+		    and a.application_name = $1
+		    and l.pid <> pg_backend_pid()`, crashHelperApp).Scan(&locks); err != nil {
+		t.Fatalf("count crash-helper advisory locks: %v", err)
 	}
-	if locks != 0 {
-		t.Fatalf("%d advisory locks survived the crash", locks)
+	return locks
+}
+
+// TestCrashLockAssertionIgnoresUnrelatedAdvisoryLocks is the regression for
+// WF-013. It deliberately keeps an advisory lock open on another backend while
+// running the crash assertion. The assertion must ignore that lock: package
+// tests share the configured database and Go runs packages in parallel.
+func TestCrashLockAssertionIgnoresUnrelatedAdvisoryLocks(t *testing.T) {
+	observer := connect(t)
+	locker := connect(t)
+	ctx := context.Background()
+	if _, err := locker.Exec(ctx, `select set_config('application_name', 'errkb-unrelated-lock', false)`); err != nil {
+		t.Fatalf("name the unrelated lock backend: %v", err)
+	}
+	const unrelatedLockKey int64 = 0x756e726c // "unrl"
+	if _, err := locker.Exec(ctx, `select pg_advisory_lock($1)`, unrelatedLockKey); err != nil {
+		t.Fatalf("acquire the unrelated advisory lock: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = locker.Exec(context.Background(), `select pg_advisory_unlock($1)`, unrelatedLockKey)
+	})
+
+	var held int
+	if err := observer.QueryRow(ctx,
+		`select count(*) from pg_locks where locktype = 'advisory' and pid = $1`, locker.PgConn().PID()).Scan(&held); err != nil {
+		t.Fatalf("confirm the unrelated advisory lock: %v", err)
+	}
+	if held == 0 {
+		t.Fatalf("the regression setup did not hold an unrelated advisory lock")
+	}
+	assertNoCrashHelperAdvisoryLocks(t, observer)
+
+	if _, err := locker.Exec(ctx, `select set_config('application_name', $1, false)`, crashHelperApp); err != nil {
+		t.Fatalf("identify the lock as crash-helper owned: %v", err)
+	}
+	if got := crashHelperAdvisoryLockCount(t, observer); got == 0 {
+		t.Fatalf("the scoped assertion did not detect a crash-helper advisory lock")
 	}
 }
 
@@ -894,7 +942,7 @@ func TestCrashSafety(t *testing.T) {
 		t.Fatalf("the uncommitted transaction leaked rows: before events=%d occurrences=%d issues=%d, after events=%d occurrences=%d issues=%d",
 			beforeEvents, beforeOccurrences, beforeIssues, events, occurrences, issues)
 	}
-	assertNoAdvisoryLocks(t, conn)
+	assertNoCrashHelperAdvisoryLocks(t, conn)
 
 	// 2) A writer killed after commit: the committed event and its occurrence
 	// must both be there.
@@ -908,7 +956,7 @@ func TestCrashSafety(t *testing.T) {
 			beforeEvents, beforeOccurrences, beforeIssues, events, occurrences, issues)
 	}
 	assertNoOrphanOccurrences(t, conn)
-	assertNoAdvisoryLocks(t, conn)
+	assertNoCrashHelperAdvisoryLocks(t, conn)
 
 	// 3) Kill a writer in the middle of a batch: every committed event keeps its
 	// occurrence, and no occurrence loses its issue or event.
@@ -930,7 +978,7 @@ func TestCrashSafety(t *testing.T) {
 		t.Fatalf("the batch writer committed no occurrence before the kill")
 	}
 	assertNoOrphanOccurrences(t, conn)
-	assertNoAdvisoryLocks(t, conn)
+	assertNoCrashHelperAdvisoryLocks(t, conn)
 
 	// 4) Kill a migration inside its transaction: the table and the ledger row
 	// must both roll back, and the advisory lock must be released.
@@ -970,7 +1018,7 @@ func TestCrashSafety(t *testing.T) {
 	if probe != nil {
 		t.Fatalf("the killed migration left table %q behind", *probe)
 	}
-	assertNoAdvisoryLocks(t, conn)
+	assertNoCrashHelperAdvisoryLocks(t, conn)
 
 	// 5) Restart: the interrupted migration applies exactly once.
 	rewriteCrashMigration(t, migrations, probeVersion)
@@ -990,5 +1038,5 @@ func TestCrashSafety(t *testing.T) {
 	if probe == nil || *probe != "crash_probe" {
 		t.Fatalf("the restarted migration did not create crash_probe (%v)", probe)
 	}
-	assertNoAdvisoryLocks(t, conn)
+	assertNoCrashHelperAdvisoryLocks(t, conn)
 }

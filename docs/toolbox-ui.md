@@ -76,15 +76,15 @@ server, never stored in a file. Payloads reuse the contract structs.
 | --- | --- | --- |
 | `GET /`, `GET /assets/*` | Implemented locally | EKB-057 |
 | `POST /api/search` | Implemented locally | EKB-057 |
-| Issue detail and solution mutation routes | Planned | EKB-058 |
-| Statistics, audit, settings and deletion routes | Planned | EKB-059 |
+| `GET /api/issues/{id}` and issue/solution mutation routes | Implemented locally | EKB-058 |
+| `GET /api/stats`, `GET /api/audit`, settings and deletion routes | Implemented locally | EKB-059 |
 
 Every handler validates its payload, maps service errors to `{code, message}` and never
 returns raw DSNs, passwords or unredacted samples.
 
 ## Packaging and release
 
-The following is the **EKB-060 target**, not current behavior:
+The EKB-060 packaging implementation now does the following:
 
 - `packaging/windows/build.ps1` embeds the assets in the binary.
 - `release.ps1` produces `errkb-toolbox.zip` from a strict file allowlist.
@@ -92,8 +92,9 @@ The following is the **EKB-060 target**, not current behavior:
   `errkb.exe ui --web`; the UI itself is not opened automatically at logon.
 - The ZIP, installer and installed EXE identify one tag/commit and share release hashes.
 
-Current behavior: no toolbox ZIP exists, `start-errkb.cmd` is not in the release bundle,
-the installer has no `[Icons]` section, and existing binaries reject `ui --web`.
+The remaining EKB-060 boundary is evidence, not implementation: one coherent candidate
+must pass the clean standard-user VM UI flow and then be rebuilt from the accepted tag.
+Existing `dist/` files are rehearsal artifacts and are not the final tagged release.
 
 ## Testing
 

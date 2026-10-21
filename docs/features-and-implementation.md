@@ -55,15 +55,15 @@ CUE defines shapes and constraints; it is not the runtime database. PL/pgSQL kee
 | Remove secrets before storage | Every capture/record path | `spec/redact.cue`, `internal/redact/`, `src/redact.ts` | Implemented and corpus-tested |
 | Classify technical failures | Capture pipeline | `internal/core/classify.go`, `src/capture.ts` | Implemented for observable technical failures |
 | Deduplicate repeated failures | Event recording by project + fingerprint | `internal/core/fingerprint.go`, `db/migrations/0002_record.sql` | Implemented |
-| Search known errors | CLI, MCP, native omnibox, Web search | `internal/database/search.go`, `candidates.go`, `rerank.go` | Core implemented; Web currently search-only |
-| Store and version fixes | MCP `err_record_solution`, service/database APIs | `internal/database/solution*.go`, `0003_solutions.sql` | Implemented; Web editor not connected |
+| Search known errors | CLI, MCP, native omnibox, Web search | `internal/database/search.go`, `candidates.go`, `rerank.go` | Implemented across CLI/MCP and the Web toolbox |
+| Store and version fixes | MCP `err_record_solution`, service/database APIs, Web detail editor | `internal/database/solution*.go`, `0003_solutions.sql` | Implemented; Web writes use daemon transactions and audit rows |
 | Learn whether a fix worked | `errkb feedback`, MCP `err_feedback` | `internal/database/solution.go`, `errkb_trust()` | Implemented |
-| Inspect issues and statistics | CLI `show`, `list`, `stats`; page models | `cmd/errkb/cli.go`, `internal/service/edit_api.go`, `internal/audit/`, `internal/ui/` | CLI implemented; full Web pages not connected |
+| Inspect issues and statistics | CLI `show`, `list`, `stats`; Web detail/stats/audit pages | `cmd/errkb/cli.go`, `internal/service/edit_api.go`, `internal/audit/`, `internal/ui/`, `internal/webshell/` | Implemented; clean-VM UI evidence pending |
 | Serve local clients | `errkb daemon` over Named Pipe | `internal/service/daemon.go`, `pipe.go`, `api.go` | Implemented |
 | Let an LLM actively query the KB | `errkb mcp`, eight tools | `internal/mcp/` | Implemented; MCP is not passive capture |
 | Diagnose installation/connectors | `errkb doctor` | `cmd/errkb/doctor.go`, `internal/service/doctor.go` | Implemented |
 | Apply and inspect migrations | `errkb db migrate`, `errkb db status` | `cmd/errkb/db.go`, `internal/database/migrate.go` | Implemented in current source |
-| Run a local toolbox window | `errkb ui`, local `errkb ui --web` | `internal/ui/`, `internal/webshell/`, `cmd/errkb/web.go` | Native models exist; Web shell is partial and absent from coherent release artifacts |
+| Run a local toolbox window | `errkb ui`, `errkb ui --web` | `internal/ui/`, `internal/webshell/`, `cmd/errkb/web.go` | Embedded Web shell implemented; accepted tagged artifact pending |
 | Manage local PostgreSQL | Windows installer and PostgreSQL manager | `internal/service/pg_manage.go`, `packaging/windows/` | Source exists; clean-VM release acceptance pending |
 | Retain/delete data safely | Retention/deletion functions and settings models | `0006_retention.sql`, `internal/ui/settings.go` | Database/model implemented; scheduling and Web settings incomplete |
 

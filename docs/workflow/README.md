@@ -10,7 +10,7 @@ This directory is the single resume point for project repair and cleanup work. I
 2. [Latest acceptance report](acceptance-report-2026-10-22.md) — what passed, what failed and why release remains blocked.
 3. [File repair sequence](file-repair-sequence.md) — files, edits, tests and completion gates for each workflow ID.
 4. [Unused-code audit](unused-code-audit.md) — what is disposable, stale, dormant, compatibility-only or active.
-5. [Project status](../project-status.md) — current delivery truth and release boundary after WF-014 reconciles it.
+5. [Project status](../project-status.md) — current delivery truth and release boundary, reconciled by WF-014.
 6. [Implementation plan](../implementation-plan.md) — product decisions and historical EKB task order.
 
 ## Ownership rules

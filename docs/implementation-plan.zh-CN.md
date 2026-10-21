@@ -4,7 +4,7 @@
 
 本文件是项目从现有 DSH 插件升级为多宿主技术错误复用工具箱的唯一施工基线。实施者应从 `EKB-001` 开始，按照任务编号推进；一张任务卡只有在自动化检查和人工验收都通过后才能标记为完成。
 
-> **施工检查点（2026-10-22）。** EKB-002～056 记录历史实施顺序，但当前本地目录不是 Git 工作区，发布产物也互不一致。当前交付事实以 [`project-status.zh-CN.md`](project-status.zh-CN.md) 为准。继续施工前，先恢复真实 clone，并把本地独有的 Web UI 修改保存到 EKB-057 分支。当前有效顺序为 EKB-057 → 058 → 059 → 060；EKB-052 与 EKB-056 在获得干净 VM 证据前仍未验收。
+> **施工检查点（2026-10-22）。** EKB-002～060 记录历史实施顺序。当前目录已经是受 Git 跟踪的工作区，Web 工具箱、启动器、安装器接线与发布来源门禁均已实现；现有 `dist/` 文件仍是彩排产物。当前交付事实以 [`project-status.zh-CN.md`](project-status.zh-CN.md) 为准；当前有效顺序是先做 WF-011 干净 VM 验收，再做 WF-012 最终带 tag 打包。
 
 若要按功能了解当前源码及每项用户能力的实现链路，请阅读 [`features-and-implementation.zh-CN.md`](features-and-implementation.zh-CN.md)；若要查看实时未解决问题和逐文件修复顺序，请从 [`workflow/README.zh-CN.md`](workflow/README.zh-CN.md) 开始。本文继续保存产品决定与历史任务依据。
 
