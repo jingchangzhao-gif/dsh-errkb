@@ -88,11 +88,11 @@ These files are the largest source-cleanup opportunity, but deleting them now wo
 | `db/migrations/testdata/upgrade/` | `TEST-COMPAT` | Real older schema/config/Markdown/capability fixtures used to prove upgrades |
 | `seeds/ERRORS.seed.md`, `seeds/ERRORS.seed.json` | `TEST-COMPAT` | Source and generated seed pair used by TypeScript and Go compatibility tests |
 | `spec/corpus/` | `TEST-COMPAT` | Cross-language behavior and false-merge corpus |
-| `.md workflow/` | `TEST-COMPAT` / archive candidate | 60 detailed EKB task records; not used at runtime, but retain implementation rationale not fully present in code |
+| `.md workflow/` | `ACTIVE-WORK` | Four unfinished or partially accepted cards remain: EKB-052, EKB-055, EKB-056 and EKB-060 |
 | `connectors/*/probe.md` and `capability.json` | `TEST-COMPAT` | Evidence behind host support claims |
 | `docs/*.md` language pairs | `ACTIVE` | User-requested bilingual project, status and implementation documentation |
 
-The `.md workflow/` directory is redundant for runtime and not linked from the product, but it is not proven disposable. Before removing it, copy any unique acceptance evidence into `implementation-plan.*`, `project-status.*` or an external project tracker.
+On 2026-10-22, 56 completed EKB cards were deleted after their durable evidence was confirmed in `implementation-plan.*`. Delete each of the four remaining cards when its acceptance condition passes; remove the directory after the last card closes.
 
 ## F. Active code that should not be removed
 

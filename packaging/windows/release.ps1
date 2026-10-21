@@ -5,8 +5,9 @@
 .DESCRIPTION
   Two modes, so the pipeline verifies before it builds:
 
-    check    verifies the tag, the version, the changelog section and the
-             clean-VM acceptance record. Nothing is built.
+    check    verifies the real Git tag and clean worktree, the version, the
+             changelog section and the clean-VM acceptance record. Nothing is
+             built.
     package  repeats the checks, builds errkb.exe through build.ps1, and
              assembles the release directory:
                errkb.exe
@@ -46,7 +47,8 @@
 
 .PARAMETER Tag
   The git tag, for example v0.1.0. Defaults to v<Version>; the check fails when
-  the two disagree.
+  the two disagree, when refs/tags/<tag> does not exist, or when it does not
+  resolve to HEAD.
 
 .PARAMETER Commit
   Commit stamp embedded in the binary. Defaults to the short HEAD hash.
@@ -116,6 +118,54 @@ function Resolve-ReleaseTag([string]$ResolvedVersion) {
         Fail "tag '$resolvedTag' and version '$ResolvedVersion' disagree; a release tag must be v<version>"
     }
     return $resolvedTag
+}
+
+function Invoke-GitText([string[]]$GitArguments, [string]$FailureMessage) {
+    $output = @(& git -C $repoRoot @GitArguments 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        Fail $FailureMessage
+    }
+    return (($output -join "`n").Trim())
+}
+
+function Resolve-TagCommit([string]$ResolvedTag) {
+    $tagRef = "refs/tags/$ResolvedTag"
+    $tagCommit = Invoke-GitText @("rev-parse", "--verify", "$tagRef^{commit}") "Git tag '$ResolvedTag' does not exist or does not resolve to a commit"
+    if ([string]::IsNullOrWhiteSpace($tagCommit)) {
+        Fail "Git tag '$ResolvedTag' resolved to an empty commit"
+    }
+    return $tagCommit
+}
+
+function Assert-ReleaseGitState([string]$ResolvedTag) {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Fail "git is not on PATH; a release must be built from a verified tag"
+    }
+
+    $tagCommit = Resolve-TagCommit $ResolvedTag
+    $headCommit = Invoke-GitText @("rev-parse", "--verify", "HEAD^{commit}") "cannot resolve the repository HEAD"
+    if ($tagCommit -ne $headCommit) {
+        Fail "Git tag '$ResolvedTag' points to commit $tagCommit but HEAD is $headCommit"
+    }
+
+    $status = @(& git -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        Fail "cannot inspect the Git worktree"
+    }
+    if ($status.Count -ne 0) {
+        $sample = ($status | Select-Object -First 5) -join "; "
+        Fail "the Git worktree is not clean; commit or remove every tracked and untracked change before releasing ($sample)"
+    }
+
+    return $tagCommit
+}
+
+function Assert-CommitMatchesTag([string]$ResolvedCommit, [string]$ResolvedTag) {
+    $tagCommit = Resolve-TagCommit $ResolvedTag
+    $tagShort = Invoke-GitText @("rev-parse", "--short", $tagCommit) "cannot abbreviate the commit for Git tag '$ResolvedTag'"
+    if ($ResolvedCommit -ne $tagCommit -and $ResolvedCommit -ne $tagShort) {
+        Fail "release commit '$ResolvedCommit' does not match Git tag '$ResolvedTag' ($tagCommit)"
+    }
 }
 
 function Assert-ChangelogSection([string]$ResolvedVersion) {
@@ -242,13 +292,15 @@ function Get-ReleaseToolchain {
 }
 
 function Invoke-ReleaseChecks([string]$ResolvedVersion, [string]$ResolvedTag) {
+    $tagCommit = Assert-ReleaseGitState $ResolvedTag
     Assert-ChangelogSection $ResolvedVersion
     Assert-VmAcceptance $ResolvedVersion
     if ($IncludeInstaller) {
         Assert-InstallerVersion $ResolvedVersion
     }
     Write-Output "release check: version $ResolvedVersion"
-    Write-Output "release check: tag $ResolvedTag"
+    Write-Output "release check: tag $ResolvedTag -> $tagCommit"
+    Write-Output "release check: Git worktree clean"
     Write-Output "release check: changelog section present"
     Write-Output "release check: clean-VM acceptance recorded for $ResolvedVersion"
 }
@@ -537,6 +589,7 @@ if ($Mode -eq "check") {
 }
 
 $resolvedCommit = Resolve-Commit
+$null = Assert-CommitMatchesTag $resolvedCommit $resolvedTag
 $resolvedBuildTime = Resolve-BuildTime
 $toolchain = Get-ReleaseToolchain
 

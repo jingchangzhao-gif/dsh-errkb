@@ -182,6 +182,28 @@ go test ./... -count=1
 
 Also run the performance smoke, crash safety and CLI loop named in `docs/benchmarks.*` and `docs/e2e-cli-loop.*`. Save commands, versions, durations and failures; never save a plaintext password.
 
+### WF-013: make the live-database gate deterministic
+
+Edit order:
+
+1. `internal/database/bench_test.go` — make `assertNoAdvisoryLocks` inspect only the ErrKB migration lock or the killed helper backend, not unrelated advisory locks held by another package.
+2. Add a regression that holds an unrelated advisory lock while the crash assertion runs.
+3. Run the focused crash test repeatedly, then run `go test ./... -count=1` with package parallelism and a live DSN.
+4. Update `docs/benchmarks.*`, this repair sequence, the acceptance report and both current-workflow files.
+
+Completion gate: the original documented parallel command passes at least three consecutive fresh runs; removing `-p 1` does not reintroduce the false failure, and the test still fails when the ErrKB migration lock really survives.
+
+### WF-014: reconcile delivery-status documentation
+
+Edit order:
+
+1. Compare `docs/project-status.*` with the current Git state, CLI help, Web routes, installer files, release manifest and the latest acceptance report.
+2. Remove resolved blocker statements; do not convert them into a growing completion log.
+3. Preserve only current boundaries: WF-013, clean-VM evidence, real-tag enforcement and any explicitly accepted signing limitation.
+4. Cross-check both languages and all links from `README.*` and `docs/workflow/README.*`.
+
+Completion gate: every “current” claim is reproducible from the present tree or the latest acceptance evidence, and the English and Chinese blocker lists are equivalent.
+
 ### WF-011: clean-VM acceptance
 
 Use `packaging/windows/vm-acceptance.ps1` on a clean Windows 10/11 x64 VM as a standard user. Complete install, first launch, real reboot, single-instance recovery, knowledge reuse and both uninstall choices. Store the evidence outside generated `dist/` until the release bundle is finalized.
@@ -195,8 +217,12 @@ Edit/run order:
 1. `packaging/windows/build.ps1`
 2. `packaging/windows/installer.iss`
 3. `packaging/windows/release.ps1`
-4. `packaging/windows/vm-acceptance.ps1`
-5. `CHANGELOG.md`, release notes, install/status/acceptance documents
+   - resolve `refs/tags/<tag>` through Git and reject a missing tag;
+   - require the resolved tag commit to equal the accepted source commit/HEAD;
+   - cover missing, mismatched and valid tags with an automated check.
+4. `packaging/windows/release-test.ps1` and `pnpm test:release`
+5. `packaging/windows/vm-acceptance.ps1`
+6. `CHANGELOG.md`, release notes, install/status/acceptance documents
 
 Build once from one accepted tag. Verify version, commit and build time across the source, EXE, installer, installed EXE, manifest and checksums. Do not copy any file from an earlier `dist/` directory.
 

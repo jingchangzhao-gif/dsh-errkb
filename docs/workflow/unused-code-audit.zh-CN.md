@@ -88,11 +88,11 @@ DSH 包入口是 `src/index.ts`，Go 程序入口是 `cmd/errkb`。Go 函数仅�
 | `db/migrations/testdata/upgrade/` | `TEST-COMPAT` | 用于证明升级的真实旧 schema、配置、Markdown 和能力文件 |
 | `seeds/ERRORS.seed.md`、`seeds/ERRORS.seed.json` | `TEST-COMPAT` | TypeScript 与 Go 兼容测试使用的源 seed 与生成 seed |
 | `spec/corpus/` | `TEST-COMPAT` | 跨语言一致性和零错误合并语料 |
-| `.md workflow/` | `TEST-COMPAT` / 可归档 | 60 份 EKB 任务详单；运行时不用，但保存了代码中没有的实施理由 |
+| `.md workflow/` | `ACTIVE-WORK` | 只保留 4 份尚未完成或未完全验收的任务卡：EKB-052、EKB-055、EKB-056、EKB-060 |
 | `connectors/*/probe.md`、`capability.json` | `TEST-COMPAT` | 宿主支持声明的证据 |
 | `docs/*.md` 中英文组合 | `ACTIVE` | 用户要求的双语项目、状态和实现文档 |
 
-`.md workflow/` 对运行时完全多余，也没有被产品文档链接，但目前无法证明可以无损删除。删除前应把其中独有的验收证据并入 `implementation-plan.*`、`project-status.*` 或外部项目管理工具。
+2026-10-22 已在确认长期证据写入 `implementation-plan.*` 后删除 56 份已完成 EKB 卡片。剩余 4 张卡片分别在通过自身验收条件后删除；最后一张关闭后再移除该目录。
 
 ## F. 不应删除的活动代码
 

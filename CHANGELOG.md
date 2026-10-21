@@ -35,6 +35,9 @@ They never claim more than the acceptance records in this repository prove.
 
 ### Fixed
 
+- The release gate now resolves the real `refs/tags/v<version>` Git ref,
+  requires it to point to a clean HEAD, and rejects an explicit build commit
+  that does not match the tag.
 - The installed product now applies database migrations during setup
   (`errkb db migrate`) instead of leaving the first run stuck on a missing
   ledger.

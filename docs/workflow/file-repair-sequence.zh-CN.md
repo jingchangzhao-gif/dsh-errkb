@@ -176,6 +176,28 @@ go test ./... -count=1
 
 同时运行 `docs/benchmarks.*` 与 `docs/e2e-cli-loop.*` 中的性能 smoke、崩溃安全和 CLI 闭环。保存命令、版本、耗时和失败，不保存明文密码。
 
+### WF-013：让真实数据库门禁保持确定性
+
+修改顺序：
+
+1. `internal/database/bench_test.go`——让 `assertNoAdvisoryLocks` 只检查 ErrKB 迁移锁或被终止的 helper 后端，不统计其他 package 持有的无关 advisory lock。
+2. 增加回归测试：断言执行时故意让另一个连接持有无关 advisory lock。
+3. 重复运行崩溃测试，再使用真实 DSN 和 package 并行执行 `go test ./... -count=1`。
+4. 同步 `docs/benchmarks.*`、本修复顺序、验收报告与两份 current-workflow。
+
+完成门槛：文档原有的并行命令至少连续 3 次全新运行通过；去掉 `-p 1` 不再产生假失败，同时真正残留 ErrKB 迁移锁时测试仍会失败。
+
+### WF-014：同步交付状态文档
+
+修改顺序：
+
+1. 把 `docs/project-status.*` 与当前 Git 状态、CLI help、Web 路由、安装器文件、发布 manifest 和最新验收报告逐项对照。
+2. 删除已经解决的阻塞描述，不把它们改写成长篇完成历史。
+3. 只保留当前边界：WF-013、干净 VM 证据、真实 tag 强制检查，以及明确接受的签名限制。
+4. 交叉检查中英文内容，以及 `README.*`、`docs/workflow/README.*` 中的链接。
+
+完成门槛：每条“当前”事实都能由现有源码或最新验收证据复现；中英文阻塞列表等价。
+
 ### WF-011：干净 VM 验收
 
 在干净 Windows 10/11 x64 VM 中以标准用户运行 `packaging/windows/vm-acceptance.ps1`，完成安装、首次启动、真实重启、单实例恢复、知识复用和两种卸载方式。发布包确定前，证据应保存在生成的 `dist/` 之外。
@@ -189,8 +211,12 @@ go test ./... -count=1
 1. `packaging/windows/build.ps1`
 2. `packaging/windows/installer.iss`
 3. `packaging/windows/release.ps1`
-4. `packaging/windows/vm-acceptance.ps1`
-5. `CHANGELOG.md`、发布说明、安装/状态/验收文档
+   - 通过 Git 解析 `refs/tags/<tag>`，不存在时必须拒绝；
+   - 要求 tag 指向已验收源码提交/HEAD；
+   - 自动覆盖 tag 缺失、指向不一致和有效三种情况。
+4. `packaging/windows/release-test.ps1` 与 `pnpm test:release`
+5. `packaging/windows/vm-acceptance.ps1`
+6. `CHANGELOG.md`、发布说明、安装/状态/验收文档
 
 只从一个已验收 tag 构建一次。核对源码、EXE、安装器、安装后 EXE、manifest 和校验和中的版本、commit 与构建时间。不得复制旧 `dist/` 中的任何文件。
 

@@ -7,10 +7,11 @@ This directory is the single resume point for project repair and cleanup work. I
 ## Read in this order
 
 1. [Current workflow and open issues](current-workflow.md) — the unresolved queue. Start with the only `NEXT` row.
-2. [File repair sequence](file-repair-sequence.md) — files, edits, tests and completion gates for each workflow ID.
-3. [Unused-code audit](unused-code-audit.md) — what is disposable, stale, dormant, compatibility-only or active.
-4. [Project status](../project-status.md) — current delivery truth and release boundary.
-5. [Implementation plan](../implementation-plan.md) — product decisions and historical EKB task order.
+2. [Latest acceptance report](acceptance-report-2026-10-22.md) — what passed, what failed and why release remains blocked.
+3. [File repair sequence](file-repair-sequence.md) — files, edits, tests and completion gates for each workflow ID.
+4. [Unused-code audit](unused-code-audit.md) — what is disposable, stale, dormant, compatibility-only or active.
+5. [Project status](../project-status.md) — current delivery truth and release boundary after WF-014 reconciles it.
+6. [Implementation plan](../implementation-plan.md) — product decisions and historical EKB task order.
 
 ## Ownership rules
 
@@ -28,5 +29,6 @@ Do not create another active todo list elsewhere. When an issue is solved, recor
 | --- | --- | --- |
 | `README.md` | `README.zh-CN.md` | Folder index and document ownership |
 | `current-workflow.md` | `current-workflow.zh-CN.md` | Ordered unresolved issues only |
+| `acceptance-report-2026-10-22.md` | `acceptance-report-2026-10-22.zh-CN.md` | Evidence and decision from the current acceptance run |
 | `file-repair-sequence.md` | `file-repair-sequence.zh-CN.md` | Per-issue file order and verification |
 | `unused-code-audit.md` | `unused-code-audit.zh-CN.md` | Cleanup classification and deletion gate |

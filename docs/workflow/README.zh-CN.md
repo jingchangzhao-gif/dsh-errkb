@@ -7,10 +7,11 @@
 ## 阅读顺序
 
 1. [当前工作流与未解决问题](current-workflow.zh-CN.md)——活动问题队列，从唯一的 `NEXT` 行开始。
-2. [文件修复顺序](file-repair-sequence.zh-CN.md)——每个工作流编号对应的文件、修改、测试和完成门槛。
-3. [无用代码审计](unused-code-audit.zh-CN.md)——哪些内容可删除、已过期、未接入、只用于兼容或仍在使用。
-4. [项目当前状态](../project-status.zh-CN.md)——当前交付事实和发布边界。
-5. [项目实施计划](../implementation-plan.zh-CN.md)——产品决定和历史 EKB 任务顺序。
+2. [最新验收报告](acceptance-report-2026-10-22.zh-CN.md)——哪些门禁通过、哪些失败以及禁止发布的原因。
+3. [文件修复顺序](file-repair-sequence.zh-CN.md)——每个工作流编号对应的文件、修改、测试和完成门槛。
+4. [无用代码审计](unused-code-audit.zh-CN.md)——哪些内容可删除、已过期、未接入、只用于兼容或仍在使用。
+5. [项目当前状态](../project-status.zh-CN.md)——WF-014 完成同步后的当前交付事实和发布边界。
+6. [项目实施计划](../implementation-plan.zh-CN.md)——产品决定和历史 EKB 任务顺序。
 
 ## 文档职责
 
@@ -28,5 +29,6 @@
 | --- | --- | --- |
 | `README.zh-CN.md` | `README.md` | 文件夹索引与文档职责 |
 | `current-workflow.zh-CN.md` | `current-workflow.md` | 只保存按顺序排列的未解决问题 |
+| `acceptance-report-2026-10-22.zh-CN.md` | `acceptance-report-2026-10-22.md` | 本轮验收证据与决定 |
 | `file-repair-sequence.zh-CN.md` | `file-repair-sequence.md` | 每项问题的文件顺序和验证方法 |
 | `unused-code-audit.zh-CN.md` | `unused-code-audit.md` | 清理分类与删除门槛 |
