@@ -69,7 +69,10 @@ Filename: "{app}\errkb.exe"; Parameters: "db migrate --credentials ""{app}\pg\cr
 ; EKB-056: one logon ScheduledTask starts the cluster and daemon again after a
 ; reboot; it also starts both now, so the product works right after setup.
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\autostart.ps1"" -Action install -AppDir ""{app}"" -Port {code:GetPgPort}"; StatusMsg: "Configuring start at logon..."; Flags: runhidden waituntilterminated; Check: CreatesCluster
-Filename: "{app}\errkb.exe"; Parameters: "version"; Description: "Show the errkb version"; Flags: postinstall shellexec runasoriginaluser
+; Do not launch a console program from a silent install. On Windows 11 the
+; default terminal host can outlive the command, which leaves automation
+; waiting indefinitely for the post-install process to exit.
+Filename: "{app}\errkb.exe"; Parameters: "version"; Description: "Show the errkb version"; Flags: postinstall shellexec runasoriginaluser skipifsilent
 
 [UninstallRun]
 ; Stop the daemon and drop the logon Run entry before the files disappear (a

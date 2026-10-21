@@ -3,10 +3,11 @@
   Regression tests for the release script's Git tag and worktree gates.
 
 .DESCRIPTION
-  Creates an isolated temporary Git repository and proves four cases: a
-  missing tag is rejected, a tag on another commit is rejected, a dirty
-  worktree is rejected, and a clean HEAD carrying the expected tag passes.
-  No tag or file in the caller's repository is changed.
+  Checks the Windows installer silent-mode contract, then creates an isolated
+  temporary Git repository and proves four release-gate cases: a missing tag
+  is rejected, a tag on another commit is rejected, a dirty worktree is
+  rejected, and a clean HEAD carrying the expected tag passes. No tag or file
+  in the caller's repository is changed.
 #>
 [CmdletBinding()]
 param()
@@ -14,6 +15,7 @@ param()
 $ErrorActionPreference = 'Stop'
 
 $sourceScript = Join-Path $PSScriptRoot 'release.ps1'
+$installerScript = Join-Path $PSScriptRoot 'installer.iss'
 $shell = Get-Command pwsh -ErrorAction Stop
 $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
 $testRoot = Join-Path $tempBase ('errkb-release-test-' + [guid]::NewGuid().ToString('N'))
@@ -65,7 +67,18 @@ function Assert-MismatchedBuildCommitRejected {
     Write-Output 'PASS mismatched explicit build commit rejected'
 }
 
+function Assert-SilentInstallDoesNotLaunchConsole {
+    $versionRun = Select-String -LiteralPath $installerScript `
+        -Pattern '^Filename: "\{app\}\\errkb\.exe"; Parameters: "version";' |
+        Select-Object -First 1
+    if (-not $versionRun -or $versionRun.Line -notmatch '\bskipifsilent\b') {
+        throw 'installer version command must include skipifsilent so unattended setup cannot hang on Windows Terminal'
+    }
+    Write-Output 'PASS silent install skips the interactive version command'
+}
+
 try {
+    Assert-SilentInstallDoesNotLaunchConsole
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'packaging\windows') -Force | Out-Null
     Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $testRoot 'packaging\windows\release.ps1')
     Write-TestFile 'CHANGELOG.md' "# Changelog`n`n## [$version] - 2099-01-01`n`n- Release gate fixture.`n"
@@ -96,7 +109,7 @@ try {
 
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 5 passed, 0 failed'
+    Write-Output 'release gate tests: 6 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and
