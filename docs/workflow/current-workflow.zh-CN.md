@@ -38,8 +38,7 @@
 
 | 编号 | 状态 | 仍然存在的问题 | 当前证据 | 完成条件 |
 | --- | --- | --- | --- | --- |
-| WF-003 | `NEXT` | EKB-057 的 Web 工具箱恢复流程不完整 | `cmd/errkb/web.go` 只读 `ERRKB_DSN`/`--dsn`，不会读取安装后的 `pg/credentials.json`，迁移路径还依赖当前目录 | 安装布局中的启动器可以打开搜索，并使用安装凭据重新连接或启动 daemon，通过真实冒烟测试 |
-| WF-004 | `OPEN` | 安装器没有工具箱启动入口 | `installer.iss` 没有 `[Icons]`，也不安装 `start-errkb.cmd` | 安装器复制启动器并创建开始菜单快捷方式，无终端打开 `errkb ui --web` |
+| WF-004 | `NEXT` | 安装器没有工具箱启动入口 | `installer.iss` 没有 `[Icons]`，也不安装 `start-errkb.cmd` | 安装器复制启动器并创建开始菜单快捷方式，无终端打开 `errkb ui --web` |
 | WF-005 | `OPEN` | EKB-058 详情与解法编辑尚未暴露到 Web UI | Go 模型和服务已有测试，但 `internal/webshell/server.go` 只有页面、资源和 `POST /api/search` | Web 详情、版本历史、追加编辑、状态纠错和需要确认的删除全部通过 daemon 后端路由工作 |
 | WF-006 | `OPEN` | EKB-059 统计、审计和设置尚未暴露到 Web UI | 审计、设置、统计模型存在，但没有 Web 路由和页面 | Web 页面展示实测统计和审计，并安全编辑采集、连接器、保留期以及预览确认删除设置 |
 | WF-007 | `OPEN` | PostgreSQL 生命周期逻辑重复，实际安装只使用其中一套 | Go `PGManager` 没有生产构造者；安装器行为在 PowerShell 中 | EKB-060 选择唯一责任方或建立经过测试的共享路径，然后删除失去作用的重复实现及过期测试/文档 |

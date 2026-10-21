@@ -11,6 +11,8 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -28,14 +30,20 @@ func runWeb(args []string, stdout, stderr io.Writer) int {
 	noBrowser := flags.Bool("no-browser", false, "print the URL instead of opening a window")
 	port := flags.Int("port", 0, "fixed loopback port (default: the system picks a free one)")
 	dsn := flags.String("dsn", os.Getenv("ERRKB_DSN"), "connection string used only when the daemon must be started")
-	migrations := flags.String("migrations", "db/migrations", "migration directory used only when the daemon must be started")
+	credentials := flags.String("credentials", "", "installer credentials.json (default: pg\\credentials.json next to errkb.exe)")
+	migrations := flags.String("migrations", "", "migration directory (default: migrations next to errkb.exe, then db/migrations)")
 	if err := flags.Parse(args); err != nil {
 		return exitUsage
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	client, err := ensureDaemon(ctx, *dsn, *migrations, stderr)
+	resolvedDSN, resolvedMigrations, err := resolveDaemonPaths(*dsn, *credentials, *migrations)
+	if err != nil {
+		fmt.Fprintf(stderr, "errkb ui: %v\n", err)
+		return exitUsage
+	}
+	client, err := ensureDaemon(ctx, resolvedDSN, resolvedMigrations, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb ui: %v\n", err)
 		return exitUnavailable
@@ -68,6 +76,66 @@ func runWeb(args []string, stdout, stderr io.Writer) int {
 	defer cancel()
 	_ = httpServer.Shutdown(shutdownCtx)
 	return exitOK
+}
+
+// resolveDaemonPaths finds the database and migration directory the installer
+// layout provides. The installed product keeps pg\credentials.json and
+// migrations\ next to errkb.exe, so the toolbox must not depend on the current
+// working directory (the launcher starts it from anywhere).
+func resolveDaemonPaths(dsnFlag, credentialsFlag, migrationsFlag string) (string, string, error) {
+	dsn := strings.TrimSpace(dsnFlag)
+	exeDir := ""
+	if executable, err := os.Executable(); err == nil {
+		exeDir = filepath.Dir(executable)
+	}
+	workDir, _ := os.Getwd()
+
+	if dsn == "" {
+		candidates := make([]string, 0, 3)
+		if credentialsFlag != "" {
+			candidates = append(candidates, credentialsFlag)
+		}
+		if exeDir != "" {
+			candidates = append(candidates, filepath.Join(exeDir, "pg", "credentials.json"))
+		}
+		if workDir != "" {
+			candidates = append(candidates, filepath.Join(workDir, "pg", "credentials.json"))
+		}
+		for _, candidate := range candidates {
+			if _, err := os.Stat(candidate); err != nil {
+				continue
+			}
+			credentials, err := service.ReadCredentials(candidate)
+			if err != nil {
+				return "", "", fmt.Errorf("read the installer credentials %s: %w", candidate, err)
+			}
+			dsn = credentials.DSN()
+			break
+		}
+	}
+
+	migrations := migrationsFlag
+	if migrations == "" {
+		options := make([]string, 0, 2)
+		if exeDir != "" {
+			options = append(options, filepath.Join(exeDir, "migrations"))
+		}
+		if workDir != "" {
+			options = append(options, filepath.Join(workDir, "db", "migrations"))
+		}
+		for _, option := range options {
+			if info, err := os.Stat(option); err == nil && info.IsDir() {
+				migrations = option
+				break
+			}
+		}
+		if migrations == "" {
+			migrations = "db/migrations"
+		}
+	} else if absolute, err := filepath.Abs(migrations); err == nil {
+		migrations = absolute
+	}
+	return dsn, migrations, nil
 }
 
 // ensureDaemon reuses a running daemon or starts one detached, then waits for
