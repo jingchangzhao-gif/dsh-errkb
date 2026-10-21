@@ -226,3 +226,29 @@ The artifact table above carries the EKB-056 rebuild (`errkb.exe` 10,936,320 byt
 `B116E5BA…`, installer 4,959,460 bytes / `F3E77D4C…`). Re-run the phases below on a clean machine
 to turn this report into evidence.
 
+### Lifecycle unification rehearsal (2026-10-22, WF-007)
+
+The PostgreSQL lifecycle now has exactly one implementation. `internal/service/pg_manage.go` is
+reached through `errkb pg install|start|stop|uninstall|status|discover`, and
+`packaging/windows/postgres.ps1` is a thin wrapper that maps the installer's arguments onto that
+command (it no longer calls `initdb`/`pg_ctl` itself). Installer, uninstaller and the logon autostart
+entry all go through the wrapper, so they all use the same code.
+
+Rehearsal on this host:
+
+- Wrapper install on a scratch layout (`-DataDir …\pg\data -Port 5442`) exited 0 and created the
+  cluster, applied 0001–0008 and wrote `pg\credentials.json`; `status` reported `reachable: true`,
+  `server: 16.15`, `schema: 0008`.
+- `stop` and `start` are idempotent (second call succeeds without error); `uninstall -DeleteData`
+  removed the data, credentials and the extra `logs\`/`health.json` and left port 5442 closed.
+- A silent install of the rebuilt setup exited 0. The Inno log shows
+  `postgres.ps1 install` exit 0 → `postgres.ps1 start` exit 0 → `errkb db migrate` exit 0
+  (`already up to date`, because `pg install` already migrated) → `autostart.ps1 -Action install`
+  exit 0. `health.json` reported `status ok` and the ledger 0008.
+- Reboot replay: after stopping the daemon and cluster, re-running the HKCU `Run` command started
+  the cluster and daemon in 3.4 s, `errkb search` answered, and `health.json` returned to `ok`.
+- `/DELETE_DATA=1` uninstall exited 0 and removed `%LOCALAPPDATA%\errkb` completely (Run key gone,
+  port closed, no processes).
+
+Remaining for the clean-VM pass: the same sequence on a machine without the development toolchain.
+

@@ -32,6 +32,9 @@ They never claim more than the acceptance records in this repository prove.
   ledger.
 - Logon autostart uses the per-user Run key; registering a Scheduled Task
   requires administrator rights and silently failed for standard users.
+- The PostgreSQL lifecycle has exactly one implementation: rrkb pg creates,
+  starts, stops and uninstalls the local cluster, and postgres.ps1 only forwards
+  the installer's arguments.
 
 ## [0.1.0] - 2026-10-21
 
