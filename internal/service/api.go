@@ -38,6 +38,10 @@ type Backend interface {
 	GetIssue(context.Context, contract.GetIssueRequest) (contract.GetIssueResponse, error)
 	// SetStatus corrects an issue status (open/resolved/wontfix/misjudged).
 	SetStatus(context.Context, contract.SetStatusRequest) (contract.SetStatusResponse, error)
+	// SetSolutionStatus moves a solution through its closed state machine.
+	SetSolutionStatus(context.Context, contract.SetSolutionStatusRequest) (contract.SetSolutionStatusResponse, error)
+	// DeleteSolution removes a solution and its versions after confirmation.
+	DeleteSolution(context.Context, contract.DeleteSolutionRequest) (contract.DeleteSolutionResponse, error)
 }
 
 // The error codes are the closed set from spec/local-api.cue. A caller must be
@@ -168,6 +172,22 @@ func (a *API) Handle(ctx context.Context, frame []byte) []byte {
 				APIErrorf(CodeInvalidRequest, "decode the get_issue payload: %v", err))
 		}
 		response, err := a.backend.GetIssue(ctx, payload)
+		return a.encodeResult(request, response, err)
+	case contract.OperationSetSolutionStatus:
+		var payload contract.SetSolutionStatusRequest
+		if err := json.Unmarshal(request.Payload, &payload); err != nil {
+			return a.rejectFrame(request.RequestID, request.Operation,
+				APIErrorf(CodeInvalidRequest, "decode the set_solution_status payload: %v", err))
+		}
+		response, err := a.backend.SetSolutionStatus(ctx, payload)
+		return a.encodeResult(request, response, err)
+	case contract.OperationDeleteSolution:
+		var payload contract.DeleteSolutionRequest
+		if err := json.Unmarshal(request.Payload, &payload); err != nil {
+			return a.rejectFrame(request.RequestID, request.Operation,
+				APIErrorf(CodeInvalidRequest, "decode the delete_solution payload: %v", err))
+		}
+		response, err := a.backend.DeleteSolution(ctx, payload)
 		return a.encodeResult(request, response, err)
 	case contract.OperationSetStatus:
 		var payload contract.SetStatusRequest

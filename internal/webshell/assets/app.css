@@ -130,3 +130,9 @@ main {
   overflow: hidden;
   clip: rect(0 0 0 0);
 }
+
+.warning {
+  margin: 0.4rem 0 0;
+  color: #f0b74c;
+}
+

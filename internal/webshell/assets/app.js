@@ -153,6 +153,11 @@ function renderVersions(solutions) {
           : "") +
         "</p>" +
         '<button type="button" data-copy="' + escapeText(copy.join("\n")) + '">Copy fix</button>' +
+        "<p>" +
+        '<button type="button" data-solution="' + escapeText(entry.solution.id) + '" data-solution-action="status" data-solution-status="verified">Verify</button>' +
+        '<button type="button" data-solution="' + escapeText(entry.solution.id) + '" data-solution-action="status" data-solution-status="deprecated" data-confirmed="true">Deprecate</button>' +
+        '<button type="button" data-solution="' + escapeText(entry.solution.id) + '" data-solution-action="delete">Delete solution</button>' +
+        "</p>" +
         "</article>"
       );
     })
@@ -274,6 +279,49 @@ function wireEdit(issueID, main) {
             }),
           },
         );
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          say(payload.message || "the daemon refused the write", true);
+          return;
+        }
+        location.reload();
+      } catch (error) {
+        say("the errkb core is not reachable", true);
+      }
+    });
+  }
+  for (const button of main.querySelectorAll("[data-solution-action]")) {
+    button.addEventListener("click", async () => {
+      const solutionID = button.getAttribute("data-solution");
+      const action = button.getAttribute("data-solution-action");
+      let url = "/api/solutions/" + encodeURIComponent(solutionID);
+      let body;
+      if (action === "delete") {
+        if (button.getAttribute("data-preview") !== "1") {
+          button.setAttribute("data-preview", "1");
+          button.textContent = "Confirm delete";
+          const note = document.createElement("p");
+          note.className = "warning";
+          note.textContent = "This removes the solution and all of its version history. Click Confirm delete to continue.";
+          button.after(note);
+          return;
+        }
+        url += "/delete";
+        body = JSON.stringify({ confirmed: true });
+      } else {
+        url += "/status";
+        body = JSON.stringify({
+          status: button.getAttribute("data-solution-status"),
+          confirmed: button.getAttribute("data-confirmed") === "true",
+        });
+      }
+      say("saving…");
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-errkb-token": token },
+          body: body,
+        });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
           say(payload.message || "the daemon refused the write", true);

@@ -116,3 +116,84 @@ func (i IssueDetailV) Validate() error {
 	}
 	return nil
 }
+
+// solution statuses the daemon state machine accepts.
+var solutionStatuses = map[string]bool{
+	"candidate":  true,
+	"verified":   true,
+	"deprecated": true,
+	"blocked":    true,
+}
+
+// SetSolutionStatusRequest moves one solution through the closed state machine.
+// Confirmed must be true for the destructive transitions (deprecated, blocked);
+// the daemon enforces it, the Web page only relays the intent.
+type SetSolutionStatusRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	SolutionID    string `json:"solution_id"`
+	Status        string `json:"status"`
+	Confirmed     bool   `json:"confirmed,omitempty"`
+}
+
+func (r SetSolutionStatusRequest) Validate() error {
+	if r.SchemaVersion != SchemaVersion {
+		return errors.New("set_solution_status.request.schema_version: unsupported version " + r.SchemaVersion)
+	}
+	if r.SolutionID == "" {
+		return errors.New("set_solution_status.request.solution_id: required")
+	}
+	if !solutionStatuses[r.Status] {
+		return errors.New("set_solution_status.request.status: unknown status " + r.Status)
+	}
+	return nil
+}
+
+type SetSolutionStatusResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	SolutionID    string `json:"solution_id"`
+	Status        string `json:"status"`
+}
+
+func (r SetSolutionStatusResponse) Validate() error {
+	if r.SchemaVersion != SchemaVersion {
+		return errors.New("set_solution_status.response.schema_version: unsupported version " + r.SchemaVersion)
+	}
+	if r.SolutionID == "" {
+		return errors.New("set_solution_status.response.solution_id: required")
+	}
+	return nil
+}
+
+// DeleteSolutionRequest removes a solution and its versions. Confirmed is the
+// second confirmation the UI promised; the daemon refuses without it.
+type DeleteSolutionRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	SolutionID    string `json:"solution_id"`
+	Confirmed     bool   `json:"confirmed,omitempty"`
+}
+
+func (r DeleteSolutionRequest) Validate() error {
+	if r.SchemaVersion != SchemaVersion {
+		return errors.New("delete_solution.request.schema_version: unsupported version " + r.SchemaVersion)
+	}
+	if r.SolutionID == "" {
+		return errors.New("delete_solution.request.solution_id: required")
+	}
+	return nil
+}
+
+type DeleteSolutionResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	SolutionID    string `json:"solution_id"`
+	Deleted       bool   `json:"deleted"`
+}
+
+func (r DeleteSolutionResponse) Validate() error {
+	if r.SchemaVersion != SchemaVersion {
+		return errors.New("delete_solution.response.schema_version: unsupported version " + r.SchemaVersion)
+	}
+	if r.SolutionID == "" {
+		return errors.New("delete_solution.response.solution_id: required")
+	}
+	return nil
+}

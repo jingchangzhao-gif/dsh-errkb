@@ -16,16 +16,18 @@ import (
 const PipeEnvelopeVersion = "v1"
 
 var validOperations = map[string]bool{
-	OperationLookup:         true,
-	OperationSearch:         true,
-	OperationRecord:         true,
-	OperationFeedback:       true,
-	OperationList:           true,
-	OperationStats:          true,
-	OperationCapture:        true,
-	OperationRecordSolution: true,
-	OperationSetStatus:      true,
-	OperationGetIssue:       true,
+	OperationLookup:            true,
+	OperationSearch:            true,
+	OperationRecord:            true,
+	OperationFeedback:          true,
+	OperationList:              true,
+	OperationStats:             true,
+	OperationCapture:           true,
+	OperationRecordSolution:    true,
+	OperationSetStatus:         true,
+	OperationGetIssue:          true,
+	OperationSetSolutionStatus: true,
+	OperationDeleteSolution:    true,
 }
 
 var validErrorCodes = map[string]bool{
@@ -203,6 +205,18 @@ func validatePayload(operation string, payload []byte) error {
 			return fmt.Errorf("get_issue payload: %w", err)
 		}
 		return decoded.Validate()
+	case OperationSetSolutionStatus:
+		var decoded SetSolutionStatusRequest
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("set_solution_status payload: %w", err)
+		}
+		return decoded.Validate()
+	case OperationDeleteSolution:
+		var decoded DeleteSolutionRequest
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("delete_solution payload: %w", err)
+		}
+		return decoded.Validate()
 	default:
 		return fmt.Errorf("operation: unknown %q", operation)
 	}
@@ -270,6 +284,18 @@ func validateResult(operation string, payload []byte) error {
 		var decoded GetIssueResponse
 		if err := decodeStrict(payload, &decoded); err != nil {
 			return fmt.Errorf("get_issue result: %w", err)
+		}
+		return decoded.Validate()
+	case OperationSetSolutionStatus:
+		var decoded SetSolutionStatusResponse
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("set_solution_status result: %w", err)
+		}
+		return decoded.Validate()
+	case OperationDeleteSolution:
+		var decoded DeleteSolutionResponse
+		if err := decodeStrict(payload, &decoded); err != nil {
+			return fmt.Errorf("delete_solution result: %w", err)
 		}
 		return decoded.Validate()
 	default:
