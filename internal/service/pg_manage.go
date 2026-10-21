@@ -923,6 +923,13 @@ func writeCredentials(path string, credentials Credentials) error {
 	return nil
 }
 
+// ReadCredentials loads the file the installer writes next to the data
+// directory (EKB-051). It is exported so the CLI can turn it into a DSN without
+// parsing JSON itself; the password never leaves the process.
+func ReadCredentials(path string) (Credentials, error) {
+	return readCredentials(path)
+}
+
 func readCredentials(path string) (Credentials, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {

@@ -45,6 +45,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 [Files]
 Source: "..\..\dist\errkb.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "postgres.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "autostart.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\..\db\migrations\*.sql"; DestDir: "{app}\migrations"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Dirs]
@@ -54,13 +56,23 @@ Name: "{app}\pg"; Permissions: users-full
 ; Choice 1 or 3: create and start the dedicated cluster.
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" install -DataDir ""{app}\pg\data"" -Port {code:GetPgPort}"; StatusMsg: "Creating the local PostgreSQL cluster (this takes a few seconds)..."; Flags: runhidden waituntilterminated; Check: CreatesCluster
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" start -DataDir ""{app}\pg\data"" -Port {code:GetPgPort}"; StatusMsg: "Starting the local PostgreSQL cluster..."; Flags: runhidden waituntilterminated; Check: CreatesCluster
+; EKB-056: a fresh install creates the schema with the shipped CLI (there is no
+; Go toolchain on the target machine). The daemon refuses to start until the
+; ledger matches, so this step is what makes the first run work.
+Filename: "{app}\errkb.exe"; Parameters: "db migrate --credentials ""{app}\pg\credentials.json"" --migrations ""{app}\migrations"""; StatusMsg: "Creating the errkb database schema..."; Flags: runhidden waituntilterminated; Check: CreatesCluster
+; EKB-056: one logon ScheduledTask starts the cluster and daemon again after a
+; reboot; it also starts both now, so the product works right after setup.
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\autostart.ps1"" -Action install -AppDir ""{app}"" -Port {code:GetPgPort}"; StatusMsg: "Configuring start at logon..."; Flags: runhidden waituntilterminated; Check: CreatesCluster
 Filename: "{app}\errkb.exe"; Parameters: "version"; Description: "Show the errkb version"; Flags: postinstall shellexec runasoriginaluser
 
 [UninstallRun]
+; Stop the daemon and drop the logon task before the files disappear (a running
+; daemon would keep errkb.exe locked and the task would point at nothing).
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\autostart.ps1"" -Action uninstall -AppDir ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbAutostart"
 ; Choice 2 (existing instance): only remove the credentials, keep everything else.
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort}"; Flags: runhidden waituntilterminated; Check: not DeleteDataOnUninstall
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort}"; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbPgKeep"; Check: not DeleteDataOnUninstall
 ; Choice 1 or 3 with data removal.
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort} -DeleteData"; Flags: runhidden waituntilterminated; Check: DeleteDataOnUninstall
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort} -DeleteData"; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbPgDelete"; Check: DeleteDataOnUninstall
 
 [Code]
 var
