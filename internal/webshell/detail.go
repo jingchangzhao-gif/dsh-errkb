@@ -1,0 +1,50 @@
+package webshell
+
+import (
+	"context"
+	"net/http"
+	"regexp"
+	"strings"
+
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
+)
+
+// issueIDPattern keeps a path that is plainly not an id from reaching the
+// database, where it would only produce a driver error instead of a 404.
+var issueIDPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+
+// GetIssueFunc performs the daemon-side detail read. The Web layer only renders
+// the answer; every rule (confirmation, state machine, audit, trust) stays in
+// the daemon's DetailService.
+type GetIssueFunc func(ctx context.Context, request contract.GetIssueRequest) (contract.GetIssueResponse, error)
+
+// serveIssue returns the whole detail document for one issue id.
+func (s *Server) serveIssue(w http.ResponseWriter, r *http.Request) {
+	if !s.authorized(r) {
+		writeError(w, http.StatusUnauthorized, "invalid_request", "missing or invalid token")
+		return
+	}
+	issueID := strings.TrimSpace(r.PathValue("id"))
+	if issueID == "" || len(issueID) > 64 {
+		writeError(w, http.StatusBadRequest, "invalid_request", "a single issue id is required")
+		return
+	}
+	if s.detail == nil {
+		writeError(w, http.StatusServiceUnavailable, "unavailable", "the detail view is not available in this launch")
+		return
+	}
+	if !issueIDPattern.MatchString(issueID) {
+		writeError(w, http.StatusNotFound, "not_found", "no issue has that id")
+		return
+	}
+	response, err := s.detail(r.Context(), contract.GetIssueRequest{SchemaVersion: "v1", IssueID: issueID})
+	if err != nil {
+		if strings.Contains(err.Error(), "not_found") || strings.Contains(err.Error(), "not found") {
+			writeError(w, http.StatusNotFound, "not_found", "no issue has that id")
+			return
+		}
+		writeError(w, http.StatusBadGateway, "unavailable", "the errkb core is not reachable")
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}

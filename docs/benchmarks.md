@@ -1,5 +1,7 @@
 # Retrieval performance and crash-safety gates
 
+[简体中文](benchmarks.zh-CN.md)
+
 EKB-027 fixes the performance and crash-safety gates for the P3 knowledge base. The
 committed gate is:
 
@@ -11,6 +13,10 @@ The 150 ms number is a gate, not a target. This document records the environment
 the measured numbers, the query plans, the fixes the first blocked run produced and
 the optimization directions that were measured and rejected. Measurements are
 reproducible with `internal/database/bench_test.go`.
+
+> This is historical evidence for the source revision tested on 2026-10-19. It does
+> not mean the current `dist`, installed executable and old release bundle form one
+> coherent release. See [project-status.md](project-status.md).
 
 ## Status
 

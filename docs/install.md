@@ -1,13 +1,16 @@
-# Installing, upgrading and uninstalling the Error Knowledge Base
+# Installation candidate, upgrade and uninstall
 
-This page describes the Windows installation path for version 0.1.0 of the Error Knowledge Base (the `errkb` command) and what it actually does today. Where the release is incomplete, it says so instead of describing the intended behavior.
+[简体中文](install.zh-CN.md)
 
-> **Status note.** The clean-VM acceptance is blocked: no hypervisor is available in the
-> environment the release was built in, and the installer does not yet apply schema
-> migrations (finding 1) or register autostart (finding 2). See
-> [`docs/acceptance-vm.md`](acceptance-vm.md) for the evidence and the harness.
-> `packaging/windows/release.ps1` refuses to package a version without a recorded
-> acceptance for it, so no public release exists until those findings are fixed.
+This page separates the **current installer source**, the **locally built acceptance
+candidate** and the **older release bundle**. They are not interchangeable.
+
+> **Status note (2026-10-22).** EKB-056 added `errkb db migrate`, the installer migration
+> step and HKCU logon startup to the current source. Those changes were rehearsed on the
+> development host, but the clean-VM run is still blocked. The existing files under
+> `dist\release\errkb-0.1.0\` predate EKB-056 and must not be presented as the current
+> installer. There is no supported public release yet. See
+> [`project-status.md`](project-status.md) and [`acceptance-vm.md`](acceptance-vm.md).
 
 ## Requirements
 
@@ -32,6 +35,10 @@ The release is not code-signed. Verify `errkb.exe` and the setup executable agai
 `SHA256SUMS` before installing, and expect a SmartScreen warning for an unsigned
 installer.
 
+Do not combine files from `dist\` and `dist\release\errkb-0.1.0\`. In the audited local
+copy, those directories contain different EXE revisions and command sets. A release must
+be rebuilt once from one tagged Git commit.
+
 ## Interactive install
 
 1. Run `errkb-<version>-setup.exe` and accept the UAC prompt.
@@ -43,8 +50,13 @@ installer.
    - **Reuse an existing instance**: you supply the DSN; nothing is created.
    - **Other port**: same as dedicated, with a port you choose. A busy port is detected and
      rejected in the wizard.
-4. Finish the wizard. The installer offers to start the cluster; it also copies
-   `errkb.exe`, `postgres.ps1`, `README.md` and the uninstaller into the install directory.
+4. Finish the wizard. In the current source, the installer starts the cluster, applies
+   migrations `0001`–`0008`, registers the per-user logon command, and copies `errkb.exe`,
+   the migrations and lifecycle scripts into the install directory.
+
+The current installer does **not** create a toolbox launcher or Start-menu shortcut. That
+is EKB-060 work. Running `errkb.exe` without a subcommand prints CLI usage; it does not
+open the toolbox.
 
 ## Silent install
 
@@ -68,36 +80,50 @@ gate.
 The daemon's default paths follow `%LOCALAPPDATA%`; pass `--health-file` and `--log-file`
 to put them elsewhere.
 
-## First run in 0.1.0 is incomplete
+## Current source versus existing artifacts
 
-The installer creates and starts PostgreSQL, but it does **not** apply the schema
-migrations, and the CLI has no `db migrate` subcommand yet. The daemon therefore refuses
-to start on a fresh install with:
+The current source contains the first-run plumbing:
+
+```powershell
+errkb db migrate --credentials "$env:LOCALAPPDATA\errkb\pg\credentials.json" `
+  --migrations "$env:LOCALAPPDATA\errkb\migrations"
+```
+
+The installer source runs that command before registering HKCU startup. A missing or
+failed migration stops the install instead of leaving a nominally successful but unusable
+daemon.
+
+The older EXE in `dist\release\errkb-0.1.0\` does not contain the `db` command. If that
+binary is paired with a new installer definition, first run fails because the schema
+cannot be created. This is why existing artifacts are acceptance evidence only.
+
+An unmigrated database produces an error similar to:
 
 ```text
 errkb daemon: schema migration check failed: applied version "", expected "0008"
 (run `errkb db migrate` first)
 ```
 
-Until a follow-up card closes this gap, the supported route is the rehearsal path in
-[`docs/acceptance-vm.md`](acceptance-vm.md): apply the eight migrations with the Go
-migrator from the repository checkout, then start the daemon.
+Until one coherent tagged build passes clean-VM acceptance, the supported route is the
+development flow: build the current source, run `db migrate`, start the daemon with an
+explicit DSN, and run `doctor`.
 
 ## Start the daemon
 
 ```powershell
+errkb db migrate --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
 errkb daemon --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable"
 ```
 
 Useful flags: `--pipe` (Named Pipe name, default `\\.\pipe\errkb`), `--lock-name` (named
 mutex for the single instance), `--health-file`, `--log-file`, `--log-max-bytes`,
-`--health-interval`. The daemon never writes logs to stdout. Stop it with `Ctrl+C` (or
-close the tray application); shutdown is graceful and waits for in-flight requests.
+`--health-interval`. The daemon never writes logs to stdout. Stop a console-started daemon
+with `Ctrl+C`; shutdown is graceful and waits for in-flight requests.
 
 Check the installation with:
 
 ```powershell
-errkb doctor
+errkb doctor --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
 ```
 
 The doctor reports eight checks — version and database connectivity, migration ledger,
@@ -160,15 +186,18 @@ path (a guard against deleting the wrong directory).
 
 | Symptom | Likely cause and fix |
 | --- | --- |
-| `schema migration check failed` | The ledger is missing or behind. Apply the migrations (0.1.0 has no `db migrate`; see the note above). |
+| `schema migration check failed` | The ledger is missing or behind. Use a current source build and run `errkb db migrate`; the older release-folder EXE has no `db` command. |
 | `the local API is not reachable` | The daemon is not running or the pipe name differs. Start `errkb daemon` and check `errkb doctor`. |
 | `database: connection refused` | PostgreSQL is not running, or the DSN points at the wrong port. Check `errkb doctor`. |
+| `flag provided but not defined: -web` | The EXE does not contain the local Web-shell integration. Existing release binaries cannot open it. |
+| `ui --web` waits and exits 4 | The daemon is down and the UI has no DSN. Credential-aware installed startup is unfinished; start the managed cluster/daemon or pass a DSN during development. |
 | Port 5433 already in use | Another cluster is listening. Choose another port in the wizard or stop the other instance. |
 | Daemon log shows an access error under `%TEMP%` | Windows denies log writes in that directory for this process. Leave the default paths under `%LOCALAPPDATA%`. |
-| `errkb run -- <command>` complains about `--` | Pass `--connector` and `--session` before `--` (known EKB-031 parsing bug). |
 
 ## Related
 
 - [`docs/acceptance-vm.md`](acceptance-vm.md) — clean-VM harness, rehearsal evidence, blockers.
+- [`docs/project-status.md`](project-status.md) — current source/artifact truth and release blockers.
+- [`docs/toolbox-ui.md`](toolbox-ui.md) — UI status and EKB-057–060 scope.
 - [`docs/privacy.md`](privacy.md) — what is stored and how it is protected.
 - [`packaging/windows/`](../packaging/windows) — build, release and installer scripts.

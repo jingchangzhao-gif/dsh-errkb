@@ -25,6 +25,9 @@ const uiShutdownTimeout = 10 * time.Second
 // runUI implements `errkb ui`: it hosts the capture service in this process,
 // shows the tray, and refuses to exit before capture has stopped gracefully.
 func runUI(args []string) int {
+	if len(args) > 0 && args[0] == "--web" {
+		return runWeb(args[1:], os.Stdout, os.Stderr)
+	}
 	flags := flag.NewFlagSet("errkb ui", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	dsn := flags.String("dsn", os.Getenv("ERRKB_DSN"), "PostgreSQL connection string (default $ERRKB_DSN)")

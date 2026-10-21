@@ -1,5 +1,7 @@
 # Clean-VM acceptance (EKB-052)
 
+[简体中文](acceptance-vm.zh-CN.md)
+
 > **Status: blocked, retest pending** — the acceptance harness and the installer are built and
 > dry-run, but the clean-VM run itself **has not been executed**. No hypervisor, VM or snapshot
 > tooling is available in the environment this card was implemented in (no `vmrun`, `qemu`,
@@ -14,6 +16,12 @@
 > install, migrations, the Run entry, the loop, a reboot replay and both uninstall choices; the
 > clean-VM evidence itself has not been produced yet, so this file still says `blocked`.
 
+> **Artifact warning (2026-10-22).** This report names the locally rebuilt EKB-056 candidate
+> (`531DB993…` / `0892445D…`, commit `fa2585e`). The older files under `dist\release\errkb-0.1.0\` are a different
+> revision and are not covered by this rehearsal. The Web toolbox and its launcher are also outside
+> this evidence; they require EKB-057–060 and a new clean-VM run. See
+> [`project-status.md`](project-status.md).
+
 This file is the *report* side of §11.1: `packaging/windows/vm-acceptance.ps1` is the executable
 half. The script exits non-zero when any automatic check fails, writes `results.json` plus one
 evidence file per check, and marks the clicks it cannot automate as `MANUAL`.
@@ -22,17 +30,21 @@ evidence file per check, and marks the clicks it cannot automate as `MANUAL`.
 
 | Artifact | Value |
 | --- | --- |
-| installer | `dist\errkb-0.1.0-setup.exe`, 4,959,460 bytes |
-| installer SHA256 | `F3E77D4CCAF0501129D092F71E3808ABB20E036BD3A10892DB0D0E55B640CC09` |
+| installer | `dist\release\errkb-0.1.0\errkb-0.1.0-setup.exe`, 5,421,683 bytes |
+| installer SHA256 | `0892445D6198A23EB15512B18C95DF035A7521AFE56A70FD8C16539C03BA130E` |
 | installer toolchain | Inno Setup 6.7.3 (`ISCC.exe`, user-scope install) |
-| binary | `dist\errkb.exe`, 10,936,320 bytes |
-| binary SHA256 | `B116E5BA493EE5A5CF5AD070332F48159B289761DED89E16C366F25EBF2EAD67` |
-| binary version | `errkb 0.1.0`, `commit local`, `built 2026-10-21T00:00:00Z`, `go go1.26.4 windows/amd64` |
+| binary | `dist\release\errkb-0.1.0\errkb.exe`, 12,680,192 bytes |
+| binary SHA256 | `531DB9937FF25BA95545F48CE3E4DBF97292EA7C002C8C5453BD0C0DD49CED59` |
+| binary version | `errkb 0.1.0`, `commit fa2585e`, `built 2026-10-22T00:00:00Z`, `go go1.26.4 windows/amd64` |
+| toolbox ZIP | `dist\release\errkb-0.1.0\errkb-toolbox.zip`, 4,682,337 bytes |
+| toolbox ZIP SHA256 | `B282EEE36DB0799D74991EB8940659788FC100476A55C494340D4D088C076126` |
 | database | PostgreSQL 16.15, dedicated cluster on the chosen port (default 5433) |
 
 The installer and binary hashes are the inputs the script verifies (`-ExpectedSha256` for the
 installer; the binary hash is printed in `results.json` for cross-checking against this table).
-Rebuild both before a real run and update this table in the same commit.
+The toolbox ZIP is the artifact the launcher entry inside the installed product starts from.
+Rebuild all three before a real run and update this table in the same commit — the values above
+come from the WF-012 rehearsal bundle (commit `fa2585e`, package label `v0.1.0`, not published).
 
 ## Required machine
 
@@ -71,7 +83,7 @@ as the card requires (`docs/` + the script are the only landed files).
 ```powershell
 # 1. artifacts: verify the installer and binary hashes before touching the machine
 pwsh -File packaging\windows\vm-acceptance.ps1 -Phase artifacts `
-  -ExpectedSha256 F3E77D4CCAF0501129D092F71E3808ABB20E036BD3A10892DB0D0E55B640CC09
+  -ExpectedSha256 0892445D6198A23EB15512B18C95DF035A7521AFE56A70FD8C16539C03BA130E
 
 # 2. interactive install as a standard user (manual gate)
 #    double-click the setup, accept UAC, choose create-reusable cluster, keep default port
@@ -115,8 +127,8 @@ and "standard user" checks are real.
 - Standard-user UAC prompt and successful install into the per-user application directory.
 - First run in a fresh terminal: `errkb run -- cmd /c "exit 9"` records; `errkb search` finds the fix
   after it was recorded through the UI; no model or network call produces the fix.
-- Reboot → sign in → nothing manually started → `errkb doctor` has a running database and the tray
-  shows `running` (currently expected to fail; see finding 2).
+- Reboot → sign in → nothing manually started → `errkb doctor` has a running database and the pipe
+  is reachable. EKB-056 implements this path; the clean-VM run must prove it.
 - Uninstall, choose **keep data**, reinstall, confirm reuse of the retained cluster.
 - Uninstall, choose **delete data**, confirm no installer/service/port/data residue.
 
@@ -184,8 +196,9 @@ executed (EKB-051 left it to this card).
 
 ### What the rehearsal proved once the schema exists
 
-On the same cluster, applying the eight migrations with a throwaway `database.Migrate` probe (there is no
-`errkb db migrate` command) let the whole loop run with the installed binary and a daemon on a named pipe:
+At this historical EKB-052 checkpoint, applying the eight migrations with a throwaway
+`database.Migrate` probe (the `errkb db migrate` command did not exist yet) let the whole loop run
+with the installed binary and a daemon on a named pipe. EKB-056 supersedes this workaround:
 
 - `errkb run --connector cli --session ekb052 --project probe -- cmd /c "exit 9"` recorded the failure
   (`issue a2a91bd8-a30c-4c64-b353-020a8696a52e`, fingerprint `4202fb44db19`).
@@ -213,7 +226,84 @@ are superseded by the EKB-056 deliverables:
    daemon reached `status ok` with migrations 0008; the installer log shows `db migrate` exiting 0
    before `autostart.ps1 -Action install` exits 0. The reboot check on a clean VM is still required.
 
-The artifact table above carries the EKB-056 rebuild (`errkb.exe` 10,936,320 bytes /
-`B116E5BA…`, installer 4,959,460 bytes / `F3E77D4C…`). Re-run the phases below on a clean machine
-to turn this report into evidence.
+The artifact table above carries the WF-012 rehearsal bundle (`errkb.exe` 12,680,192 bytes /
+`531DB993…`, installer 5,421,683 bytes / `0892445D…`, toolbox ZIP 4,682,337 bytes, built from
+commit `fa2585e`). Re-run the phases below on a clean machine to turn this report into evidence.
 
+### Lifecycle unification rehearsal (2026-10-22, WF-007)
+
+The PostgreSQL lifecycle now has exactly one implementation. `internal/service/pg_manage.go` is
+reached through `errkb pg install|start|stop|uninstall|status|discover`, and
+`packaging/windows/postgres.ps1` is a thin wrapper that maps the installer's arguments onto that
+command (it no longer calls `initdb`/`pg_ctl` itself). Installer, uninstaller and the logon autostart
+entry all go through the wrapper, so they all use the same code.
+
+Rehearsal on this host:
+
+- Wrapper install on a scratch layout (`-DataDir …\pg\data -Port 5442`) exited 0 and created the
+  cluster, applied 0001–0008 and wrote `pg\credentials.json`; `status` reported `reachable: true`,
+  `server: 16.15`, `schema: 0008`.
+- `stop` and `start` are idempotent (second call succeeds without error); `uninstall -DeleteData`
+  removed the data, credentials and the extra `logs\`/`health.json` and left port 5442 closed.
+- A silent install of the rebuilt setup exited 0. The Inno log shows
+  `postgres.ps1 install` exit 0 → `postgres.ps1 start` exit 0 → `errkb db migrate` exit 0
+  (`already up to date`, because `pg install` already migrated) → `autostart.ps1 -Action install`
+  exit 0. `health.json` reported `status ok` and the ledger 0008.
+- Reboot replay: after stopping the daemon and cluster, re-running the HKCU `Run` command started
+  the cluster and daemon in 3.4 s, `errkb search` answered, and `health.json` returned to `ok`.
+- `/DELETE_DATA=1` uninstall exited 0 and removed `%LOCALAPPDATA%\errkb` completely (Run key gone,
+  port closed, no processes).
+
+Remaining for the clean-VM pass: the same sequence on a machine without the development toolchain.
+
+
+
+## Coherent pre-release artifact rehearsal (2026-10-22, WF-012)
+
+Purpose: prove the EXE, installer, toolbox ZIP, manifest, SBOM and hashes can be
+produced from one revision in one pass, and that an installed copy reports the
+same identity. This is a development-host rehearsal, not an accepted release:
+no tag was created and nothing was published, because clean-VM acceptance
+(EKB-052 / WF-011) is still open.
+
+Source revision: `fa2585e` (local branch `local/work-state-2026-10-22`). Built
+with `packaging\windows\release.ps1 -Mode package -Version 0.1.0 -Tag v0.1.0
+-Commit fa2585e -BuildTime 2026-10-22T00:00:00Z -IncludeInstaller` and an
+explicit `VM_ACCEPTANCE_VERSION=0.1.0`; the explicit value makes the gate
+observable and is not an acceptance claim.
+
+Bundle `dist\release\errkb-0.1.0` (manifest version `0.1.0`, tag `v0.1.0`,
+commit `fa2585e`, build time `2026-10-22T00:00:00Z`, Go 1.26.4, go-winres
+v0.3.3):
+
+| Artifact | Size | SHA256 |
+| --- | --- | --- |
+| `errkb.exe` | 12,680,192 | `531db9937ff25ba95545f48ce3e4dbf97292ea7c002c8c5453bd0c0dd49ced59` |
+| `errkb-0.1.0-setup.exe` | 5,421,683 | `0892445d6198a23eb15512b18c95df035a7521afe56a70fd8c16539c03ba130e` |
+| `errkb-toolbox.zip` | 4,682,337 | `b282eee36db0799d74991eb8940659788fc100476a55c494340d4d088c076126` |
+| `manifest.json` | 3,478 | listed in `SHA256SUMS` |
+| `sbom.json` | 7,935 | listed in `SHA256SUMS` |
+| `SHA256SUMS` | 736 | all 9 entries verified |
+
+Identity checks:
+
+- `dist\errkb.exe`, the `errkb.exe` inside `errkb-toolbox.zip`, and the installed
+  `%LOCALAPPDATA%\errkb\errkb.exe` all hash to the same value
+  (`531db993…`); `SHA256SUMS` matches every file.
+- The installed binary reports `errkb 0.1.0`, `commit fa2585e`,
+  `built 2026-10-22T00:00:00Z` — exactly the manifest fields — and its `help`
+  lists the newest commands (`tail --file`, `markdown import|export`), so the
+  artifact and the source expose the same surface.
+- `health.json` after install was `ok` with the ledger at 0008.
+- Silent uninstall with `/DELETE_DATA=1` exited 0, removed
+  `%LOCALAPPDATA%\errkb` and the Start-menu folder, cleared the HKCU `Run`
+  value, and left port 5433 closed. The Inno log shows the uninstaller passing
+  `-Choice keep` to `postgres.ps1` and the marker file (written by
+  `InitializeUninstall`) driving the delete, which is why the switch is checked
+  in both `/delete_data` and `/delete_data=1` spellings.
+- The installer contains the unified `postgres.ps1` (which delegates to
+  `errkb pg uninstall -DeleteData`) and the HKCU-Run `autostart.ps1`.
+
+Known limits: setup and ZIP are not byte-reproducible (documented in
+`manifest.json`); `VM_ACCEPTANCE_VERSION` was supplied explicitly; no git tag was
+created or pushed, so this bundle must not be published as `v0.1.0`.

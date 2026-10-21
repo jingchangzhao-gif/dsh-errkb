@@ -576,10 +576,15 @@ func (m *PGManager) migrate(ctx context.Context, credentials Credentials, migrat
 	return nil
 }
 
-// Start starts the cluster and waits until it accepts connections.
+// Start starts the cluster and waits until it accepts connections. It returns
+// nil when the cluster is already listening, so the logon autostart path stays
+// idempotent.
 func (m *PGManager) Start(ctx context.Context, instance Instance) error {
 	if !isPostgresDataDir(instance.DataDir) {
 		return fmt.Errorf("start: %s is not a PostgreSQL data directory", instance.DataDir)
+	}
+	if portOpen(instance.Port) {
+		return nil
 	}
 	logPath := filepath.Join(filepath.Dir(instance.DataDir), pgLogDirName, pgLogFileName)
 	startCtx, cancel := context.WithTimeout(ctx, DefaultPGReadyTimeout+30*time.Second)
@@ -618,23 +623,27 @@ func (m *PGManager) stopQuietly(ctx context.Context, instance Instance) error {
 	return err
 }
 
-// Stop stops the cluster. When deleteData is set the cluster files are removed
-// afterwards (after a guard proves the directory really is a cluster).
+// Stop stops the cluster. Stopping an already stopped cluster is a no-op, so
+// the uninstaller and autostart paths are idempotent. When deleteData is set the
+// cluster files are removed afterwards (after a guard proves the directory
+// really is a cluster).
 func (m *PGManager) Stop(ctx context.Context, instance Instance, deleteData bool) error {
-	if !isPostgresDataDir(instance.DataDir) {
-		return fmt.Errorf("stop: %s is not a PostgreSQL data directory", instance.DataDir)
-	}
-	if err := m.stopQuietly(ctx, instance); err != nil {
-		return fmt.Errorf("stop: %w", err)
-	}
-	deadline := m.now().Add(15 * time.Second)
-	for portOpen(instance.Port) {
-		if m.now().After(deadline) {
-			return fmt.Errorf("stop: the port %d is still open", instance.Port)
+	if isPostgresDataDir(instance.DataDir) && portOpen(instance.Port) {
+		if err := m.stopQuietly(ctx, instance); err != nil {
+			return fmt.Errorf("stop: %w", err)
 		}
-		time.Sleep(200 * time.Millisecond)
+		deadline := m.now().Add(15 * time.Second)
+		for portOpen(instance.Port) {
+			if m.now().After(deadline) {
+				return fmt.Errorf("stop: the port %d is still open", instance.Port)
+			}
+			time.Sleep(200 * time.Millisecond)
+		}
 	}
 	if deleteData {
+		if _, err := os.Stat(instance.DataDir); errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		return removePostgresDataDir(instance.DataDir)
 	}
 	return nil

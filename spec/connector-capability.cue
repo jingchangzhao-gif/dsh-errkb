@@ -7,11 +7,11 @@ package spec
 // #EventField names the ErrorEvent v1 fields a connector may fill in.
 #EventField:
 	"schema_version" | "event_id" | "connector_id" | "session_id" |
-		"observed_at" | "channel" | "category" | "severity" | "transient" |
-		"headline" | "normalized_message" | "redacted_sample" |
-		"error_code" | "command" | "exit_code" | "tool_name" |
-		"os" | "shell" | "runtime_versions" | "project_key" |
-		"fingerprint" | "evidence" | "confidence"
+	"observed_at" | "channel" | "category" | "severity" | "transient" |
+	"headline" | "normalized_message" | "redacted_sample" |
+	"error_code" | "command" | "exit_code" | "tool_name" |
+	"os" | "shell" | "runtime_versions" | "project_key" |
+	"fingerprint" | "evidence" | "confidence"
 
 #ConnectorCapability: {
 	// Host identifier, e.g. "dsh", "codex", "claude-code".
@@ -29,13 +29,13 @@ package spec
 	fallback: {
 		channel: #Channel
 		missing: [...#EventField]
-		note?:   string
+		note?: string
 	}
 	// Shape of the live capability probe recorded for this host.
 	probe: {
 		probed_at:    string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
 		host_version: string
 		ok:           bool
-		missing:      [...#EventField]
+		missing: [...#EventField]
 	}
 }

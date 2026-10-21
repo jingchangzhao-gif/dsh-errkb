@@ -11,6 +11,8 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/audit"
 )
 
 // SolutionRecord is the solution and revision RecordSolution appended.
@@ -80,6 +82,17 @@ func RecordSolution(
 		}
 	}
 
+	// Every edit leaves an audit row in the same transaction, so a recorded
+	// fix and its trail cannot diverge.
+	if err := insertAudit(ctx, tx, "solution.version.added", "solution_version", version.ID, actor, source, map[string]any{
+		"solution_id":   solutionID,
+		"version":       version.Version,
+		"body":          body,
+		"preconditions": preconditions,
+	}); err != nil {
+		return SolutionRecord{}, translateSolutionError("record solution", err)
+	}
+
 	tag, err := tx.Exec(ctx, `
 		update issues set status = 'resolved', updated_at = now() where id = $1
 	`, issueID)
@@ -101,7 +114,8 @@ func RecordSolution(
 }
 
 // SetIssueStatus corrects an issue status. The database check constraint is the
-// authority; a missing issue surfaces as pgx.ErrNoRows.
+// authority; a missing issue surfaces as pgx.ErrNoRows. The edit and its audit
+// row commit together.
 func SetIssueStatus(ctx context.Context, conn *pgx.Conn, issueID, status string) error {
 	valid := map[string]bool{"open": true, "resolved": true, "wontfix": true, "misjudged": true}
 	if issueID == "" {
@@ -110,14 +124,45 @@ func SetIssueStatus(ctx context.Context, conn *pgx.Conn, issueID, status string)
 	if !valid[status] {
 		return fmt.Errorf("set issue status: unknown status %q", status)
 	}
-	tag, err := conn.Exec(ctx, `
-		update issues set status = $2, updated_at = now() where id = $1
-	`, issueID, status)
+	tx, err := conn.Begin(ctx)
 	if err != nil {
 		return translateSolutionError("set issue status", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("set issue status: issue %s: %w", issueID, pgx.ErrNoRows)
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var before string
+	if err := tx.QueryRow(ctx, `select status from issues where id = $1`, issueID).Scan(&before); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("set issue status: issue %s: %w", issueID, pgx.ErrNoRows)
+		}
+		return translateSolutionError("set issue status", err)
+	}
+	if _, err := tx.Exec(ctx, `
+		update issues set status = $2, updated_at = now() where id = $1
+	`, issueID, status); err != nil {
+		return translateSolutionError("set issue status", err)
+	}
+	if err := insertAudit(ctx, tx, "issue.status.changed", "issue", issueID, "owner", "api", map[string]any{
+		"from": before,
+		"to":   status,
+	}); err != nil {
+		return translateSolutionError("set issue status", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return translateSolutionError("set issue status", err)
 	}
 	return nil
+}
+
+// insertAudit appends one audit row inside the caller's transaction, so the
+// edit and its trail cannot diverge.
+func insertAudit(ctx context.Context, tx pgx.Tx, action, entity, entityID, operator, source string, detail map[string]any) error {
+	return audit.Record(ctx, tx, audit.Entry{
+		Action:   action,
+		Entity:   entity,
+		EntityID: entityID,
+		Operator: operator,
+		Source:   source,
+		Detail:   detail,
+	})
 }

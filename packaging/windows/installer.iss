@@ -1,4 +1,4 @@
-; Inno Setup definition for errkb (EKB-051).
+﻿; Inno Setup definition for errkb (EKB-051).
 ;
 ; The installer manages a PostgreSQL cluster for the installed product.
 ; PostgreSQL stays an explicit dependency (plan §2) and the installer refuses to
@@ -46,12 +46,18 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Source: "..\..\dist\errkb.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "postgres.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "autostart.ps1"; DestDir: "{app}"; Flags: ignoreversion
+Source: "start-errkb.cmd"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\db\migrations\*.sql"; DestDir: "{app}\migrations"; Flags: ignoreversion
 Source: "..\..\README.md"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Dirs]
 Name: "{app}\pg"; Permissions: users-full
 
+[Icons]
+; Open the toolbox without a terminal: a hidden PowerShell hosts errkb ui --web,
+; and the launcher stays available for manual use.
+Name: "{group}\Start Error Knowledge Base"; Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -Command ""& '{app}\errkb.exe' ui --web"""; WorkingDir: "{app}"; IconFilename: "{app}\errkb.exe"
+Name: "{group}\Uninstall Error Knowledge Base"; Filename: "{uninstallexe}"
 [Run]
 ; Choice 1 or 3: create and start the dedicated cluster.
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" install -DataDir ""{app}\pg\data"" -Port {code:GetPgPort}"; StatusMsg: "Creating the local PostgreSQL cluster (this takes a few seconds)..."; Flags: runhidden waituntilterminated; Check: CreatesCluster
@@ -241,12 +247,12 @@ begin
     { A dialog answer cannot travel to the second uninstaller phase that runs
       the uninstall commands, so the choice is written as a marker file next
       to the database and postgres.ps1 reads it. }
-    if UninstallParam('/delete_data') then
+    if UninstallParam('/delete_data') or UninstallParam('/delete_data=1') then
     begin
       SetDeleteDataMarker(False);
       Exit;
     end;
-    if UninstallParam('/keep_data') then
+    if UninstallParam('/keep_data') or UninstallParam('/keep_data=1') then
     begin
       SetDeleteDataMarker(True);
       Exit;

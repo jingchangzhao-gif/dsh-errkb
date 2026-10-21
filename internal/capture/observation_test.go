@@ -123,6 +123,33 @@ func TestCaptureRedactsRawTextBeforeStorage(t *testing.T) {
 	}
 }
 
+func TestCaptureAcceptsARedactedRequestId(t *testing.T) {
+	// The live DSH profile reported a provider failure whose message carried
+	// "request_id: <uuid>". Redaction replaced the value, but the validation
+	// pattern rejected the label itself; the event never reached the store.
+	db := newCaptureDatabase(t)
+	ctx := context.Background()
+	rawID := "4e21e61c-f81a-4d5b-a7e2-6a8ee852fc07"
+	message := "provider failed (request_id: " + rawID + ")"
+
+	response, err := capture.CaptureObservation(ctx, db.conn, captureRequest(t, "obs-request-id", message))
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	var headline string
+	if err := db.conn.QueryRow(ctx,
+		`select headline from events where event_id = $1::uuid`, response.EventID,
+	).Scan(&headline); err != nil {
+		t.Fatalf("read stored event: %v", err)
+	}
+	if strings.Contains(headline, rawID) {
+		t.Fatalf("stored headline still contains the raw request id: %q", headline)
+	}
+	if !strings.Contains(headline, "<request-id>") {
+		t.Fatalf("stored headline = %q, want the redacted marker", headline)
+	}
+}
+
 func TestCaptureRejectsAnInvalidEnvelope(t *testing.T) {
 	db := newCaptureDatabase(t)
 	request := captureRequest(t, "", "open <path> failed")

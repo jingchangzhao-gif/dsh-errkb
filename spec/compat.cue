@@ -624,9 +624,61 @@ compat: {
 				"LocalError.retryable",
 			]
 			enums: {
-				operation: ["lookup", "search", "record", "feedback", "list", "stats", "capture", "record_solution", "set_status"]
+				operation: ["lookup", "search", "record", "feedback", "list", "stats", "capture", "record_solution", "set_status", "get_issue", "set_solution_status", "delete_solution"]
 				error_code: ["invalid_request", "not_found", "unavailable", "conflict", "internal"]
 			}
+		}
+		// The detail view (WF-005): one issue with its occurrence, solution and
+		// outcome history plus the two solution writes. The reads and writes reuse
+		// the closed state machine of internal/service/edit_api.go; a status change
+		// to deprecated or blocked and any deletion still need confirmed=true.
+		detail_view: {
+			file: "spec/detail-view.cue"
+			definitions: ["GetIssueRequest", "GetIssueResponse", "SetSolutionStatusRequest", "SetSolutionStatusResponse", "DeleteSolutionRequest", "DeleteSolutionResponse"]
+			schema_version: "v1"
+			semantics:      "One issue with its history for the Web toolbox, plus the solution status and deletion writes. The view types are display-only; trust stays computed by errkb_trust() and every write is audited."
+			unknown_fields: "reject"
+			decoder: {
+				file:   "internal/contract/local_api.go"
+				marker: "DisallowUnknownFields"
+			}
+			version_anchor: "#DetailViewVersion"
+			fields: [
+				"GetIssueRequest.schema_version",
+				"GetIssueRequest.issue_id",
+				"GetIssueResponse.schema_version",
+				"GetIssueResponse.issue",
+				"SetSolutionStatusRequest.schema_version",
+				"SetSolutionStatusRequest.solution_id",
+				"SetSolutionStatusRequest.status",
+				"SetSolutionStatusRequest.confirmed",
+				"SetSolutionStatusResponse.schema_version",
+				"SetSolutionStatusResponse.solution_id",
+				"SetSolutionStatusResponse.status",
+				"DeleteSolutionRequest.schema_version",
+				"DeleteSolutionRequest.solution_id",
+				"DeleteSolutionRequest.confirmed",
+				"DeleteSolutionResponse.schema_version",
+				"DeleteSolutionResponse.solution_id",
+				"DeleteSolutionResponse.deleted",
+			]
+			required: [
+				"GetIssueRequest.schema_version",
+				"GetIssueRequest.issue_id",
+				"GetIssueResponse.schema_version",
+				"GetIssueResponse.issue",
+				"SetSolutionStatusRequest.schema_version",
+				"SetSolutionStatusRequest.solution_id",
+				"SetSolutionStatusRequest.status",
+				"SetSolutionStatusResponse.schema_version",
+				"SetSolutionStatusResponse.solution_id",
+				"SetSolutionStatusResponse.status",
+				"DeleteSolutionRequest.schema_version",
+				"DeleteSolutionRequest.solution_id",
+				"DeleteSolutionResponse.schema_version",
+				"DeleteSolutionResponse.solution_id",
+				"DeleteSolutionResponse.deleted",
+			]
 		}
 		redact: {
 			file: "spec/redact.cue"

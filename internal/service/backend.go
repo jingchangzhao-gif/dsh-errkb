@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -409,4 +410,103 @@ func normalizeQuery(text string) string {
 		return ""
 	}
 	return core.Normalize(text)
+}
+
+// GetIssue answers the Web detail page. All reads and the trust computation
+// come from DetailService, so the Web layer never re-implements business rules.
+func (b *SQLBackend) GetIssue(ctx context.Context, request contract.GetIssueRequest) (contract.GetIssueResponse, error) {
+	if err := request.Validate(); err != nil {
+		return contract.GetIssueResponse{}, APIErrorf(CodeInvalidRequest, "%v", err)
+	}
+	if b.pool == nil {
+		return contract.GetIssueResponse{}, APIErrorf(CodeUnavailable, "no database pool is configured")
+	}
+	detail, err := NewDetailService(b.pool).Load(ctx, request.IssueID)
+	if err != nil {
+		if errors.Is(err, ErrDetailNotFound) {
+			return contract.GetIssueResponse{}, APIErrorf(CodeNotFound, "issue %s not found", request.IssueID)
+		}
+		return contract.GetIssueResponse{}, translateBackendError("get_issue", err)
+	}
+	return contract.GetIssueResponse{SchemaVersion: contract.SchemaVersion, Issue: mapIssueDetail(detail)}, nil
+}
+
+func mapIssueDetail(detail IssueDetail) contract.IssueDetailV {
+	out := contract.IssueDetailV{
+		ID: detail.Issue.ID, Fingerprint: detail.Issue.Fingerprint, Title: detail.Issue.Title,
+		Category: detail.Issue.Category, Status: detail.Issue.Status, ProjectKey: detail.Issue.ProjectKey,
+		Trigger: detail.Issue.Trigger, Hits: detail.Issue.Hits,
+		FirstSeen: detail.Issue.FirstSeen, LastSeen: detail.Issue.LastSeen,
+	}
+	for _, occurrence := range detail.Occurrences {
+		out.Occurrences = append(out.Occurrences, contract.OccurrenceV{
+			ID: occurrence.ID, ObservedAt: occurrence.OccurredAt,
+			Environment: detailEnvironmentMap(occurrence.OS, occurrence.Shell, occurrence.Connector, occurrence.RuntimeVersions),
+			Headline:    occurrence.Headline,
+		})
+	}
+	for index, solution := range detail.Solutions {
+		if index == 0 {
+			out.Trust = contract.TrustView{
+				Score:     float64(solution.Trust.Score),
+				Samples:   int64(solution.Trust.Samples),
+				Successes: int64(solution.Trust.Successes),
+				Failures:  int64(solution.Trust.Failures),
+				Unknowns:  int64(solution.Trust.Unknowns),
+			}
+		}
+		view := contract.SolutionV{ID: solution.ID, Status: solution.Status}
+		for _, version := range solution.Versions {
+			view.Versions = append(view.Versions, contract.VersionV{
+				ID: version.ID, Version: version.Version, Body: version.Body,
+				Source: version.Source, AppliesTo: detailEnvironmentText(version.AppliesTo),
+				Risks: version.Risks, Preconditions: version.Preconditions, EffectiveAt: version.EffectiveAt,
+			})
+		}
+		out.Solutions = append(out.Solutions, view)
+		for _, outcome := range solution.Outcomes {
+			out.Outcomes = append(out.Outcomes, contract.OutcomeV{
+				ID: outcome.ID, Outcome: outcome.Kind, Note: outcome.Note, ObservedAt: outcome.ObservedAt,
+			})
+		}
+	}
+	return out
+}
+
+func detailEnvironmentMap(os, shell, connector string, runtimeVersions map[string]string) map[string]string {
+	environment := map[string]string{}
+	if os != "" {
+		environment["os"] = os
+	}
+	if shell != "" {
+		environment["shell"] = shell
+	}
+	if connector != "" {
+		environment["connector"] = connector
+	}
+	for key, value := range runtimeVersions {
+		environment["runtime."+key] = value
+	}
+	if len(environment) == 0 {
+		return nil
+	}
+	return environment
+}
+
+func detailEnvironmentText(environment database.Environment) string {
+	parts := make([]string, 0, 5)
+	for _, pair := range [][2]string{{"os", environment.OS}, {"shell", environment.Shell}, {"connector", environment.Connector}} {
+		if pair[1] != "" {
+			parts = append(parts, pair[0]+"="+pair[1])
+		}
+	}
+	keys := make([]string, 0, len(environment.RuntimeVersions))
+	for key := range environment.RuntimeVersions {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		parts = append(parts, "runtime."+key+"="+environment.RuntimeVersions[key])
+	}
+	return strings.Join(parts, ", ")
 }

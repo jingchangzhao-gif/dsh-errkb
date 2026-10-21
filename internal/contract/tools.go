@@ -40,6 +40,7 @@ const (
 	// so the knowledge base could only grow by importing Markdown.
 	OperationRecordSolution = "record_solution"
 	OperationSetStatus      = "set_status"
+	OperationGetIssue       = "get_issue"
 )
 
 // matchReasons is the plan section 5 order. The first three prove "same

@@ -5,13 +5,16 @@
 .DESCRIPTION
   Two modes, so the pipeline verifies before it builds:
 
-    check    verifies the tag, the version, the changelog section and the
-             clean-VM acceptance record. Nothing is built.
+    check    verifies the real Git tag and clean worktree, the version, the
+             changelog section and the clean-VM acceptance record. Nothing is
+             built.
     package  repeats the checks, builds errkb.exe through build.ps1, and
              assembles the release directory:
                errkb.exe
                errkb.exe.sha256          checksum line for the binary
                errkb-<version>-setup.exe (with -IncludeInstaller)
+               errkb-toolbox.zip         portable launcher: errkb.exe, start-errkb.cmd,
+                                         README.md and CHANGELOG.md, no data or credentials
                sbom.json                 Go modules + bundled and required tools
                THIRD-PARTY-NOTICES.md    license declarations
                SIGNING.md                the signing policy of this release
@@ -25,8 +28,10 @@
   build time comes from the commit (never the wall clock), the bundle is
   rebuilt from scratch, artifacts are sorted before they are hashed, and the
   manifest records the Go and go-winres versions so a difference is visible
-  instead of silent. See docs/acceptance-vm.md and build.ps1 for the pinned
-  toolchain.
+  instead of silent. The setup executable and errkb-toolbox.zip are the two
+  byte-level exceptions, because Inno Setup embeds its compilation time and
+  ZIP headers record file modification times; both are explained in
+  manifest.json and verified through the errkb.exe hash they carry.
 
   Signing policy
   --------------
@@ -42,7 +47,8 @@
 
 .PARAMETER Tag
   The git tag, for example v0.1.0. Defaults to v<Version>; the check fails when
-  the two disagree.
+  the two disagree, when refs/tags/<tag> does not exist, or when it does not
+  resolve to HEAD.
 
 .PARAMETER Commit
   Commit stamp embedded in the binary. Defaults to the short HEAD hash.
@@ -112,6 +118,54 @@ function Resolve-ReleaseTag([string]$ResolvedVersion) {
         Fail "tag '$resolvedTag' and version '$ResolvedVersion' disagree; a release tag must be v<version>"
     }
     return $resolvedTag
+}
+
+function Invoke-GitText([string[]]$GitArguments, [string]$FailureMessage) {
+    $output = @(& git -C $repoRoot @GitArguments 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        Fail $FailureMessage
+    }
+    return (($output -join "`n").Trim())
+}
+
+function Resolve-TagCommit([string]$ResolvedTag) {
+    $tagRef = "refs/tags/$ResolvedTag"
+    $tagCommit = Invoke-GitText @("rev-parse", "--verify", "$tagRef^{commit}") "Git tag '$ResolvedTag' does not exist or does not resolve to a commit"
+    if ([string]::IsNullOrWhiteSpace($tagCommit)) {
+        Fail "Git tag '$ResolvedTag' resolved to an empty commit"
+    }
+    return $tagCommit
+}
+
+function Assert-ReleaseGitState([string]$ResolvedTag) {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        Fail "git is not on PATH; a release must be built from a verified tag"
+    }
+
+    $tagCommit = Resolve-TagCommit $ResolvedTag
+    $headCommit = Invoke-GitText @("rev-parse", "--verify", "HEAD^{commit}") "cannot resolve the repository HEAD"
+    if ($tagCommit -ne $headCommit) {
+        Fail "Git tag '$ResolvedTag' points to commit $tagCommit but HEAD is $headCommit"
+    }
+
+    $status = @(& git -C $repoRoot status --porcelain=v1 --untracked-files=all 2>$null)
+    if ($LASTEXITCODE -ne 0) {
+        Fail "cannot inspect the Git worktree"
+    }
+    if ($status.Count -ne 0) {
+        $sample = ($status | Select-Object -First 5) -join "; "
+        Fail "the Git worktree is not clean; commit or remove every tracked and untracked change before releasing ($sample)"
+    }
+
+    return $tagCommit
+}
+
+function Assert-CommitMatchesTag([string]$ResolvedCommit, [string]$ResolvedTag) {
+    $tagCommit = Resolve-TagCommit $ResolvedTag
+    $tagShort = Invoke-GitText @("rev-parse", "--short", $tagCommit) "cannot abbreviate the commit for Git tag '$ResolvedTag'"
+    if ($ResolvedCommit -ne $tagCommit -and $ResolvedCommit -ne $tagShort) {
+        Fail "release commit '$ResolvedCommit' does not match Git tag '$ResolvedTag' ($tagCommit)"
+    }
 }
 
 function Assert-ChangelogSection([string]$ResolvedVersion) {
@@ -238,13 +292,15 @@ function Get-ReleaseToolchain {
 }
 
 function Invoke-ReleaseChecks([string]$ResolvedVersion, [string]$ResolvedTag) {
+    $tagCommit = Assert-ReleaseGitState $ResolvedTag
     Assert-ChangelogSection $ResolvedVersion
     Assert-VmAcceptance $ResolvedVersion
     if ($IncludeInstaller) {
         Assert-InstallerVersion $ResolvedVersion
     }
     Write-Output "release check: version $ResolvedVersion"
-    Write-Output "release check: tag $ResolvedTag"
+    Write-Output "release check: tag $ResolvedTag -> $tagCommit"
+    Write-Output "release check: Git worktree clean"
     Write-Output "release check: changelog section present"
     Write-Output "release check: clean-VM acceptance recorded for $ResolvedVersion"
 }
@@ -496,6 +552,7 @@ function New-Manifest([string]$Bundle, [string]$ResolvedVersion, [string]$Resolv
         reproducibility = [ordered]@{
             scope     = "rebuilding the same tag, commit and build time with the same toolchain produces the same errkb.exe, errkb.exe.sha256, manifest.json, sbom.json, THIRD-PARTY-NOTICES.md, SIGNING.md, RELEASE-NOTES.md and SHA256SUMS (verified by packaging/windows/release.ps1 twice per release)"
             installer = "the setup executable is not byte-reproducible: Inno Setup embeds its compilation time in setup.exe. Verify it by installing and comparing the installed errkb.exe with errkb.exe.sha256"
+            toolbox   = "errkb-toolbox.zip is not byte-reproducible: ZIP headers record file modification times. Verify the contained errkb.exe against errkb.exe.sha256 from the same release"
         }
         references      = [ordered]@{
             changelog      = "CHANGELOG.md"
@@ -532,6 +589,7 @@ if ($Mode -eq "check") {
 }
 
 $resolvedCommit = Resolve-Commit
+$null = Assert-CommitMatchesTag $resolvedCommit $resolvedTag
 $resolvedBuildTime = Resolve-BuildTime
 $toolchain = Get-ReleaseToolchain
 
@@ -565,6 +623,29 @@ for ($index = 0; $index -lt $expected.Count; $index++) {
 Copy-Item $binaryPath (Join-Path $bundle "errkb.exe") -Force
 $binaryHash = (Get-FileHash $binaryPath -Algorithm SHA256).Hash.ToLowerInvariant()
 [System.IO.File]::WriteAllText((Join-Path $bundle "errkb.exe.sha256"), "$binaryHash  errkb.exe`n", [System.Text.UTF8Encoding]::new($false))
+
+$toolboxStaging = Join-Path $repoRoot "dist\toolbox-$resolvedVersion"
+if (Test-Path $toolboxStaging) {
+    Remove-Item -Recurse -Force $toolboxStaging
+}
+New-Item -ItemType Directory -Path $toolboxStaging -Force | Out-Null
+Copy-Item $binaryPath (Join-Path $toolboxStaging "errkb.exe") -Force
+$toolboxWhitelist = @(
+    @{ Source = (Join-Path $repoRoot "README.md"); Name = "README.md" },
+    @{ Source = (Join-Path $repoRoot "CHANGELOG.md"); Name = "CHANGELOG.md" },
+    @{ Source = (Join-Path $repoRoot "LICENSE"); Name = "LICENSE" },
+    @{ Source = (Join-Path $repoRoot "packaging\windows\start-errkb.cmd"); Name = "start-errkb.cmd" }
+)
+foreach ($entry in $toolboxWhitelist) {
+    if (-not (Test-Path $entry.Source)) {
+        Fail "the toolbox whitelist is missing $($entry.Source)"
+    }
+    Copy-Item $entry.Source (Join-Path $toolboxStaging $entry.Name) -Force
+}
+$toolboxPath = Join-Path $bundle "errkb-toolbox.zip"
+Compress-Archive -Path (Join-Path $toolboxStaging "*") -DestinationPath $toolboxPath -Force
+Remove-Item -Recurse -Force $toolboxStaging
+Write-Output "release package: wrote errkb-toolbox.zip (errkb.exe, start-errkb.cmd, README.md, CHANGELOG.md, LICENSE)"
 
 $installerPath = $null
 if ($IncludeInstaller) {

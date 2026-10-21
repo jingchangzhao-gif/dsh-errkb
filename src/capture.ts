@@ -14,7 +14,7 @@
 // create an entry; matching an entry that already exists is up to the caller.
 //
 // Multi-line output goes through the headline extractor of
-// docs/discussions.md §2a (decided): one line is picked as the message, so a
+// docs/implementation-plan.md EKB-012: one line is picked as the message, so a
 // fortieth `tsc` error or a reordered log does not change the signature, and
 // the full text is kept as the raw sample.
 //
@@ -222,7 +222,7 @@ export function safeErrorText(error: unknown): ErrorText {
 }
 
 // ---------------------------------------------------------------------------
-// Headline extraction (docs/discussions.md §2a)
+// Headline extraction (docs/implementation-plan.md EKB-012)
 
 /**
  * A line that names its error: a Node/pnpm code (`ERR_PNPM_…`), an errno
@@ -264,7 +264,7 @@ export interface Headline {
 
 /**
  * Pick the one line of a (possibly multi-line) error text that identifies it
- * (docs/discussions.md §2a):
+ * (docs/implementation-plan.md EKB-012):
  *
  * 1. a Python traceback gives its last non-empty line, the exception itself;
  * 2. otherwise the first line naming a code (see {@link CODE});

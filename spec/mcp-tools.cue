@@ -69,10 +69,10 @@ import "list"
 
 // #LookupRequest asks the question "I know what this error is".
 #LookupRequest: {
-	schema_version:      "v1"
-	issue?:              string & !=""
-	error_code?:         string & !=""
-	fingerprint?:        #Fingerprint
+	schema_version: "v1"
+	issue?:         string & !=""
+	error_code?:    string & !=""
+	fingerprint?:   #Fingerprint
 	// Raw host text is accepted: a lookup is a query, and the daemon
 	// normalizes it before matching. Only stored text carries #NoSensitive.
 	normalized_message?: string & !=""
@@ -98,9 +98,9 @@ import "list"
 	schema_version: "v1"
 	// Raw host text is accepted: a search is a query, and the daemon
 	// normalizes it before matching.
-	query:          string & !=""
-	project_key?:   string & !=""
-	limit?:         int & >=1 & <=#MaxCandidates
+	query:        string & !=""
+	project_key?: string & !=""
+	limit?:       int & >=1 & <=#MaxCandidates
 }
 
 #SearchResponse: {
@@ -180,9 +180,9 @@ import "list"
 	id:         string & !=""
 	title:      #NoSensitive & !=""
 	updated_at: string & =~"^[0-9]{4}-[0-9]{2}-[0-9]{2}T"
-	hits?:       int & >=0
-	status?:     #IssueStatus
-	fix?:        #NoSensitive
+	hits?:      int & >=0
+	status?:    #IssueStatus
+	fix?:       #NoSensitive
 }
 
 #ListResponse: {
@@ -240,9 +240,9 @@ import "list"
 // #SolutionEnvironment narrows the hosts a solution applies to. An empty
 // object means "no restriction", never "unknown".
 #SolutionEnvironment: {
-	os?:               string & !=""
-	shell?:            string & !=""
-	connector?:        string & !=""
+	os?:        string & !=""
+	shell?:     string & !=""
+	connector?: string & !=""
 	runtime_versions?: [string]: string & !=""
 }
 
@@ -251,21 +251,21 @@ import "list"
 // resolved. Trust stays computed by errkb_trust() from outcomes: nothing in
 // this request can set it.
 #RecordSolutionRequest: {
-	schema_version:  "v1"
-	issue_id:        string & !=""
-	body:            #NoSensitive & !=""
-	preconditions?:  #NoSensitive
-	environment?:    #SolutionEnvironment
-	source?:         string & !=""
-	actor?:          string & !=""
+	schema_version: "v1"
+	issue_id:       string & !=""
+	body:           #NoSensitive & !=""
+	preconditions?: #NoSensitive
+	environment?:   #SolutionEnvironment
+	source?:        string & !=""
+	actor?:         string & !=""
 }
 
 #RecordSolutionResponse: {
-	schema_version:       "v1"
-	solution_id:          string & !=""
-	solution_version_id:  string & !=""
-	version:              int & >=1
-	recorded:             bool
+	schema_version:      "v1"
+	solution_id:         string & !=""
+	solution_version_id: string & !=""
+	version:             int & >=1
+	recorded:            bool
 }
 
 #RecordSolutionTool: #Tool & {

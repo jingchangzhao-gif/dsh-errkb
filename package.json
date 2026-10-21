@@ -29,6 +29,7 @@
   "scripts": {
     "build": "tsdown",
     "test": "vitest run --coverage",
+    "test:release": "pwsh -NoProfile -File packaging/windows/release-test.ps1",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "format": "prettier --write .",

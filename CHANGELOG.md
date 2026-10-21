@@ -10,6 +10,43 @@ They never claim more than the acceptance records in this repository prove.
 
 ## [Unreleased]
 
+### Added
+
+- Web toolbox (local branch, not yet released): `errkb ui --web` serves an
+  embedded loopback interface with a per-launch token and a strict content
+  security policy. It covers search, issue detail with version history and
+  outcome counts, appending a solution version, issue and solution status
+  changes, confirmation-gated deletion, measured statistics, the audit trail
+  with filters, and the connector/privacy settings page. Every edit goes
+  through the daemon and leaves an audit row in the same database transaction.
+- The release bundle now carries `errkb-toolbox.zip` (the binary plus the
+  launcher and documentation) next to the installer, with its hash in
+  `SHA256SUMS` and a documented ZIP reproducibility exception in the manifest.
+- The installer registers a Start-menu shortcut for the toolbox and ships the
+  launcher.
+
+- `errkb tail --file <path>` follows a log file (rotation, truncation,
+  UTF-8/UTF-16 detection, bounded duplicate bursts) and records the classified
+  failures through the daemon as channel C; `--once` and `--timeout` keep
+  rehearsals deterministic.
+- `errkb markdown import --file <path>` and `errkb markdown export [--out <path>]` expose the legacy `ERRORS.md` exchange through the CLI; an import/export/re-import round trip adds no issues.
+- The trust-formula test counts its own schema instead of the whole database,
+  so parallel test packages no longer race on a shared function count.
+
+### Fixed
+
+- The release gate now resolves the real `refs/tags/v<version>` Git ref,
+  requires it to point to a clean HEAD, and rejects an explicit build commit
+  that does not match the tag.
+- The installed product now applies database migrations during setup
+  (`errkb db migrate`) instead of leaving the first run stuck on a missing
+  ledger.
+- Logon autostart uses the per-user Run key; registering a Scheduled Task
+  requires administrator rights and silently failed for standard users.
+- The PostgreSQL lifecycle has exactly one implementation: rrkb pg creates,
+  starts, stops and uninstalls the local cluster, and postgres.ps1 only forwards
+  the installer's arguments.
+
 ## [0.1.0] - 2026-10-21
 
 The first release. It is a local error knowledge base: capture the failure once,

@@ -17,7 +17,7 @@
 // `misjudged=true` in its machine comment, still matches - its counter keeps
 // running - but the result says not to inject it (§5.3 误判兜底).
 //
-// Tokenization answers docs/discussions.md §2c: Latin and number runs are
+// Tokenization is preserved by docs/implementation-plan.md EKB-015: Latin and number runs are
 // words, CJK runs become character bigrams, and placeholders such as `<path>`
 // stay one token. Without the bigrams a Chinese message has no spaces, is one
 // token, and its Jaccard is always 0 or 1.
