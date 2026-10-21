@@ -1,5 +1,7 @@
 # Clean-VM acceptance (EKB-052)
 
+[简体中文](acceptance-vm.zh-CN.md)
+
 > **Status: blocked, retest pending** — the acceptance harness and the installer are built and
 > dry-run, but the clean-VM run itself **has not been executed**. No hypervisor, VM or snapshot
 > tooling is available in the environment this card was implemented in (no `vmrun`, `qemu`,
@@ -13,6 +15,12 @@
 > HKCU Run autostart (`packaging/windows/autostart.ps1`). The dev-host rehearsal of EKB-056 verified
 > install, migrations, the Run entry, the loop, a reboot replay and both uninstall choices; the
 > clean-VM evidence itself has not been produced yet, so this file still says `blocked`.
+
+> **Artifact warning (2026-10-22).** This report names the locally rebuilt EKB-056 candidate
+> (`B116E5BA…` / `F3E77D4C…`). The older files under `dist\release\errkb-0.1.0\` are a different
+> revision and are not covered by this rehearsal. The Web toolbox and its launcher are also outside
+> this evidence; they require EKB-057–060 and a new clean-VM run. See
+> [`project-status.md`](project-status.md).
 
 This file is the *report* side of §11.1: `packaging/windows/vm-acceptance.ps1` is the executable
 half. The script exits non-zero when any automatic check fails, writes `results.json` plus one
@@ -115,8 +123,8 @@ and "standard user" checks are real.
 - Standard-user UAC prompt and successful install into the per-user application directory.
 - First run in a fresh terminal: `errkb run -- cmd /c "exit 9"` records; `errkb search` finds the fix
   after it was recorded through the UI; no model or network call produces the fix.
-- Reboot → sign in → nothing manually started → `errkb doctor` has a running database and the tray
-  shows `running` (currently expected to fail; see finding 2).
+- Reboot → sign in → nothing manually started → `errkb doctor` has a running database and the pipe
+  is reachable. EKB-056 implements this path; the clean-VM run must prove it.
 - Uninstall, choose **keep data**, reinstall, confirm reuse of the retained cluster.
 - Uninstall, choose **delete data**, confirm no installer/service/port/data residue.
 
@@ -184,8 +192,9 @@ executed (EKB-051 left it to this card).
 
 ### What the rehearsal proved once the schema exists
 
-On the same cluster, applying the eight migrations with a throwaway `database.Migrate` probe (there is no
-`errkb db migrate` command) let the whole loop run with the installed binary and a daemon on a named pipe:
+At this historical EKB-052 checkpoint, applying the eight migrations with a throwaway
+`database.Migrate` probe (the `errkb db migrate` command did not exist yet) let the whole loop run
+with the installed binary and a daemon on a named pipe. EKB-056 supersedes this workaround:
 
 - `errkb run --connector cli --session ekb052 --project probe -- cmd /c "exit 9"` recorded the failure
   (`issue a2a91bd8-a30c-4c64-b353-020a8696a52e`, fingerprint `4202fb44db19`).

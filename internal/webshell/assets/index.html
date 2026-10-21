@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="errkb-token" content="__TOKEN__" />
+    <title>Error Knowledge Base</title>
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Error Knowledge Base</h1>
+      <p class="hint">
+        Search by issue id, error code, command, or failure text.
+      </p>
+    </header>
+    <main>
+      <label class="sr-only" for="query">Search</label>
+      <input
+        id="query"
+        type="search"
+        autofocus
+        autocomplete="off"
+        placeholder="E-0001, ERR_PNPM_NO_SCRIPT, pnpm build, permission denied…"
+      />
+      <p id="status" role="status"></p>
+      <ol id="hits" aria-live="polite"></ol>
+    </main>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

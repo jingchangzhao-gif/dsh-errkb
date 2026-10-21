@@ -7,7 +7,7 @@
 // errors apart: the words, the codes, and the last segment of every path.
 // `signature` hashes that form together with the category.
 //
-// Deliberately not here (still open in docs/discussions.md §2): picking a
+// Deliberately not here: picking a
 // headline line out of multi-line output, treating localized OS text as a near
 // hit, and tokenizing CJK text for fuzzy matching. Those belong to the matcher.
 import { createHash } from "node:crypto";

@@ -15,7 +15,7 @@
 //   ask-fix   [errkb] E-0011 looks resolved. Record the fix with err_record
 //             in one sentence so it can be reused. (T14, src/resolve-detect.ts)
 //
-// The hit wording answers docs/discussions.md §1.2: it orders the work ("try
+// The hit wording orders the work ("try
 // this first") instead of forbidding any ("do not re-diagnose"), so it does not
 // contradict a research nudge from another plugin on the same step. A hit
 // without a fix still speaks, briefly: the model learns the error is a repeat
@@ -30,7 +30,7 @@
 // CapTracker allows 1 notice per step, 3 per turn and 2 per ID per session, and
 // a `fixed` entry 1 per session.
 //
-// Fix trust (docs/discussions.md §4). FixTrust counts, per ID, how often a fix
+// Fix trust (superseded by docs/implementation-plan.md EKB-021 in the platform). FixTrust counts, per ID, how often a fix
 // was injected and how often the same entry was captured again later in the
 // same turn. One recurrence turns the wording into "This fix failed here last
 // time"; two with no recorded success stop the ID from being injected on this

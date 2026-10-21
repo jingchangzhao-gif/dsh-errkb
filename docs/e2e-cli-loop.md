@@ -1,7 +1,13 @@
 # CLI technical-error loop (EKB-035)
 
+[简体中文](e2e-cli-loop.zh-CN.md)
+
 Status: **passed** on 2026-10-19, Windows 11 (10.0.26200), PostgreSQL 16.15 on
 `127.0.0.1:5432`, `errkb dev` built from this repository.
+
+> This is historical acceptance evidence for the EKB-035 implementation point. It
+> does not mean the current `dist`, installed executable and old release directory
+> are mutually consistent. See [project-status.md](project-status.md).
 
 This is the real end-to-end acceptance the plan calls for at the P4 gate: one
 genuinely failing command, the production daemon, the production pipe client,
@@ -216,15 +222,14 @@ success | c73c64e2-41bf-4c29-8df0-a579fc25e154 | 1c798104-50c4-4f26-afab-fbaa783
 
 ## Known boundaries
 
-- The loop writes through the pipe into a daemon started with an explicit
-  `--dsn`, because `errkb` has no `db migrate` subcommand yet; the test migrates
-  its throwaway schema with `database.Migrate` before starting the daemon.
-  Until a migration command exists, an operator must use the same Go entry
-  point (or the daemon's migration check will refuse the schema).
+- This record describes the EKB-035 implementation point, when the test migrated
+  its throwaway schema through `database.Migrate`. EKB-056 later added
+  `errkb db migrate`; current development and installation flows should use that
+  command. The explicit DSN remains intentional test isolation.
 - The scenario runs the real Windows `cmd /c type`, so this test is
   Windows-only, like the daemon and the CLI; the Linux CI `go` job skips it.
-- `errkb run` currently requires `--connector` and `--session`; nothing
-  provisions them automatically yet (EKB-036 is the connector cards' area).
+- At the time of this record, `errkb run` required explicit `--connector` and
+  `--session`. EKB-056 later added the `cli` defaults and fixed a leading `--`.
 - The solution was recorded through the Go API rather than a CLI verb because
   no solution-entry command exists; the card explicitly allows this for the P4
   demo as long as the fix comes from the database, which it does.

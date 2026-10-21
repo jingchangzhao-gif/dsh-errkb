@@ -154,7 +154,10 @@ try {
     # 3. Generate the resource block (version info + manifest) inside the command
     #    package so `go build` picks it up, then remove it after the build: the
     #    repository keeps the source of truth, not a generated binary object.
-    $metadata | ConvertTo-Json -Depth 8 | Set-Content -Path $resolvedWinresPath -Encoding utf8
+    #    Write UTF-8 without a BOM: Windows PowerShell 5.1's `-Encoding utf8`
+    #    adds one, and go-winres refuses a BOM-prefixed JSON document.
+    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+    [System.IO.File]::WriteAllText($resolvedWinresPath, ($metadata | ConvertTo-Json -Depth 8), $utf8NoBom)
     Invoke-Checked $winresPath @(
         "make",
         "--arch", "amd64",
@@ -199,7 +202,7 @@ try {
         commit      = $Commit
         build_time  = $BuildTime
     }
-    $document | ConvertTo-Json | Set-Content -Path $resolvedVersionPath -Encoding utf8
+    [System.IO.File]::WriteAllText($resolvedVersionPath, ($document | ConvertTo-Json), $utf8NoBom)
 
     $size = (Get-Item $binary).Length
     Write-Output ""

@@ -1,10 +1,12 @@
 # Privacy and data handling
 
+[简体中文](privacy.zh-CN.md)
+
 The Error Knowledge Base is built to keep a failure history on the machine that produced it. This page describes what is stored, where, for how long, and what is explicitly **not** done.
 
 ## Summary
 
-- Nothing leaves the machine. The core never calls a model, never uses the network, and has no telemetry or remote endpoint.
+- Nothing leaves the machine. The core never calls a model, makes no outbound network request, and has no telemetry or remote endpoint. Local PostgreSQL and an explicitly enabled loopback HTTP listener are still local transports.
 - Redaction happens **before** anything is written to the knowledge base; the database only receives redacted text.
 - The local API is a Named Pipe with an owner-only ACL; HTTP is off by default.
 - Retention is explicit (three independent periods) and deletion is previewed and audited.

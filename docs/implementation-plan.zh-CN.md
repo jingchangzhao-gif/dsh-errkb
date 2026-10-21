@@ -4,6 +4,10 @@
 
 本文件是项目从现有 DSH 插件升级为多宿主技术错误复用工具箱的唯一施工基线。实施者应从 `EKB-001` 开始，按照任务编号推进；一张任务卡只有在自动化检查和人工验收都通过后才能标记为完成。
 
+> **施工检查点（2026-10-22）。** EKB-002～056 记录历史实施顺序，但当前本地目录不是 Git 工作区，发布产物也互不一致。当前交付事实以 [`project-status.zh-CN.md`](project-status.zh-CN.md) 为准。继续施工前，先恢复真实 clone，并把本地独有的 Web UI 修改保存到 EKB-057 分支。当前有效顺序为 EKB-057 → 058 → 059 → 060；EKB-052 与 EKB-056 在获得干净 VM 证据前仍未验收。
+
+若要按功能了解当前源码及每项用户能力的实现链路，请阅读 [`features-and-implementation.zh-CN.md`](features-and-implementation.zh-CN.md)；若要查看实时未解决问题和逐文件修复顺序，请从 [`workflow/README.zh-CN.md`](workflow/README.zh-CN.md) 开始。本文继续保存产品决定与历史任务依据。
+
 ## 1 项目结论和版本范围
 
 最终产品不是一个绑定单一模型的插件，也不是一个试图读取模型内部推理过程的桌面监控器。最终产品由一个本地核心平台和多个轻量连接器组成：
@@ -450,6 +454,17 @@ P6 门槛：用户不需要打开数据库或终端，就能暂停采集、搜�
 
 P7 门槛：干净 Windows 虚拟机可以安装、升级、备份、卸载并保留或删除数据；发布物有校验和和可追踪版本。
 
+### P8 交付交互式工具箱
+
+| 状态 | ID | 任务 | 前置 | 产出和验收 |
+| --- | --- | --- | --- | --- |
+| ◐ | EKB-057 | Web 工具箱基础 | 045、056 | 本地独有的部分实现：已有嵌入式回环 Web 壳、启动 token、CSP 和搜索路由。仍需把修改恢复进 Git、将 `ui --web` 做成受测启动路径、用安装凭据恢复 daemon、增加真实 UI 冒烟测试，并让启动器/资源进入同一个一致产物。现有发布二进制和 GitHub `main` 都拒绝 `--web`。 |
+| ☐ | EKB-058 | 问题详情与解法编辑 | 046、057 | 增加详情、版本历史、追加编辑、状态转换、误判和删除的 Web 路由/页面；保持确认、审计和可信度只读规则。 |
+| ☐ | EKB-059 | 统计、审计与设置 | 047、049、057-058 | 增加实测统计、审计过滤、连接器/采集设置、保留期和预览确认删除的 Web 路由/页面；复用现有服务和配置契约。 |
+| ☐ | EKB-060 | 安装器与开始菜单 UI 集成 | 052、057-059 | 打包启动器与工具箱 ZIP，创建指向 `errkb.exe ui --web` 的开始菜单快捷方式，从一个 tag 只构建一次，并记录干净 VM 的 UI/安装/重启/卸载证据。 |
+
+P8 门槛：标准用户安装一个可追踪产物，从开始菜单打开工具箱，通过本地 pipe 使用四类页面，真实重启后仍可用，并能选择保留或删除数据完成卸载。
+
 ### 11.1 按卡的文件施工顺序
 
 本表按卡号顺序列出每张卡要落地的文件，`→` 表示先后。全部路径相对仓库根目录；同一文件在后续卡再次出现，表示继续修改而不是重建。P0 的 002、003、004 在 001 之后可并行，005 等三者全部验收；P5 的 040 与 041 可并行，但都必须在 036、037 之后。
@@ -515,6 +530,10 @@ P7 门槛：干净 Windows 虚拟机可以安装、升级、备份、卸载并�
 | EKB-054 | `packaging/windows/release.ps1` → `.github/workflows/release.yml` → `CHANGELOG.md`（发布前读取 `docs/acceptance-vm.md` 的验收结论）|
 | EKB-055 | `README.md` → `README.zh-CN.md` → 删除 `README.toolbox.md`、`README.toolbox.zh-CN.md` → `docs/install.md`、`docs/privacy.md` → 本文件与英文版逐节同步 |
 | EKB-056 | `cmd/errkb/db.go` → `cmd/errkb/main.go`（`db` 分发与用法）→ `cmd/errkb/run.go`（`--` 切分）→ `internal/service/pg_manage.go`（导出 `ReadCredentials`）→ `packaging/windows/autostart.ps1` → `packaging/windows/installer.iss`（迁移与自启接线）→ `docs/acceptance-vm.md` → 本文件与英文版计划行 |
+| EKB-057 | `internal/webshell/server.go` → 嵌入资源 → `cmd/errkb/web.go` → `cmd/errkb/ui.go` 分派 → 基于安装凭据的 daemon 启动 → Web 壳/e2e 测试 → `packaging/windows/start-errkb.cmd` → 中英文 `toolbox-ui` 文档 |
+| EKB-058 | Web 详情处理器与资源 → 路由/服务测试 → 详情 UI e2e → 中英文计划与状态文档 |
+| EKB-059 | Web 统计/审计/设置处理器与资源 → 路由/服务测试 → 设置 UI e2e → 中英文计划与状态文档 |
+| EKB-060 | `packaging/windows/installer.iss` → `packaging/windows/release.ps1` → 工具箱 ZIP/manifest/校验和 → `packaging/windows/vm-acceptance.ps1` → 中英文安装/验收/状态文档 |
 
 ## 12 公共质量门
 
@@ -579,5 +598,5 @@ errkb db migrate --check
 
 ## 15 下一步
 
-下一张任务卡是 `EKB-001`：在新的真实 Git clone 中建立可回滚基线，把本文件和英文版本带入该工作区，然后记录上游 HEAD 和当前失败测试。不要直接从 Go 代码或窗口监控开始。
+从当前上游 `main` 重新建立真实 Git 工作区，把本地独有的 EKB-057 文件放进具名分支，并在改变行为前核对完整 diff。然后按“命令分派 → 安装凭据恢复 daemon → e2e 冒烟测试 → 发布/启动器集成”的顺序完成 EKB-057。干净 checkout 中的搜索壳能通过安装产物成功打开之前，不开始 EKB-058。
 

@@ -6,7 +6,7 @@
 // against the same list. Path handling is reused from signature.ts, so a path
 // collapses identically whether it is being fingerprinted or stored.
 //
-// No text-rule redaction is complete (docs/discussions.md §5): internal host
+// No text-rule redaction is complete (docs/implementation-plan.md EKB-014): internal host
 // names, `user@host` in SSH errors and short tokens below the length thresholds
 // all pass through. That is why the real knowledge base lives in a private
 // repository and this one only carries curated seed entries (§17 Q4).

@@ -15,6 +15,9 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Local host-probe spill files. These are command transcripts, not fixtures.
+*claude-probefired*.txt
+
 # The errkb runtime knowledge base, all of it (§17 Q4). Real entries live in
 # a private repository that `kbDir` points to; text-rule redaction cannot be
 # complete, so a development install must never commit its errors/ here. The

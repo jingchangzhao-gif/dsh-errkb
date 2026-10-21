@@ -4,13 +4,15 @@
 
 > **Recycles errors: the same failure is diagnosed once, recorded, and handed back as a known fix the next time it appears — locally, without calling a model.**
 
-**Status: v0.1.0 (2026-10-21).** Windows desktop build with a local PostgreSQL 16 knowledge base, measured against DSH 0.2.0-rc.2, Codex CLI 0.156.1 and Claude Code 2.1.282. The clean-VM acceptance is **blocked** and recorded in [`docs/acceptance-vm.md`](docs/acceptance-vm.md); the release pipeline refuses to publish a version without that record.
+**Project status (2026-10-22): development snapshot, not an end-user release.** The reusable error core, PostgreSQL schema, CLI, daemon, MCP server and measured DSH/Codex/Claude connectors are implemented. The one-click Windows toolbox is not yet deliverable: the Web UI exists only in the local working copy, current release artifacts do not contain its launch route, and clean-VM acceptance is still pending. See [`docs/project-status.md`](docs/project-status.md) for the exact boundary between implemented, verified and releasable.
 
-The **Error Knowledge Base** (`error-knowledge-base`) is one product in several shapes: a command-line client, a local background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, and host connectors for Codex CLI and Claude Code. Every shape talks to the same local core and the same knowledge base: the classification, redaction, normalisation, fingerprinting, storage, retrieval and fix-trust logic lives in the core and is not reimplemented per host. The project and its repository are now `error-knowledge-base`; the command is still `errkb` and the DSH plugin package keeps its `dsh-errkb` name.
+The **Error Knowledge Base** (`error-knowledge-base`) is a local platform with several interfaces: a command-line client, a background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, host connectors and, when the remaining UI cards are complete, a Windows toolbox window. Every interface uses the same core and the same knowledge base; classification, redaction, normalisation, fingerprinting, storage, retrieval and fix trust are not reimplemented per host. The command remains `errkb`, and the DSH adapter package retains the name `dsh-errkb`.
 
 ## Contents
 
 - [What the Error Knowledge Base is](#what-the-error-knowledge-base-is)
+- [Current delivery status](#current-delivery-status)
+- [Feature overview](#feature-overview)
 - [How it works](#how-it-works)
 - [Supported hosts (measured)](#supported-hosts-measured)
 - [What the core guarantees](#what-the-core-guarantees)
@@ -33,10 +35,45 @@ A local error knowledge base for LLM tools and command-line workflows. When some
 
 It is deliberately **not**:
 
-- **A chat model.** The core never calls a model and never uses the network. Connectors observe what the host already produced; the fix either already exists in the database or is written by the user.
+- **A chat model.** The core never calls a model and makes no outbound network request. Connectors observe what the host already produced; the fix either already exists in the database or is written by the user. Local PostgreSQL, Named Pipe and an explicitly enabled loopback HTTP listener are the only transports.
 - **A log archive.** Only failures that earn an ID are stored, with bounded samples; retention is explicit.
 - **A cloud service.** There is no account, no telemetry and no remote endpoint. HTTP off by default; the local API is a Named Pipe.
 - **A drop-in binary with an embedded database.** The knowledge base is PostgreSQL, a runtime prerequisite (see [Requirements](#requirements)); the Windows installer creates and manages a dedicated cluster.
+
+## Current delivery status
+
+The project uses three different words deliberately:
+
+- **Implemented** means source code and automated tests exist.
+- **Verified** means the behavior has been exercised in the stated real environment.
+- **Releasable** means one coherent, versioned artifact has passed clean-machine installation, launch, restart and uninstall acceptance.
+
+| Area | Current state | What that means |
+| --- | --- | --- |
+| Deterministic core and redaction | Implemented and unit-tested | Normalisation, fingerprinting, matching and redaction can be developed normally |
+| PostgreSQL schema and retrieval | Implemented; integration tests require a real database | Migrations `0001`–`0008`, exact/fuzzy retrieval, solutions and outcomes exist |
+| CLI, daemon and MCP | Implemented | Usable from a development build when a migrated PostgreSQL instance and DSN are available |
+| DSH, Codex CLI and Claude Code connectors | Measured with pinned versions | See the connector matrix; unsupported host behavior is not implied |
+| Windows installer migration and logon start | Implemented in current source; clean-VM acceptance pending | `db migrate` and HKCU Run wiring exist, but do not yet constitute a public release |
+| Web toolbox search shell | Partially implemented in this local working copy | Search-only; not present in the current GitHub `main` launch path or release binaries |
+| Detail, solution editing, statistics and settings pages | Not wired into the Web toolbox | Service/page models exist, but the browser UI and HTTP routes remain EKB-058/059 work |
+| Release bundle | Not releasable | Local `dist` artifacts were produced at different revisions and must not be mixed |
+
+## Feature overview
+
+The product covers one complete technical-error reuse loop rather than only collecting logs:
+
+| Stage | User-visible capability | Implementation boundary |
+| --- | --- | --- |
+| Observe | Capture failures from hooks, CLI wrappers, connectors and logs | Adapters emit `ErrorEvent v1`; they do not own matching logic |
+| Protect | Redact secrets before persistence | One CUE rule source generates Go, TypeScript and CI rules |
+| Identify | Classify, normalize, fingerprint and deduplicate | Deterministic Go/TypeScript processing plus transactional PostgreSQL recording |
+| Retrieve | Search exact identifiers first, then bounded approximate candidates | PL/pgSQL exact/`pg_trgm` queries and Go Jaccard reranking |
+| Reuse | Return a stored fix with source, match reason, environment warning and trust | CLI, MCP, notifications and UI use the same backend contract |
+| Learn | Record whether a fix succeeded and keep solution history | Versioned solutions, outcomes and SQL-computed trust |
+| Operate | Diagnose, migrate, retain, delete, audit and back up local data | Go operations layer plus PostgreSQL functions and migration ledger |
+
+The source-level mapping for every feature, including what is complete and what is only modeled, is in [`docs/features-and-implementation.md`](docs/features-and-implementation.md).
 
 ## How it works
 
@@ -53,7 +90,7 @@ fix + reason + trust ◀── exact match first, approximate top 3 ◀───
 4. **Store.** Issues (one per fingerprint and project), occurrences, immutable events, solution versions and outcomes land in PostgreSQL. Schema migrations run in one transaction each, with an advisory lock and a checksum ledger.
 5. **Retrieve and hand back.** Exact lookups by issue id, fingerprint, error code or command run first. Fuzzy candidates come from `pg_trgm`, are re-ranked with Jaccard similarity, and are always capped at three and **marked approximate**. The result carries the match reason, the environment difference when one exists, and the fix's trust; approximate matches are never auto-reused.
 
-The full design is in [`docs/implementation-plan.md`](docs/implementation-plan.md).
+For the source-level implementation map, see [`docs/features-and-implementation.md`](docs/features-and-implementation.md). For the ordered construction plan, see [`docs/implementation-plan.md`](docs/implementation-plan.md).
 
 ## Supported hosts (measured)
 
@@ -81,14 +118,19 @@ Generic log and manual hosts use the template in [`connectors/templates/cli-log/
 
 ## Quick start
 
-> The installed first-run path is **not complete in 0.1.0**: the installer creates the PostgreSQL cluster but does not apply the schema, and the CLI has no `db migrate` command yet. See [Known limitations](#known-limitations). Until a follow-up card closes that gap, the supported route is the development/rehearsal path recorded in [`docs/acceptance-vm.md`](docs/acceptance-vm.md).
+> This is a **development checkout** procedure. There is not yet a supported one-click release. Do not mix `dist\errkb.exe` with `dist\release\...`; they were built from different revisions.
 
 1. **Install PostgreSQL 16** (EDB installer, or let the errkb installer create a dedicated cluster on port 5433). Record the DSN.
-2. **Get the schema in place** on that database. In 0.1.0 this is done with the Go migrator (the same path the tests and the rehearsal use).
-3. **Build and start the daemon:**
+2. **Build the current source and apply the schema:**
 
    ```powershell
    go build -o errkb.exe ./cmd/errkb
+   .\errkb.exe db migrate --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
+   ```
+
+3. **Start the daemon:**
+
+   ```powershell
    .\errkb.exe daemon --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable"
    ```
 
@@ -98,7 +140,9 @@ Generic log and manual hosts use the template in [`connectors/templates/cli-log/
    .\errkb.exe run --connector cli --session demo --project demo -- cmd /c "exit 9"
    ```
 
-5. **Record the fix** — through the MCP server (`err_record_solution`), the DSH plugin, or the editor UI model — then run the same command again; the wrapper prints the known fix, its source and its trust.
+5. **Record the fix** through the MCP server (`err_record_solution`) or a connector, then run the same command again; the wrapper prints the known fix, its source and its trust.
+
+The local working copy also contains an in-progress search shell under `errkb ui --web`. It is not an installation instruction: the current release binaries and GitHub `main` do not expose that route, and its daemon fallback still needs installed-credential handling.
 
 The full loop, including the recorded output, is in [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md).
 
@@ -115,8 +159,10 @@ One binary, several subcommands:
 | `errkb feedback <issue> <version> --outcome success\|failure\|unknown` | Record an outcome; this is what moves trust |
 | `errkb stats` | Counts, hit rate, latency percentiles and estimated savings |
 | `errkb run -- <command>` | Run a command, keep its output visible, record failures only |
+| `errkb db migrate\|status` | Apply migrations or inspect the schema ledger |
 | `errkb daemon` | Local background service: Named Pipe API, health document, redacted log |
-| `errkb ui` | Tray icon and search window wired to the daemon |
+| `errkb ui` | Native tray/search host from the source tree; not the released Web toolbox |
+| `errkb ui --web` | In-progress local Web search shell; not present in current release artifacts |
 | `errkb doctor` | Eight read-only environment and connector checks, with a fix per finding |
 | `errkb mcp` | MCP stdio server with eight tools |
 | `errkb version` | Version, commit, build time and Go toolchain |
@@ -161,38 +207,43 @@ Defaults: Named Pipe on, HTTP off, capture on, notices on, search limit 3, captu
 
 ## Installing and uninstalling
 
-The Windows installer (`errkb-<version>-setup.exe`) installs per user into `%LOCALAPPDATA%\errkb`, creates a dedicated PostgreSQL cluster on port 5433 (or reuses an existing instance / a chosen port), and offers to start it. Uninstalling asks **keep data** or **delete data**; the cluster password lives in `%LOCALAPPDATA%\errkb\pg\credentials.json` with owner-only ACLs.
+The current installer source installs per user into `%LOCALAPPDATA%\errkb`, can create a dedicated PostgreSQL cluster on port 5433, applies migrations and registers a per-user logon command. Uninstalling can keep or delete the data. However, the checked-in/local release artifacts are not one coherent build, no Start-menu toolbox shortcut is created, and the clean-VM run has not passed. Treat the installer as an acceptance candidate rather than a supported release.
 
 Full steps, data locations, silent-install behavior and the current first-run gap are in [`docs/install.md`](docs/install.md). The clean-VM acceptance is blocked; its findings and harness are in [`docs/acceptance-vm.md`](docs/acceptance-vm.md). The release is not code-signed; verify artifacts against `SHA256SUMS` in the release bundle.
 
 ## Privacy
 
-Everything stays on the machine. The core never calls a model and never uses the network; the local API is a Named Pipe with an owner-only ACL, HTTP is off by default, and redaction happens **before** anything is written to the knowledge base. Retention periods, scoped deletion with a preview and an audit trail, and what the adapter's offline queue keeps are described in [`docs/privacy.md`](docs/privacy.md).
+Everything stays on the machine. The core never calls a model and makes no outbound network request; the local API is a Named Pipe with an owner-only ACL, HTTP is off by default, and redaction happens **before** anything is written to the knowledge base. Retention periods, scoped deletion with a preview and an audit trail, and what the adapter's offline queue keeps are described in [`docs/privacy.md`](docs/privacy.md).
 
 ## Documentation
 
 | Document | What it answers |
 | --- | --- |
-| [`docs/implementation-plan.md`](docs/implementation-plan.md) / [中文](docs/implementation-plan.zh-CN.md) | The single source of truth: scope, decisions, task cards, acceptance gates |
+| [`docs/project-status.md`](docs/project-status.md) / [中文](docs/project-status.zh-CN.md) | What is implemented, verified, blocked and safe to run now |
+| [`docs/workflow/README.md`](docs/workflow/README.md) / [中文](docs/workflow/README.zh-CN.md) | Workflow control center: active issues, file repair order and cleanup audit |
+| [`docs/features-and-implementation.md`](docs/features-and-implementation.md) / [中文](docs/features-and-implementation.zh-CN.md) | What every feature does and which code, contract and data path implements it |
+| [`docs/implementation-plan.md`](docs/implementation-plan.md) / [中文](docs/implementation-plan.zh-CN.md) | Scope, decisions, ordered task cards and acceptance gates |
 | [`docs/connector-matrix.md`](docs/connector-matrix.md) / [中文](docs/connector-matrix.zh-CN.md) | Which host reports which field, measured with pinned versions |
-| [`docs/install.md`](docs/install.md) | Install, data locations, upgrade, uninstall |
-| [`docs/privacy.md`](docs/privacy.md) | Data flow, redaction, retention, deletion |
-| [`docs/benchmarks.md`](docs/benchmarks.md) | Performance gate, dataset, plans, environment |
-| [`docs/acceptance-vm.md`](docs/acceptance-vm.md) | Clean-VM acceptance results and current blockers |
-| [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md) | The generic CLI loop, end to end, without a model |
+| [`docs/install.md`](docs/install.md) / [中文](docs/install.zh-CN.md) | Current installation candidate, data locations, upgrade and uninstall |
+| [`docs/toolbox-ui.md`](docs/toolbox-ui.md) / [中文](docs/toolbox-ui.zh-CN.md) | Toolbox UI architecture, implementation status and remaining cards |
+| [`docs/privacy.md`](docs/privacy.md) / [中文](docs/privacy.zh-CN.md) | Data flow, redaction, retention, deletion |
+| [`docs/benchmarks.md`](docs/benchmarks.md) / [中文](docs/benchmarks.zh-CN.md) | Performance gate, dataset, plans, environment |
+| [`docs/acceptance-vm.md`](docs/acceptance-vm.md) / [中文](docs/acceptance-vm.zh-CN.md) | Clean-VM acceptance results and current blockers |
+| [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md) / [中文](docs/e2e-cli-loop.zh-CN.md) | The generic CLI loop, end to end, without a model |
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in each release |
 | [`packaging/windows/`](packaging/windows) | Build, release and installer scripts |
 
 ## Known limitations
 
-These are recorded in [`CHANGELOG.md`](CHANGELOG.md) and tracked by the plan; they are not hidden.
+These are release blockers or deliberate boundaries, not hidden capabilities:
 
-- **No first-run schema on a fresh install.** The installer creates the cluster but applies no migrations, and `errkb` has no `db migrate` subcommand yet; the daemon refuses to start until the ledger exists.
-- **Nothing restarts after a reboot.** The cluster is not registered as a Windows service and there is no daemon/tray autostart yet.
+- **There is no coherent one-click toolbox artifact yet.** Local source, `dist`, the installed EXE and `dist/release` represent different revisions.
+- **The Web toolbox is not connected to distribution.** The local search shell is not on the current GitHub launch path; the installer creates no launcher or Start-menu shortcut.
+- **The Web UI cannot self-recover from a stopped daemon.** Its fallback uses `ERRKB_DSN`/`--dsn` and does not yet read the installed credentials file.
+- **Clean-VM acceptance is pending.** Source-level migration and HKCU logon startup exist, but installation, actual reboot, standard-user launch and uninstall must be repeated on a clean Windows VM.
 - **The release is not code-signed.** SmartScreen may warn; verify `SHA256SUMS`.
 - **PostgreSQL is a prerequisite.** The core needs a local PostgreSQL 16 server; the installer creates one, but the database is not embedded in the application.
-- **Some UI screens are models only.** The tray and the search window are wired to the running daemon; issue detail, settings and statistics exist as tested models whose windows are not hooked up yet.
-- **`errkb run -- <command>` without options before `--`** reports that the command must follow `--` even though it does. Pass `--connector` and `--session` first, as the adapters do.
+- **The Web toolbox is search-only today.** Issue detail, solution editing, settings, statistics and audit have tested service/model layers but no Web routes or screens yet.
 - **The DSH plugin is pending store review.** Installing it by hand is the supported path for now.
 - **Two measured gaps in the connector matrix:** the DSH `tools/result` live path and the Codex `PostToolUse` hook are unverified.
 
