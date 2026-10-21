@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Preview or remove confirmed local-only generated and probe files.
   预览或删除已经确认只属于本机的生成文件与探针文件。
