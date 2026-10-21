@@ -1,14 +1,16 @@
 # Start at logon for the installed product (EKB-056).
 #
 # The release installs per user: the PostgreSQL cluster and the errkb daemon
-# both run as the signed-in user. This script registers one logon ScheduledTask
-# for the current user and can also run the same start path by hand.
+# both run as the signed-in user. Windows does not let a standard user register
+# a Scheduled Task, so this script uses the per-user Run key
+# (HKCU\Software\Microsoft\Windows\CurrentVersion\Run) instead. It can also run
+# the same start path by hand.
 #
 # Actions:
-#   install    register the logon task and start the cluster and daemon now
-#   uninstall  unregister the task and stop a daemon started from this app dir
+#   install    write the logon Run entry and start the cluster and daemon now
+#   uninstall  remove the Run entry and stop a daemon started from this app dir
 #   start      start the cluster (idempotent) and the daemon (idempotent)
-#   status     print the task state, the pipe reachability and the health file
+#   status     print the Run entry, the pipe reachability and the health file
 #
 # The script only packages decisions made elsewhere: credentials come from
 # postgres.ps1 (EKB-051), the cluster lifecycle is postgres.ps1, the daemon
@@ -22,7 +24,8 @@ param(
     [string]$AppDir = (Split-Path -Parent $PSScriptRoot),
     [int]$Port = 5433,
     [string]$PipeName = 'errkb',
-    [string]$TaskName = 'errkb-autostart',
+    [string]$RunValueName = 'errkb-autostart',
+    [string]$LegacyTaskName = 'errkb-autostart',
     [int]$WaitSeconds = 45
 )
 
@@ -39,6 +42,7 @@ $HealthFile = Join-Path $env:LOCALAPPDATA 'errkb\health.json'
 $DaemonLog = Join-Path $LogDir 'daemon.log'
 $PipePath = '\\.\pipe\' + $PipeName
 $DaemonLock = 'Local\errkb-daemon'
+$RunKey = 'HKCU:' + '\Software\Microsoft\Windows\CurrentVersion\Run'
 
 function Get-Credentials {
     if (-not (Test-Path $CredentialsPath)) {
@@ -96,9 +100,9 @@ function Start-DaemonOnce {
     $arguments = 'daemon --dsn "' + $dsn + '" --migrations "' + $MigrationsDir + '"' +
         ' --lock-name "' + $DaemonLock + '" --pipe "' + $PipePath + '"' +
         ' --health-file "' + $HealthFile + '" --log-file "' + $DaemonLog + '"'
-    # The logon task starts this script with -WindowStyle Hidden, so the daemon
+    # The Run entry starts this script with -WindowStyle Hidden, so the daemon
     # has no visible console to hide; re-check this on the clean VM if a future
-    # host hangs when starting the daemon from the task.
+    # host hangs when starting the daemon from the entry.
     Start-Process -FilePath $Exe -ArgumentList $arguments -ErrorAction Stop
 
     $deadline = (Get-Date).AddSeconds($WaitSeconds)
@@ -118,34 +122,40 @@ function Start-All {
     Start-DaemonOnce
 }
 
-function Get-CurrentUser {
-    return [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+function Get-RunCommand {
+    $shell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    return ('"' + $shell + '" -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $PSCommandPath + '"' +
+        ' -Action start -AppDir "' + $AppDir + '" -Port ' + $Port + ' -PipeName "' + $PipeName + '"')
 }
 
-function Install-Task {
+function Install-Autostart {
     if (-not (Test-Path $Exe)) {
         throw ("errkb.exe is missing from " + $AppDir + "; run the installer again.")
     }
-    $shell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-    $argument = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $PSCommandPath + '"' +
-        ' -Action start -AppDir "' + $AppDir + '" -Port ' + $Port + ' -PipeName "' + $PipeName + '"'
-    $taskAction = New-ScheduledTaskAction -Execute $shell -Argument $argument
-    $taskTrigger = New-ScheduledTaskTrigger -AtLogOn
-    $taskSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-    $principal = New-ScheduledTaskPrincipal -UserId (Get-CurrentUser) -LogonType Interactive -RunLevel Limited
-    Register-ScheduledTask -TaskName $TaskName -Action $taskAction -Trigger $taskTrigger `
-        -Settings $taskSettings -Principal $principal -Force `
-        -Description 'Start the errkb PostgreSQL cluster and daemon when the user signs in.' | Out-Null
-    Write-Output ('task       registered ' + $TaskName + ' for ' + (Get-CurrentUser))
+    if (-not (Test-Path $RunKey)) { New-Item -Path $RunKey -Force | Out-Null }
+    $command = Get-RunCommand
+    New-ItemProperty -Path $RunKey -Name $RunValueName -Value $command -PropertyType String -Force | Out-Null
+    Write-Output ('autostart  registered ' + $RunValueName + ' (current user sign-in)')
 }
 
-function Uninstall-Task {
-    $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+function Uninstall-Autostart {
+    $existing = Get-ItemProperty -Path $RunKey -Name $RunValueName -ErrorAction SilentlyContinue
     if ($null -ne $existing) {
-        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-        Write-Output ('task       removed ' + $TaskName)
+        Remove-ItemProperty -Path $RunKey -Name $RunValueName -ErrorAction SilentlyContinue
+        Write-Output ('autostart  removed ' + $RunValueName)
     } else {
-        Write-Output ('task       not registered ' + $TaskName)
+        Write-Output ('autostart  not registered ' + $RunValueName)
+    }
+    # Remove a task left by a pre-release build; the current installer never
+    # creates one, and a denial here must not fail the uninstall.
+    try {
+        $legacy = Get-ScheduledTask -TaskName $LegacyTaskName -ErrorAction SilentlyContinue
+        if ($null -ne $legacy) {
+            Unregister-ScheduledTask -TaskName $LegacyTaskName -Confirm:$false -ErrorAction Stop
+            Write-Output ('legacy task removed ' + $LegacyTaskName)
+        }
+    } catch {
+        Write-Output ('legacy task check skipped: ' + $_.Exception.Message)
     }
     $exeFull = [System.IO.Path]::GetFullPath($Exe)
     $stopped = 0
@@ -159,12 +169,11 @@ function Uninstall-Task {
 }
 
 function Show-Status {
-    $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+    $existing = Get-ItemProperty -Path $RunKey -Name $RunValueName -ErrorAction SilentlyContinue
     if ($null -eq $existing) {
-        Write-Output ('task       not registered ' + $TaskName)
+        Write-Output ('autostart  not registered ' + $RunValueName)
     } else {
-        $info = Get-ScheduledTaskInfo -TaskName $TaskName
-        Write-Output ('task       ' + $existing.State + ', last run ' + $info.LastRunTime + ', last result ' + $info.LastTaskResult)
+        Write-Output ('autostart  ' + $RunValueName + ' -> ' + $existing.$RunValueName)
     }
     Write-Output ('cluster    port ' + $Port + ' open=' + (Test-PortOpen -Port $Port))
     Write-Output ('daemon     pipe reachable=' + (Test-Pipe $PipeName))
@@ -197,12 +206,12 @@ function Test-PortOpen {
 
 switch ($Action) {
     'install' {
-        Install-Task
+        Install-Autostart
         Start-All
         Write-Output 'autostart: OK (the cluster and daemon start again at the next sign-in)'
     }
     'uninstall' {
-        Uninstall-Task
+        Uninstall-Autostart
     }
     'start' {
         Start-All

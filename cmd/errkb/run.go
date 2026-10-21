@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/capture"
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
@@ -61,8 +60,11 @@ func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Rea
 
 	flags := flag.NewFlagSet("run", flag.ContinueOnError)
 	flags.SetOutput(stderr)
-	connector := flags.String("connector", "", "connector id the event belongs to (required)")
-	session := flags.String("session", "", "session id the event belongs to (required)")
+	// The defaults make the documented first-run command work without flags:
+	// `errkb run -- cmd /c "exit 3"` records under the built-in CLI identity
+	// (EKB-056 acceptance 8). A caller that wants its own rows passes both.
+	connector := flags.String("connector", "cli", "connector id the event belongs to (default cli)")
+	session := flags.String("session", "cli", "session id the event belongs to (default cli)")
 	project := flags.String("project", "default", "project key the issue is scoped to")
 	captureBytes := flags.Int("capture-bytes", 0, "retained bytes per stream (default 65536)")
 	if err := flags.Parse(flagArgs); err != nil {
@@ -70,10 +72,6 @@ func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Rea
 	}
 	if len(flags.Args()) != 0 {
 		fmt.Fprintln(stderr, "errkb run: flags belong before `--`")
-		return exitUsage
-	}
-	if strings.TrimSpace(*connector) == "" || strings.TrimSpace(*session) == "" {
-		fmt.Fprintln(stderr, "errkb run: --connector and --session are required (the daemon needs rows to hang the event on)")
 		return exitUsage
 	}
 
