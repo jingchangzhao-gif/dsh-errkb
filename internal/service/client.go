@@ -249,3 +249,16 @@ func (c *Client) SetStatus(ctx context.Context, request contract.SetStatusReques
 	}
 	return response, nil
 }
+
+// GetIssue returns the detail document for the Web page.
+func (c *Client) GetIssue(ctx context.Context, request contract.GetIssueRequest) (contract.GetIssueResponse, error) {
+	payload, err := c.Call(ctx, contract.OperationGetIssue, request)
+	if err != nil {
+		return contract.GetIssueResponse{}, err
+	}
+	var response contract.GetIssueResponse
+	if err := json.Unmarshal(payload, &response); err != nil {
+		return contract.GetIssueResponse{}, fmt.Errorf("decode the get_issue result: %w", err)
+	}
+	return response, nil
+}

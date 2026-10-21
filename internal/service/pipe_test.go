@@ -68,6 +68,21 @@ func (f *fakeBackend) Search(context.Context, contract.SearchRequest) (contract.
 	return contract.SearchResponse{SchemaVersion: contract.ToolSchemaVersion, Candidates: []contract.Candidate{}}, nil
 }
 
+func (f *fakeBackend) GetIssue(_ context.Context, request contract.GetIssueRequest) (contract.GetIssueResponse, error) {
+	f.note("get_issue")
+	if f.err != nil {
+		return contract.GetIssueResponse{}, f.err
+	}
+	return contract.GetIssueResponse{
+		SchemaVersion: contract.ToolSchemaVersion,
+		Issue: contract.IssueDetailV{
+			ID:          request.IssueID,
+			Fingerprint: "000000000000",
+			Title:       "fake issue",
+		},
+	}, nil
+}
+
 func (f *fakeBackend) Record(_ context.Context, request contract.RecordRequest) (contract.RecordResponse, error) {
 	f.note("record")
 	if f.err != nil {

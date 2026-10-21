@@ -50,9 +50,14 @@ func runWeb(args []string, stdout, stderr io.Writer) int {
 	}
 	defer client.Close()
 
-	server, err := webshell.New(func(ctx context.Context, request contract.SearchRequest) (contract.SearchResponse, error) {
-		return client.Search(ctx, request)
-	})
+	server, err := webshell.NewWithDetail(
+		func(ctx context.Context, request contract.SearchRequest) (contract.SearchResponse, error) {
+			return client.Search(ctx, request)
+		},
+		func(ctx context.Context, request contract.GetIssueRequest) (contract.GetIssueResponse, error) {
+			return client.GetIssue(ctx, request)
+		},
+	)
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb ui: %v\n", err)
 		return exitInternal

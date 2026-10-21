@@ -33,10 +33,16 @@ type Server struct {
 	page   []byte
 	assets fs.FS
 	search SearchFunc
+	detail GetIssueFunc
 }
 
-// New builds the shell with a fresh per-launch token.
+// New builds the shell with a fresh per-launch token and search only.
 func New(search SearchFunc) (*Server, error) {
+	return NewWithDetail(search, nil)
+}
+
+// NewWithDetail also wires the detail read; nil keeps the search-only shell.
+func NewWithDetail(search SearchFunc, detail GetIssueFunc) (*Server, error) {
 	if search == nil {
 		return nil, errors.New("webshell: a search function is required")
 	}
@@ -58,6 +64,7 @@ func New(search SearchFunc) (*Server, error) {
 		page:   []byte(strings.ReplaceAll(string(page), "__TOKEN__", encoded)),
 		assets: sub,
 		search: search,
+		detail: detail,
 	}, nil
 }
 
@@ -80,6 +87,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.servePage)
 	mux.Handle("GET /assets/", http.StripPrefix("/assets/", http.FileServer(http.FS(s.assets))))
 	mux.HandleFunc("POST /api/search", s.serveSearch)
+	mux.HandleFunc("GET /api/issues/{id}", s.serveIssue)
+	mux.HandleFunc("GET /issues/{id}", s.servePage)
 	return withHeaders(mux)
 }
 

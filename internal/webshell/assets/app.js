@@ -36,9 +36,11 @@ function renderHits(candidates) {
       : "exact";
     const badgeClass = candidate.approximate ? "approximate" : "exact";
     item.innerHTML =
-      "<h2>" +
+      '<h2><a href="/issues/' +
+      encodeURIComponent(candidate.issue_id) +
+      '">' +
       escapeText(candidate.title) +
-      "</h2>" +
+      "</a></h2>" +
       '<div class="meta">' +
       '<span class="badge ' +
       badgeClass +
@@ -113,3 +115,115 @@ input.addEventListener("keydown", (event) => {
     search();
   }
 });
+
+// ---- detail page (WF-005) -------------------------------------------------
+function environmentText(environment) {
+  return Object.keys(environment || {})
+    .sort()
+    .map((key) => key + "=" + environment[key])
+    .join(", ");
+}
+
+function renderVersions(solutions) {
+  const versions = [];
+  for (const solution of solutions || []) {
+    for (const version of solution.versions || []) {
+      versions.push({ status: solution.status, version });
+    }
+  }
+  versions.sort((left, right) => (right.version.version || 0) - (left.version.version || 0));
+  if (versions.length === 0) return "<p>no solution recorded yet</p>";
+  return versions
+    .map((entry) => {
+      const version = entry.version;
+      const copy = [version.body || ""];
+      if (version.source) copy.push("source: " + version.source);
+      if (version.applies_to) copy.push("applies to: " + version.applies_to);
+      if (version.risks) copy.push("risks: " + version.risks);
+      return (
+        '<article class="version">' +
+        "<h3>v" + version.version + " · " + escapeText(entry.status) + "</h3>" +
+        "<pre>" + escapeText(version.body) + "</pre>" +
+        '<p class="meta">' +
+        (version.source ? "<span>source " + escapeText(version.source) + "</span>" : "") +
+        (version.applies_to ? "<span>applies to " + escapeText(version.applies_to) + "</span>" : "") +
+        (version.risks ? "<span>risks " + escapeText(version.risks) + "</span>" : "") +
+        (version.preconditions
+          ? "<span>preconditions " + escapeText(version.preconditions) + "</span>"
+          : "") +
+        "</p>" +
+        '<button type="button" data-copy="' + escapeText(copy.join("\n")) + '">Copy fix</button>' +
+        "</article>"
+      );
+    })
+    .join("");
+}
+
+function renderDetail(detail) {
+  const counts = { success: 0, failure: 0, unknown: 0 };
+  for (const outcome of detail.outcomes || []) {
+    if (counts[outcome.outcome] !== undefined) counts[outcome.outcome] += 1;
+  }
+  const environmentRows = (detail.occurrences || [])
+    .map((occurrence) => {
+      const text = environmentText(occurrence.environment);
+      return (
+        "<li>" +
+        escapeText(occurrence.headline || occurrence.id) +
+        (text ? ' <span class="env">' + escapeText(text) + "</span>" : "") +
+        "</li>"
+      );
+    })
+    .join("");
+  const trust = detail.trust || {};
+  return (
+    '<p><a href="/">← back to search</a></p>' +
+    "<h2>" + escapeText(detail.title) + "</h2>" +
+    '<p class="meta"><span>issue ' + escapeText(detail.id) + "</span>" +
+    "<span>fingerprint " + escapeText(detail.fingerprint) + "</span>" +
+    "<span>" + escapeText(detail.status) + "</span>" +
+    "<span>" + detail.hits + " hit(s)</span></p>" +
+    '<p class="reason">trust ' + Number(trust.score || 0).toFixed(2) +
+    " (based on " + Number(trust.samples || 0) + " recorded outcome(s); read-only)</p>" +
+    "<h3>Environment</h3><ul>" + (environmentRows || "<li>not recorded</li>") + "</ul>" +
+    "<h3>Solution history (newest first)</h3>" + renderVersions(detail.solutions) +
+    "<h3>Outcomes</h3><p>success " + counts.success + " · failure " + counts.failure +
+    " · unknown " + counts.unknown + "</p>"
+  );
+}
+
+async function loadDetail() {
+  const match = location.pathname.match(/^\/issues\/([^/]+)$/);
+  if (!match) return;
+  const issueID = decodeURIComponent(match[1]);
+  const main = document.querySelector("main");
+  main.innerHTML = '<p id="status" role="status">loading…</p>';
+  try {
+    const response = await fetch("/api/issues/" + encodeURIComponent(issueID), {
+      headers: { "x-errkb-token": token },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      main.innerHTML =
+        '<p class="error">' + escapeText(payload.message || "could not load the issue") + "</p>" +
+        '<p><a href="/">back to search</a></p>';
+      return;
+    }
+    const payload = await response.json();
+    main.innerHTML = renderDetail(payload.issue || {});
+    for (const button of main.querySelectorAll("[data-copy]")) {
+      button.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(button.getAttribute("data-copy"));
+          button.textContent = "Copied";
+        } catch (error) {
+          button.textContent = "Copy failed";
+        }
+      });
+    }
+  } catch (error) {
+    main.innerHTML = '<p class="error">the errkb core is not reachable</p>';
+  }
+}
+
+loadDetail();

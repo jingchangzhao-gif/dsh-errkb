@@ -34,6 +34,8 @@ type Backend interface {
 	Capture(context.Context, contract.CaptureRequest) (contract.CaptureResponse, error)
 	// RecordSolution appends a verified solution version and resolves the issue.
 	RecordSolution(context.Context, contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error)
+	// GetIssue returns one issue with its occurrence, solution and outcome history.
+	GetIssue(context.Context, contract.GetIssueRequest) (contract.GetIssueResponse, error)
 	// SetStatus corrects an issue status (open/resolved/wontfix/misjudged).
 	SetStatus(context.Context, contract.SetStatusRequest) (contract.SetStatusResponse, error)
 }
@@ -158,6 +160,14 @@ func (a *API) Handle(ctx context.Context, frame []byte) []byte {
 				APIErrorf(CodeInvalidRequest, "decode the record_solution payload: %v", err))
 		}
 		response, err := a.backend.RecordSolution(ctx, payload)
+		return a.encodeResult(request, response, err)
+	case contract.OperationGetIssue:
+		var payload contract.GetIssueRequest
+		if err := json.Unmarshal(request.Payload, &payload); err != nil {
+			return a.rejectFrame(request.RequestID, request.Operation,
+				APIErrorf(CodeInvalidRequest, "decode the get_issue payload: %v", err))
+		}
+		response, err := a.backend.GetIssue(ctx, payload)
 		return a.encodeResult(request, response, err)
 	case contract.OperationSetStatus:
 		var payload contract.SetStatusRequest
