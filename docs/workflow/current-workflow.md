@@ -39,7 +39,7 @@ There is intentionally no `DONE` state in this file. Resolved problems are delet
 | ID | Status | Remaining problem | Evidence now | Completion condition |
 | --- | --- | --- | --- | --- |
 | WF-011 | `BLOCKED` | Clean standard-user Windows acceptance is missing | No recorded clean install, real reboot, toolbox launch and both uninstall modes for one coherent artifact | Complete `vm-acceptance.ps1` plus manual gates on a clean VM and attach its evidence directory |
-| WF-012 | `NEXT` | No coherent release artifact exists | Existing `dist` executables came from different revisions and do not expose the same command surface | Build EXE, installer, portable toolbox, manifest, SBOM and hashes once from one accepted tag; installed binary must report that same identity |
+| WF-012 | `BLOCKED` | The coherent artifact exists but cannot be accepted or published before the clean-VM pass | `dist\release\errkb-0.1.0` built once from commit `fa2585e` (package label `v0.1.0`, no git tag): EXE/installer/ZIP/manifest/SBOM/hashes verified, installed binary reports `fa2585e` | After WF-011, rebuild the same bundle from an accepted tag, verify the installed identity and attach the bundle hashes |
 
 ## Per-item update format
 
