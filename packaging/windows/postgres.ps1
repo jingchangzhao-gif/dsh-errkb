@@ -26,7 +26,8 @@ param(
     [string]$BinDir = '',
     [string]$Database = 'errkb',
     [string]$Superuser = 'postgres',
-    [switch]$DeleteData
+    [switch]$DeleteData,
+    [string]$Choice = 'keep'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -236,15 +237,26 @@ function Stop-Cluster {
 }
 
 function Uninstall-Cluster {
+    # -Choice carries the uninstaller's command line ("delete" for
+    # /DELETE_DATA=1); -DeleteData remains for direct script use.
+    $marker = Join-Path (Split-Path -Parent (Split-Path -Parent $DataDir)) '.errkb-delete-data'
+    $removeData = $DeleteData -or ($Choice -in @('delete', '1', 'true', 'yes', 'delete_data')) -or (Test-Path $marker)
     if (Test-Cluster) {
         Stop-Cluster
-        if ($DeleteData) {
-            $parent = Split-Path -Parent $DataDir
+        if ($removeData) {
             if ([string]::IsNullOrWhiteSpace($DataDir) -or $DataDir.Length -lt 8) {
                 throw "refusing to delete a path that is too broad: $DataDir"
             }
             Remove-Item -Recurse -Force $DataDir
-            Write-Output "deleted    $DataDir (data removed because -DeleteData was passed)"
+            $pgRoot = Split-Path -Parent $DataDir
+            $appRoot = Split-Path -Parent $pgRoot
+            if ($appRoot.Length -ge 8) {
+                foreach ($extra in @((Join-Path $appRoot 'health.json'), (Join-Path $appRoot 'logs'), $pgRoot)) {
+                    if (Test-Path $extra) { Remove-Item -Recurse -Force $extra -ErrorAction SilentlyContinue }
+                }
+            }
+            Write-Output "deleted    $DataDir (data removed because the uninstall chose delete)"
+            if (Test-Path $marker) { Remove-Item -Force $marker }
         } else {
             Write-Output "kept       $DataDir (re-run with -DeleteData to remove it)"
         }

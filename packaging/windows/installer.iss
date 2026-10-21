@@ -66,19 +66,22 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 Filename: "{app}\errkb.exe"; Parameters: "version"; Description: "Show the errkb version"; Flags: postinstall shellexec runasoriginaluser
 
 [UninstallRun]
-; Stop the daemon and drop the logon task before the files disappear (a running
-; daemon would keep errkb.exe locked and the task would point at nothing).
+; Stop the daemon and drop the logon Run entry before the files disappear (a
+; running daemon would keep errkb.exe locked and the Run entry would point at
+; nothing).
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\autostart.ps1"" -Action uninstall -AppDir ""{app}"""; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbAutostart"
-; Choice 2 (existing instance): only remove the credentials, keep everything else.
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort}"; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbPgKeep"; Check: not DeleteDataOnUninstall
-; Choice 1 or 3 with data removal.
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort} -DeleteData"; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbPgDelete"; Check: DeleteDataOnUninstall
+; The uninstaller keeps the local database data by default. A silent uninstall
+; cannot answer a dialog, so the choice is a command-line switch:
+;   unins000.exe /VERYSILENT /DELETE_DATA=1   -> remove the cluster data
+;   unins000.exe /VERYSILENT                  -> keep the data
+; The switch is expanded by the uninstaller's own command line, which means it
+; also works in the second phase that actually runs [UninstallRun].
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort} -Choice {param:DELETE_DATA|keep}"; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbPg"
 
 [Code]
 var
   ClusterPage: TInputOptionWizardPage;
   PortPage: TInputQueryWizardPage;
-  DeleteData: Boolean;
   PortChosen: Integer;
 
 function PostgresBinPresent(): Boolean;
@@ -191,9 +194,41 @@ begin
   Result := IntToStr(PortChosen);
 end;
 
-function DeleteDataOnUninstall(): Boolean;
+function UninstallParam(Name: String): Boolean;
+var
+  I: Integer;
+  Param: String;
+  LowerName: String;
 begin
-  Result := DeleteData;
+  Result := False;
+  LowerName := Lowercase(Name);
+  for I := 1 to ParamCount do
+  begin
+    Param := Lowercase(ParamStr(I));
+    if Param = LowerName then
+    begin
+      Result := True;
+      Exit;
+    end;
+    if Copy(Param, 1, Length(LowerName) + 1) = LowerName + '=' then
+    begin
+      Result := Param <> LowerName + '=0';
+      Exit;
+    end;
+  end;
+end;
+
+procedure SetDeleteDataMarker(Remove: Boolean);
+var
+  Marker: String;
+begin
+  Marker := ExpandConstant('{app}\.errkb-delete-data');
+  if Remove then
+  begin
+    if FileExists(Marker) then DeleteFile(Marker);
+  end
+  else
+    SaveStringToFile(Marker, '1', False);
 end;
 
 function InitializeUninstall(): Boolean;
@@ -203,13 +238,26 @@ begin
   Result := True;
   if ClusterDataPresent() then
   begin
+    { A dialog answer cannot travel to the second uninstaller phase that runs
+      the uninstall commands, so the choice is written as a marker file next
+      to the database and postgres.ps1 reads it. }
+    if UninstallParam('/delete_data') then
+    begin
+      SetDeleteDataMarker(False);
+      Exit;
+    end;
+    if UninstallParam('/keep_data') then
+    begin
+      SetDeleteDataMarker(True);
+      Exit;
+    end;
     Choice := MsgBox('Keep the local database data?', mbConfirmation, MB_YESNOCANCEL);
     if Choice = IDCANCEL then
     begin
       Result := False;
       Exit;
     end;
-    DeleteData := (Choice = IDNO);
+    SetDeleteDataMarker(Choice = IDYES);
   end;
 end;
 

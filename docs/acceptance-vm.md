@@ -10,8 +10,9 @@
 >
 > The two blocking findings below (a fresh install had no migrations, nothing restarted after a
 > reboot) were implemented in **EKB-056**: `errkb db migrate`, the installer migration step, and the
-> logon-task autostart (`packaging/windows/autostart.ps1`). This file still says `blocked` because
-> the clean-VM evidence has not been produced yet; re-run the phases below to close the card.
+> HKCU Run autostart (`packaging/windows/autostart.ps1`). The dev-host rehearsal of EKB-056 verified
+> install, migrations, the Run entry, the loop, a reboot replay and both uninstall choices; the
+> clean-VM evidence itself has not been produced yet, so this file still says `blocked`.
 
 This file is the *report* side of §11.1: `packaging/windows/vm-acceptance.ps1` is the executable
 half. The script exits non-zero when any automatic check fails, writes `results.json` plus one
@@ -21,11 +22,11 @@ evidence file per check, and marks the clicks it cannot automate as `MANUAL`.
 
 | Artifact | Value |
 | --- | --- |
-| installer | `dist\errkb-0.1.0-setup.exe`, 4,961,033 bytes |
-| installer SHA256 | `19518D1DE0AC0CFCF9AD68E8B9E3783D70CCBA499889ECB6107B4551C38B5448` |
+| installer | `dist\errkb-0.1.0-setup.exe`, 4,959,460 bytes |
+| installer SHA256 | `F3E77D4CCAF0501129D092F71E3808ABB20E036BD3A10892DB0D0E55B640CC09` |
 | installer toolchain | Inno Setup 6.7.3 (`ISCC.exe`, user-scope install) |
-| binary | `dist\errkb.exe`, 10,937,344 bytes |
-| binary SHA256 | `eb0d5148eb86d6a540a815a6f2cb3e5a3f3c12cb6179fef03aac0b06e6286143` |
+| binary | `dist\errkb.exe`, 10,936,320 bytes |
+| binary SHA256 | `B116E5BA493EE5A5CF5AD070332F48159B289761DED89E16C366F25EBF2EAD67` |
 | binary version | `errkb 0.1.0`, `commit local`, `built 2026-10-21T00:00:00Z`, `go go1.26.4 windows/amd64` |
 | database | PostgreSQL 16.15, dedicated cluster on the chosen port (default 5433) |
 
@@ -55,10 +56,11 @@ as the card requires (`docs/` + the script are the only landed files).
    `already up to date`, and the daemon started against it. The clean-VM first run remains the
    acceptance gate.
 2. ~~**Nothing restarts after a reboot.**~~ **Addressed by EKB-056.** `packaging/windows/autostart.ps1`
-   registers a per-user logon task (cluster → daemon, idempotent `start`), installer registers it and
-   the uninstaller removes it, so no task is left behind. Local evidence is limited to
-   script parsing and the start path; registering the task itself is denied by the implementation
-   host's sandbox, so the reboot check stays in the clean VM.
+   writes a per-user HKCU Run entry (Windows denies per-user Scheduled Task registration to a
+   standard user, so the Run key is the compliant no-admin mechanism) that starts the cluster and
+   the daemon after sign-in; the uninstaller removes it. On the implementation host the entry
+   registered, the daemon started and `health.json` reached `status ok`, and re-running the Run
+   command brought the pipe up in ~4 s. The sign-in/reboot assertion itself stays a clean-VM check.
 3. **Silent install cannot answer the cluster question.** `installer.iss` asks create / reuse / other
    port interactively; `/VERYSILENT` takes the default (create a dedicated cluster on 5433). The
    automated run therefore exercises one branch only; the interactive standard-user click-through is
@@ -69,7 +71,7 @@ as the card requires (`docs/` + the script are the only landed files).
 ```powershell
 # 1. artifacts: verify the installer and binary hashes before touching the machine
 pwsh -File packaging\windows\vm-acceptance.ps1 -Phase artifacts `
-  -ExpectedSha256 703B535C540BD99D0B3C2ED1FEB6E706404C130DEF6CB2970E0818196077717F
+  -ExpectedSha256 F3E77D4CCAF0501129D092F71E3808ABB20E036BD3A10892DB0D0E55B640CC09
 
 # 2. interactive install as a standard user (manual gate)
 #    double-click the setup, accept UAC, choose create-reusable cluster, keep default port
@@ -132,14 +134,14 @@ and "standard user" checks are real.
 
 | # | Check | Status here |
 | --- | --- | --- |
-| 1 | Fresh install runs and records | harness ready; migrations wired in EKB-056, retest pending |
+| 1 | Fresh install runs and records | dev-host rehearsal passed (install → migrations → `errkb run` recorded); clean VM pending |
 | 2 | Reuse inside the same install | harness ready (`loop`); migrations wired in EKB-056 |
 | 3 | Standard user completes install and first run | manual gate; not run (no VM) |
-| 4 | No manual step on a clean machine | migrations wired in EKB-056; retest pending |
-| 5 | Second run shows the fix with no model call | harness ready; retest pending |
-| 6 | Autostart after reboot | logon task implemented in EKB-056; retest pending |
-| 7 | Uninstall keeps data on request | harness ready (`uninstall -KeepData`); not run (no VM) |
-| 8 | Uninstall deletes everything | harness ready; not run (no VM) |
+| 4 | No manual step on a clean machine | installer runs `db migrate`; dev-host rehearsal passed; clean VM pending |
+| 5 | Second run shows the fix with no model call | dev-host rehearsal passed (fix returned with trust 0.60); clean VM pending |
+| 6 | Autostart after reboot | HKCU Run entry registered + daemon started (dev host); reboot replay passed; clean VM pending |
+| 7 | Uninstall keeps data on request | keep-data run left `pg\`/`logs\`/`health.json`, removed exe + Run key; clean VM pending |
+| 8 | Uninstall deletes everything | delete-data run removed the app directory, Run key and port; clean VM pending |
 | 9 | Machine residue check | harness encodes it (service/port/process/files); not run (no VM) |
 | 10 | `docs/acceptance-vm.md` records steps/results | this file |
 | 11 | Scripted `vm-acceptance.ps1` with structured output | delivered |
@@ -204,10 +206,14 @@ are superseded by the EKB-056 deliverables:
    exit 0), and maps failures to the documented exit codes (2 usage, 4 unavailable, 1 internal).
    The installer calls it after the cluster is up and before the success page; a failure aborts the
    install instead of leaving a half-installed cluster.
-2. **Logon-task autostart.** `packaging/windows/autostart.ps1` registers a per-user task that starts
-   the cluster and the daemon after sign-in, `start` is idempotent, and the uninstaller removes the
-   task. Registering the task could not be executed on the implementation host (its sandbox denies
-   `Register-ScheduledTask`), so the reboot assertion itself remains a clean-VM check.
 
-Rebuild the installer and the binary after EKB-056 (their hashes changed), update the artifact table
-above in the same commit, and re-run the phases to turn this report into evidence.
+2. **No-admin autostart through HKCU Run.** `packaging/windows/autostart.ps1 -Action install` writes a
+   per-user `Run` value that starts the cluster and the daemon at sign-in (idempotent `start`);
+   `-Action uninstall` removes it and stops the daemon. On this host the entry registered and the
+   daemon reached `status ok` with migrations 0008; the installer log shows `db migrate` exiting 0
+   before `autostart.ps1 -Action install` exits 0. The reboot check on a clean VM is still required.
+
+The artifact table above carries the EKB-056 rebuild (`errkb.exe` 10,936,320 bytes /
+`B116E5BA…`, installer 4,959,460 bytes / `F3E77D4C…`). Re-run the phases below on a clean machine
+to turn this report into evidence.
+
