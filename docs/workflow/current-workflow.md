@@ -2,7 +2,7 @@
 
 [简体中文](current-workflow.zh-CN.md)
 
-Status date: **2026-10-22**
+Status date: **2026-10-23**
 
 This is the operational resume point for the next work session. It contains only unresolved work. When an issue passes its acceptance check, remove it from the active table in both languages; preserve historical evidence in the implementation plan, CHANGELOG, test record or acceptance document instead of keeping a growing “done” list here.
 
@@ -36,9 +36,7 @@ There is intentionally no `DONE` state in this file. Resolved problems are delet
 
 ## Active issues, in execution order
 
-| ID | Status | Remaining problem | Evidence now | Completion condition |
-| --- | --- | --- | --- | --- |
-| WF-012 | `IN PROGRESS` | Create and verify the first real tagged bundle | PR #91 is merged at `4334539`; WF-011A/WF-011B and every required check passed, and `windows-acceptance` is now a protected required check. Release notes are being finalized before tagging | Merge this release-metadata update, create `v0.1.0`, let the tag workflow rerun acceptance and package once, then verify installed identity and bundle hashes |
+No active WF items. WF-012 completed with the public v0.1.0 release from commit `1438473`; the tag workflow, bundle checksums, manifest identity, standalone binary and toolbox binary were verified.
 
 ## Per-item update format
 

@@ -6,7 +6,7 @@
 
 ## 阅读顺序
 
-1. [当前工作流与未解决问题](current-workflow.zh-CN.md)——活动问题队列，从唯一的 `NEXT` 行开始。
+1. [当前工作流与未解决问题](current-workflow.zh-CN.md)——活动问题队列；存在活动行时，从唯一的 `NEXT` 行开始。
 2. [首次验收历史报告](acceptance-report-2026-10-22.zh-CN.md)——最初的失败基线；其中 WF-011 结论已被 Windows CI 证据取代。
 3. [文件修复顺序](file-repair-sequence.zh-CN.md)——每个工作流编号对应的文件、修改、测试和完成门槛。
 4. [无用代码审计](unused-code-audit.zh-CN.md)——哪些内容可删除、已过期、未接入、只用于兼容或仍在使用。

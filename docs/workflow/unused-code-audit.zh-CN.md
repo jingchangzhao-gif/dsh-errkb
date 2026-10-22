@@ -54,7 +54,7 @@ DSH 包入口是 `src/index.ts`，Go 程序入口是 `cmd/errkb`。Go 函数仅�
 | --- | --- | --- | --- |
 | `dist/errkb.exe` 以及根安装器、校验和和资源文件 | `STALE-ARTIFACT` | 与 release 子目录处于不同实现时点，且二进制没有本地 Web 启动路由 | 从带 tag 提交重建前移除 |
 | `dist/release/errkb-0.1.0/` | `STALE-ARTIFACT` | 旧发布包；其 EXE 命令面与根 EXE、当前源码都不同 | 若需要历史证据则移到仓库外归档，否则本地删除 |
-| 整个 `dist/` | `REGENERATABLE` | 已被忽略的构建输出，约 53 MB，内部版本不一致 | WF-012 前清空，再从已验收 tag 只构建一次 |
+| 整个 `dist/` | `REGENERATABLE` | 已被忽略的本地构建输出，不是发布权威 | 按需重新生成；分发时使用 v0.1.0 GitHub Release |
 
 禁止从这些目录挑选部分二进制，再与新生成的安装器文件混用。下一份可验收发布必须让 EXE、安装器、manifest、SBOM 和校验和来自同一个带 tag 提交。
 
@@ -90,7 +90,7 @@ DSH 包入口是 `src/index.ts`，Go 程序入口是 `cmd/errkb`。Go 函数仅�
 | `connectors/*/probe.md`、`capability.json` | `TEST-COMPAT` | 宿主支持声明的证据 |
 | `docs/*.md` 中英文组合 | `ACTIVE` | 用户要求的双语项目、状态和实现文档 |
 
-2026-10-22 已在确认长期证据写入 `implementation-plan.*` 后删除 56 份已完成 EKB 卡片。最后 4 张本地卡片可在 WF-011A/WF-011B 变绿后删除；WF-012 由 `current-workflow.*` 跟踪。
+2026-10-22 已在确认长期证据写入 `implementation-plan.*` 后删除 56 份已完成 EKB 卡片。最后 4 张本地卡片已在 WF-011A/WF-011B 通过后删除；WF-012 也已完成，`current-workflow.*` 不再有活动行。
 
 ## F. 不应删除的活动代码
 
@@ -122,7 +122,7 @@ pwsh -File packaging/windows/cleanup-local.ps1 -Apply
 3. 把剩余 `dist/` 视为无效；只有恢复真实 Git 工作区并选定唯一提交后才重建。
 4. 保留已接入的 Web UI、tailer、Markdown 与 PostgreSQL 管理器代码；它们已有生产入口。
 5. 单独决定接入还是删除仍处于 dormant 状态的桌面通知模型/服务。
-6. WF-011A/WF-011B 变绿后删除四张已被取代的本地 EKB 卡；WF-012 继续保留在实时工作流文件中。
+6. 已完成：四张被取代的本地 EKB 卡已经删除，WF-012 也在 v0.1.0 发布核对后关闭。
 
 ## 删除门槛
 

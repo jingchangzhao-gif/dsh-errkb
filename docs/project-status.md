@@ -2,9 +2,9 @@
 
 [简体中文](project-status.zh-CN.md)
 
-Status date: 2026-10-22
+Status date: 2026-10-23
 
-This page is the current delivery authority: it states what exists in the present Git worktree, what has been exercised, and what still prevents a public release. Historical task notes describe how the project arrived here; they do not override this page.
+This page is the current delivery authority: it states what exists in the present Git worktree, what has been exercised, what is publicly released and which limitations remain. Historical task notes describe how the project arrived here; they do not override this page.
 
 ## Executive summary
 
@@ -23,7 +23,7 @@ DSH / Codex / Claude / generic CLI / MCP
           exact search → fuzzy top 3 → known fix
 ```
 
-The reusable core, PostgreSQL schema, CLI, daemon, MCP server, first host connectors and embedded Windows Web toolbox are implemented. The installer source includes managed PostgreSQL setup, migrations, logon recovery, a launcher, a Start-menu shortcut and both uninstall choices. WF-011A/WF-011B now make the installed lifecycle and recovery a mandatory Windows CI gate. The project is still an **acceptance candidate**, not a public release, because the final build from a real accepted Git tag remains open.
+The reusable core, PostgreSQL schema, CLI, daemon, MCP server, first host connectors and embedded Windows Web toolbox are implemented. The v0.1.0 installer includes managed PostgreSQL setup, migrations, logon recovery, a launcher, a Start-menu shortcut and both uninstall choices. WF-011A/WF-011B make the installed lifecycle and recovery a mandatory Windows CI gate. WF-012 published the verified tag and bundle on 2026-10-23, so v0.1.0 is the first supported public release.
 
 ## Status vocabulary
 
@@ -66,8 +66,8 @@ The automated gate does not claim a physical reboot or visual review of interact
 
 ## Current release boundaries
 
-1. **WF-012 — real tagged release.** This repository has no accepted `v0.1.0` tag yet. Existing files under `dist/` are rehearsal artifacts and must not be published. Merge a green `windows-acceptance` result, create the real tag, let the tag workflow repeat acceptance and build once, then verify that source, EXE, installer, installed EXE, manifest and hashes identify the same version, commit and build time.
-2. **Signing limitation — accepted but visible.** The candidate is not Authenticode-signed. This is not hidden and does not weaken the checksum/provenance gates; users must verify `SHA256SUMS` until a signing certificate is introduced.
+1. **v0.1.0 — released and verified.** Tag `v0.1.0` points to commit `1438473`; the tag workflow reran WF-011A/WF-011B and published the installer, toolbox ZIP, standalone EXE, manifest, SBOM and hashes. The downloaded bundle identity and all `SHA256SUMS` entries were verified.
+2. **Signing limitation — accepted but visible.** The release is not Authenticode-signed. This is not hidden and does not weaken the checksum/provenance gates; users must verify `SHA256SUMS` until a signing certificate is introduced.
 
 WF-013 (parallel database determinism) and WF-014 (delivery-status reconciliation) are complete.
 
@@ -86,7 +86,7 @@ go build -o errkb.exe ./cmd/errkb
 
 ### End-user installation
 
-There is no supported public installer yet. The next valid transition is WF-012 tagged packaging after the `windows-acceptance` check is green; no feature implementation card remains ahead of that gate.
+Download `errkb-0.1.0-setup.exe` from the [v0.1.0 release](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0), install PostgreSQL 16 first, verify the installer against `SHA256SUMS`, then run the installer as a standard user. `errkb-toolbox.zip` is the portable alternative.
 
 ## Release checklist
 
