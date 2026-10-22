@@ -200,6 +200,22 @@ function Get-Dsn {
     return ('postgres://{0}:{1}@127.0.0.1:{2}/{3}?sslmode=disable' -f $cred.superuser, $cred.password, $cred.port, $cred.database)
 }
 
+function Stop-InstalledDaemon {
+    $exeFull = [System.IO.Path]::GetFullPath($Exe)
+    foreach ($candidate in @(Get-CimInstance Win32_Process -Filter "Name = 'errkb.exe'" -ErrorAction SilentlyContinue)) {
+        if ($candidate.ExecutablePath -and
+            ([System.IO.Path]::GetFullPath($candidate.ExecutablePath) -eq $exeFull)) {
+            Stop-Process -Id $candidate.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    }
+    $deadline = (Get-Date).AddSeconds(10)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Test-Pipe $PipeName -TimeoutMs 200)) { return }
+        Start-Sleep -Milliseconds 200
+    }
+    throw 'the installer-started daemon did not release the Named Pipe within 10 seconds'
+}
+
 # One-shot MCP call: initialize, then tools/call, then close stdin. The server
 # answers in order and exits on EOF; each call is independent of the next.
 function Invoke-Mcp {
@@ -237,6 +253,10 @@ function Invoke-Mcp {
 }
 
 function Start-ErkbDaemon {
+    # Setup starts the production daemon immediately. Stop that exact installed
+    # executable before starting the evidence-scoped instance below; otherwise
+    # two different mutex names still contend for the same Named Pipe.
+    Stop-InstalledDaemon
     $dsn = Get-Dsn
     $health = Join-Path $EvidenceDir 'health.json'
     $log = Join-Path $EvidenceDir 'daemon.log'

@@ -95,6 +95,10 @@ function Assert-AcceptanceUsesInstalledMigrations {
         ([regex]::Matches($acceptanceSource, 'doctor[^\r\n]*--migrations\s+\$Migrations')).Count -lt 2) {
         throw 'VM acceptance must point daemon and both doctor calls at the migrations installed next to errkb.exe'
     }
+    if ($acceptanceSource -notmatch 'function Stop-InstalledDaemon' -or
+        $acceptanceSource -notmatch 'function Start-ErkbDaemon \{\s*#?[\s\S]*?Stop-InstalledDaemon') {
+        throw 'VM acceptance must stop the installer-started daemon before binding its evidence-scoped pipe'
+    }
     Write-Output 'PASS VM acceptance uses installed migrations'
 }
 
