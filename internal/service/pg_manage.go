@@ -782,11 +782,11 @@ func (m *PGManager) Uninstall(ctx context.Context, instance Instance, deleteData
 			return report, err
 		}
 		report.DataRemoved = true
-	}
-	if err := os.Remove(instance.CredentialsFile); err == nil {
-		report.Credentials = true
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return report, fmt.Errorf("uninstall: credentials: %w", err)
+		if err := os.Remove(instance.CredentialsFile); err == nil {
+			report.Credentials = true
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return report, fmt.Errorf("uninstall: credentials: %w", err)
+		}
 	}
 	deadline := m.now().Add(15 * time.Second)
 	for portOpen(instance.Port) {

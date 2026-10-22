@@ -43,9 +43,31 @@ if (-not (Test-Path $Exe)) {
 $marker = Join-Path (Split-Path -Parent $root) '.errkb-delete-data'
 $removeData = $DeleteData -or ($Choice -in @('delete', '1', 'true', 'yes', 'delete_data')) -or (Test-Path $marker)
 
-$arguments = @('pg', $Action, '--data-dir', $DataDir, '--port', $Port, '--database', $Database, '--superuser', $Superuser)
+$effectiveAction = $Action
+$credentialsPath = Join-Path $root 'credentials.json'
+$clusterVersionPath = Join-Path $DataDir 'PG_VERSION'
+if ($Action -eq 'install') {
+    $hasData = Test-Path $clusterVersionPath
+    $hasCredentials = Test-Path $credentialsPath
+    if ($hasData -xor $hasCredentials) {
+        throw 'A retained cluster can only be reused with its protected credentials.json. Restore both together or explicitly delete the retained data before installing.'
+    }
+    if ($hasData -and $hasCredentials) {
+        $stored = Get-Content $credentialsPath -Raw | ConvertFrom-Json
+        $storedDataDir = [System.IO.Path]::GetFullPath([string]$stored.data_dir)
+        $requestedDataDir = [System.IO.Path]::GetFullPath($DataDir)
+        if ([int]$stored.port -ne $Port -or [string]$stored.database -ne $Database -or
+            $storedDataDir -ne $requestedDataDir) {
+            throw 'The retained cluster credentials do not match the requested data directory, port or database. Choose the matching settings or explicitly delete the retained data.'
+        }
+        $effectiveAction = 'start'
+        Write-Output ('reusing     retained cluster at ' + $DataDir)
+    }
+}
+
+$arguments = @('pg', $effectiveAction, '--data-dir', $DataDir, '--port', $Port, '--database', $Database, '--superuser', $Superuser)
 $migrations = Join-Path (Split-Path -Parent $root) 'migrations'
-if ($Action -eq 'install') { $arguments += @('--migrations', $migrations) }
+if ($effectiveAction -eq 'install') { $arguments += @('--migrations', $migrations) }
 if ($Action -eq 'stop' -or $Action -eq 'uninstall') {
     if ($removeData) { $arguments += '--delete-data' }
 }

@@ -17,6 +17,7 @@ $ErrorActionPreference = 'Stop'
 $sourceScript = Join-Path $PSScriptRoot 'release.ps1'
 $installerScript = Join-Path $PSScriptRoot 'installer.iss'
 $vmAcceptanceScript = Join-Path $PSScriptRoot 'vm-acceptance.ps1'
+$postgresScript = Join-Path $PSScriptRoot 'postgres.ps1'
 $shell = Get-Command pwsh -ErrorAction Stop
 $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
 $testRoot = Join-Path $tempBase ('errkb-release-test-' + [guid]::NewGuid().ToString('N'))
@@ -99,11 +100,61 @@ function Assert-AcceptanceUsesInstalledMigrations {
 
 function Assert-AcceptanceAllowsFreshConnectorState {
     $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
-    if ($acceptanceSource -notmatch "doctor connectors'[\s\S]*?degraded with zero registered connectors" -or
+    if ($acceptanceSource -notmatch "degraded with zero registered connectors" -or
+        $acceptanceSource -notmatch "Assert-Step 'doctor connectors'" -or
         $acceptanceSource -match "foreach \(\$required in @\('database', 'migrations', 'extension', 'connectors'\)\)") {
         throw 'VM acceptance must treat zero registered connectors as the expected degraded state on a fresh install'
     }
     Write-Output 'PASS VM acceptance allows the fresh connector state'
+}
+
+function Assert-RetainedClusterCanBeReused {
+    $postgresSource = Get-Content -LiteralPath $postgresScript -Raw
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    if ($postgresSource -notmatch '\$effectiveAction\s*=\s*''start''' -or
+        $postgresSource -notmatch 'retained cluster' -or
+        $acceptanceSource -notmatch "ExpectedConnectorState\s*=\s*'fresh'" -or
+        $acceptanceSource -notmatch "ExpectedConnectorState -eq 'fresh'") {
+        throw 'retained-data reinstall must reuse the cluster and validate fresh/existing connector states separately'
+    }
+
+    $probeRoot = Join-Path $tempBase ('errkb-retained-reuse-test-' + [guid]::NewGuid().ToString('N'))
+    try {
+        $dataDir = Join-Path $probeRoot 'pg\data'
+        New-Item -ItemType Directory -Path $dataDir -Force | Out-Null
+        [System.IO.File]::WriteAllText((Join-Path $dataDir 'PG_VERSION'), '16')
+        $fakeExe = Join-Path $probeRoot 'fake-errkb.cmd'
+        [System.IO.File]::WriteAllText($fakeExe, "@echo off`r`necho %*`r`nexit /b 0`r`n", [System.Text.Encoding]::ASCII)
+        $credentials = [ordered]@{
+            version      = 1
+            port         = 5433
+            database     = 'errkb'
+            superuser    = 'postgres'
+            password     = 'release-test-secret'
+            data_dir     = $dataDir
+            service_name = ''
+        }
+        [System.IO.File]::WriteAllText(
+            (Join-Path $probeRoot 'pg\credentials.json'),
+            ($credentials | ConvertTo-Json),
+            [System.Text.UTF8Encoding]::new($false))
+
+        $output = @(& $shell.Source -NoProfile -File $postgresScript install `
+                -DataDir $dataDir -Port 5433 -Database errkb -Superuser postgres -Exe $fakeExe 2>&1)
+        $exitCode = $LASTEXITCODE
+        $text = $output -join "`n"
+        if ($exitCode -ne 0 -or $text -notmatch 'reusing\s+retained cluster' -or
+            $text -notmatch 'pg start' -or $text -match 'pg install') {
+            throw "retained-cluster reuse probe failed (exit $exitCode):`n$text"
+        }
+    } finally {
+        $resolvedProbe = [System.IO.Path]::GetFullPath($probeRoot)
+        if ($resolvedProbe.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and
+            (Split-Path -Leaf $resolvedProbe).StartsWith('errkb-retained-reuse-test-', [System.StringComparison]::Ordinal)) {
+            Remove-Item -LiteralPath $resolvedProbe -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Output 'PASS retained cluster can be reused'
 }
 
 try {
@@ -111,6 +162,7 @@ try {
     Assert-AcceptanceWaitsForDirectProcessOnly
     Assert-AcceptanceUsesInstalledMigrations
     Assert-AcceptanceAllowsFreshConnectorState
+    Assert-RetainedClusterCanBeReused
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'packaging\windows') -Force | Out-Null
     Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $testRoot 'packaging\windows\release.ps1')
     Write-TestFile 'CHANGELOG.md' "# Changelog`n`n## [$version] - 2099-01-01`n`n- Release gate fixture.`n"
@@ -141,7 +193,7 @@ try {
 
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 9 passed, 0 failed'
+    Write-Output 'release gate tests: 10 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and

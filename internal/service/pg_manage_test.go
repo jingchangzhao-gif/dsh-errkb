@@ -181,8 +181,11 @@ func TestPGManagerUninstallKeepsDataWhenAsked(t *testing.T) {
 	if _, err := os.Stat(instance.DataDir); err != nil {
 		t.Fatalf("the data directory was deleted although keepData was chosen: %v", err)
 	}
-	if _, err := os.Stat(instance.CredentialsFile); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("the credentials file survived the uninstall: %v", err)
+	if report.Credentials {
+		t.Fatalf("the report claims credential removal although keepData was chosen: %+v", report)
+	}
+	if _, err := os.Stat(instance.CredentialsFile); err != nil {
+		t.Fatalf("the credentials file was deleted although it is required to reuse the retained data: %v", err)
 	}
 }
 

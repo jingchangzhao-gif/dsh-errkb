@@ -53,6 +53,9 @@ param(
 
     [int]$Port = 5433,
 
+    [ValidateSet('fresh', 'existing')]
+    [string]$ExpectedConnectorState = 'fresh',
+
     [ValidateSet('keep', 'delete')]
     [string]$UninstallData = 'keep',
 
@@ -356,10 +359,18 @@ function Step-FirstRun {
         Assert-Step ("doctor " + $required) 'status ok' $ok ('status=' + $(if ($check) { $check.status } else { 'missing' }))
     }
     $connectorCheck = $byName['connectors']
-    $freshConnectorState = ($null -ne $connectorCheck) -and
-        ($connectorCheck.status -eq 'degraded') -and
-        ([string]$connectorCheck.detail.count -eq '0')
-    Assert-Step 'doctor connectors' 'degraded with zero registered connectors on a fresh install' $freshConnectorState `
+    $connectorCount = if ($connectorCheck) { [int]$connectorCheck.detail.count } else { -1 }
+    $connectorStateOK = if ($ExpectedConnectorState -eq 'fresh') {
+        ($null -ne $connectorCheck) -and ($connectorCheck.status -eq 'degraded') -and ($connectorCount -eq 0)
+    } else {
+        ($null -ne $connectorCheck) -and ($connectorCheck.status -eq 'ok') -and ($connectorCount -ge 1)
+    }
+    $connectorExpected = if ($ExpectedConnectorState -eq 'fresh') {
+        'degraded with zero registered connectors on a fresh install'
+    } else {
+        'ok with at least one connector preserved after reinstall'
+    }
+    Assert-Step 'doctor connectors' $connectorExpected $connectorStateOK `
         ('status={0}, count={1}' -f $(if ($connectorCheck) { $connectorCheck.status } else { 'missing' }), $(if ($connectorCheck) { $connectorCheck.detail.count } else { '?' }))
     $pipeCheck = $byName['pipe']
     Add-Result -Step 'doctor default: Named Pipe' -Expected 'pipe enabled by default' -Actual ('config: ' + $(if ($pipeCheck) { $pipeCheck.summary } else { 'unknown' })) -Pass $true -Status MANUAL
@@ -378,10 +389,19 @@ function Step-FirstRun {
         $doctor2 = Invoke-Logged 'doctor-daemon' { & $Exe doctor --dsn (Get-Dsn) --migrations $Migrations --json }
         try { $report2 = $doctor2.Output | ConvertFrom-Json } catch { $report2 = $null }
         $nonOK = if ($report2) { @($report2.checks | Where-Object { $_.status -ne 'ok' }) } else { @() }
-        $expectedFreshState = ($null -ne $report2) -and ($report2.status -eq 'degraded') -and
-            ($nonOK.Count -eq 1) -and ($nonOK[0].name -eq 'connectors') -and
-            ($nonOK[0].status -eq 'degraded') -and ([string]$nonOK[0].detail.count -eq '0')
-        Assert-Step 'doctor operational' 'all runtime checks ok; only zero connectors is degraded' $expectedFreshState `
+        $expectedRuntimeState = if ($ExpectedConnectorState -eq 'fresh') {
+            ($null -ne $report2) -and ($report2.status -eq 'degraded') -and
+                ($nonOK.Count -eq 1) -and ($nonOK[0].name -eq 'connectors') -and
+                ($nonOK[0].status -eq 'degraded') -and ([string]$nonOK[0].detail.count -eq '0')
+        } else {
+            ($null -ne $report2) -and ($report2.status -eq 'ok') -and ($nonOK.Count -eq 0)
+        }
+        $runtimeExpected = if ($ExpectedConnectorState -eq 'fresh') {
+            'all runtime checks ok; only zero connectors is degraded'
+        } else {
+            'all checks ok with the retained connector'
+        }
+        Assert-Step 'doctor operational' $runtimeExpected $expectedRuntimeState `
             ('status={0}, non-ok={1}' -f $(if ($report2) { $report2.status } else { 'invalid json' }), $(if ($nonOK.Count) { ($nonOK.name -join ',') } else { 'none' }))
     } finally {
         Stop-ErkbDaemon -Process $process
@@ -486,6 +506,7 @@ function Step-Uninstall {
     if ($keep) {
         Assert-Step 'application removed' 'the application directory is gone' (-not (Test-Path $Exe)) ('exe present=' + (Test-Path $Exe))
         Assert-Step 'data kept' 'the cluster data directory still exists' (Test-Path (Join-Path $AppDir 'pg\data\PG_VERSION')) 'kept'
+        Assert-Step 'credentials kept' 'protected credentials remain with retained data for reinstall' (Test-Path $Credentials) ($(if (Test-Path $Credentials) { 'kept' } else { 'missing' }))
         Add-Manual 'data kept migration' 'reinstall once and confirm the retained cluster is detected and reused (the wizard offers to reuse it)'
     } else {
         Assert-Step 'data deleted' 'the data directory is gone' (-not (Test-Path (Join-Path $AppDir 'pg\data'))) 'deleted'
