@@ -207,7 +207,7 @@ jobs:
         run: |
           go install github.com/tc-hib/go-winres@v0.3.3
           choco install innosetup postgresql16 --yes --no-progress --params "/Password:errkb-ci-only"
-          $pgBin = "C:\Program Files\PostgreSQL\16\bin"
+          $pgBin = Join-Path $env:ProgramFiles "PostgreSQL\16\bin"
           if (-not (Test-Path (Join-Path $pgBin "pg_ctl.exe"))) {
             throw "PostgreSQL 16 was not installed at $pgBin"
           }

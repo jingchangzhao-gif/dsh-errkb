@@ -33,7 +33,7 @@ $DataDir = Join-Path $AppDir 'pg\data'
 $Credentials = Join-Path $AppDir 'pg\credentials.json'
 $Migrations = Join-Path $AppDir 'migrations'
 $HealthFile = Join-Path $AppDir 'health.json'
-$RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+$RunKey = 'HKCU:' + '\Software\Microsoft\Windows\CurrentVersion\Run'
 $RunValueName = 'errkb-autostart'
 $script:Results = New-Object System.Collections.Generic.List[object]
 

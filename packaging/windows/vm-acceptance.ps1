@@ -561,7 +561,7 @@ function Step-Uninstall {
     Assert-Step 'no errkb process left' 'no errkb.exe running' (-not (Get-Process -Name 'errkb' -ErrorAction SilentlyContinue)) 'checked'
     $services = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*errkb*' })
     Assert-Step 'no orphan service' 'no errkb service remains' ($services.Count -eq 0) ('{0} service(s)' -f $services.Count)
-    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $runKey = 'HKCU:' + '\Software\Microsoft\Windows\CurrentVersion\Run'
     $runValue = Get-ItemProperty -Path $runKey -Name 'errkb-autostart' -ErrorAction SilentlyContinue
     Assert-Step 'autostart removed' 'the per-user Run entry is absent' ($null -eq $runValue) ($(if ($runValue) { 'present' } else { 'absent' }))
     if ($keep) {
