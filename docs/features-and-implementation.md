@@ -206,7 +206,7 @@ The local `errkb ui --web` embeds static assets, binds only to `127.0.0.1`, gene
 - Retention has separate sample, normalized-event and audit periods. Scoped deletion supports preview, confirmation and audit (`0006_retention.sql`).
 - Crash tests kill real writer and migration processes and verify committed-data integrity.
 
-WF-011A/WF-011B cover the installer lifecycle and deterministic recovery in Windows CI. The project is still not a public one-click release until WF-012 creates and verifies one coherent tagged bundle.
+WF-011A/WF-011B cover the installer lifecycle and deterministic recovery in Windows CI. WF-012 produced and verified the public v0.1.0 tagged bundle on 2026-10-23.
 
 ## 11. Explicit non-features
 

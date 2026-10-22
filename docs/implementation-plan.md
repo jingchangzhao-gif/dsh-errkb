@@ -4,7 +4,7 @@
 
 This document is the sole execution baseline for upgrading the existing DSH plugin into a multi-host technical-error reuse toolbox. Start at `EKB-001` and proceed in numeric order. A card is complete only after both its automated checks and its manual acceptance pass.
 
-> **Execution checkpoint (2026-10-22).** Cards EKB-002–060 record the historical implementation sequence; their dated status text is not the live queue. The Web toolbox, launcher, installer integration and provenance gate are implemented. EKB-052 is superseded by mandatory WF-011A unattended lifecycle acceptance and WF-011B deterministic recovery in Windows CI; physical reboot and interactive visual review are optional evidence. Existing `dist/` files remain rehearsal artifacts. Use [`project-status.md`](project-status.md) for current delivery truth; the only active card is WF-012 final tagged packaging.
+> **Execution checkpoint (2026-10-23).** Cards EKB-002–060 record the historical implementation sequence; their dated status text is not the live queue. The Web toolbox, launcher, installer integration and provenance gate are implemented. WF-011A/WF-011B are mandatory Windows CI, and WF-012 published the verified v0.1.0 bundle. Physical reboot and interactive visual review remain optional evidence. Use [`project-status.md`](project-status.md) for current delivery truth; there is no active WF card.
 
 For a capability-oriented view of the current source and the implementation path behind each user feature, read [`features-and-implementation.md`](features-and-implementation.md). For the live unresolved queue and per-file repair order, start at [`workflow/README.md`](workflow/README.md). This plan remains the product-decision and historical task authority.
 

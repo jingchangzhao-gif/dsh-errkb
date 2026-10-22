@@ -4,7 +4,7 @@
 
 This file translates every active `WF-nnn` issue into a concrete edit order. Follow the phases sequentially. Do not edit a later phase merely because its files are easy to reach; the earlier phases establish the contracts and runtime paths that later UI and packaging work depend on.
 
-> **Current checkpoint (2026-10-22):** the phases below are retained as historical repair instructions. WF-011A and WF-011B replace the former clean-VM blocker and run in Windows CI. Completed rows have been removed from `current-workflow.md`; only WF-012 remains active.
+> **Current checkpoint (2026-10-23):** the phases below are retained as historical repair instructions. WF-011A/WF-011B run in Windows CI, and WF-012 published and verified v0.1.0. Completed rows have been removed from `current-workflow.md`; no WF item remains active.
 
 ## Global change protocol
 
@@ -208,7 +208,7 @@ Edit order:
 
 Completion gate: every “current” claim is reproducible from the present tree or the latest acceptance evidence, and the English and Chinese blocker lists are equivalent.
 
-Result: the bilingual status, README summaries, feature matrix, install guide, toolbox UI status and plan checkpoint now agree with the tracked worktree. WF-011A/WF-011B subsequently replaced the physical-VM blocker; only the final accepted tag/build and the visible unsigned-binary limitation remain.
+Result: the bilingual status, README summaries, feature matrix, install guide, toolbox UI status and plan checkpoint agreed with the tracked worktree. WF-011A/WF-011B subsequently replaced the physical-VM blocker, and WF-012 completed the accepted tag/build. The visible unsigned-binary limitation remains.
 
 ### WF-011A/WF-011B: Windows acceptance — completed 2026-10-22
 
@@ -216,7 +216,7 @@ Result: the bilingual status, README summaries, feature matrix, install guide, t
 
 ## Phase 9 — coherent release
 
-### WF-012
+### WF-012 — completed 2026-10-23
 
 Edit/run order:
 
@@ -231,6 +231,8 @@ Edit/run order:
 6. `CHANGELOG.md`, release notes, install/status/acceptance documents
 
 Build once from one accepted tag. Verify version, commit and build time across the source, EXE, installer, installed EXE, manifest and checksums. Do not copy any file from an earlier `dist/` directory.
+
+Result: tag `v0.1.0` points to accepted commit `1438473`; the tag workflow repeated WF-011A/WF-011B, built and published the release, and the downloaded checksums, manifest identity, standalone EXE and toolbox EXE were verified.
 
 ## Common final gate
 

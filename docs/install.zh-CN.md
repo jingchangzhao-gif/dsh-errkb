@@ -1,10 +1,10 @@
-# 安装候选、升级与卸载
+# 安装、升级与卸载
 
 [English](install.md)
 
-本文明确区分三类内容：**当前安装器源码**、**本地构建的验收候选**和**旧发布目录**。它们不能混用。
+本文明确区分正式 v0.1.0 发布文件与可丢弃的本地构建输出。
 
-> **状态说明（2026-10-22）。** EKB-056 已在当前源码中加入 `errkb db migrate`、安装阶段迁移和 HKCU 登录启动；WF-011A/WF-011B 现已在 Windows CI 中验证该生命周期与确定性恢复。`dist\release\errkb-0.1.0\` 中的文件早于这些变更，不能被当成当前安装器。项目目前没有受支持的公开版本。详情见 [`project-status.zh-CN.md`](project-status.zh-CN.md) 与 [`acceptance-vm.zh-CN.md`](acceptance-vm.zh-CN.md)。
+> **状态说明（2026-10-23）。** v0.1.0 是受支持的公开版本。请只从 [GitHub Release 页面](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0)下载，并使用随附的 `SHA256SUMS` 核对文件。WF-011A/WF-011B 已在 Windows CI 中验证其生命周期与确定性恢复。详情见 [`project-status.zh-CN.md`](project-status.zh-CN.md) 与 [`acceptance-vm.zh-CN.md`](acceptance-vm.zh-CN.md)。
 
 ## 系统要求
 
@@ -18,9 +18,9 @@
 | 产物 | 来源 | 当前可用性 |
 | --- | --- | --- |
 | `dist\errkb.exe` | `packaging\windows\build.ps1` | 当前源码构建；包含 Web 工具箱启动路由 |
-| `dist\errkb-<version>-setup.exe` | 当前安装器源码 | 验收候选；WF-011A/WF-011B 在 CI 中重建并测试 |
+| `errkb-0.1.0-setup.exe` | v0.1.0 GitHub Release | 正式安装器；WF-011A/WF-011B 在 CI 中重建并测试 |
 | `dist\release\errkb-0.1.0\` | 旧发布打包结果 | 已过期；其中 EXE 没有 `db` 命令 |
-| `errkb-toolbox.zip` | `packaging\windows\release.ps1` | 已实现生成逻辑；等待 WF-012 的真实 tag 构建 |
+| `errkb-toolbox.zip` | v0.1.0 GitHub Release | 已核对的便携工具箱 |
 
 不要混用 `dist\` 与 `dist\release\errkb-0.1.0\` 中的文件。正式发布必须从同一个带 tag 的 Git 提交一次性重建，并让 EXE、安装器、manifest、校验和与安装后文件都指向同一修订。
 
@@ -50,7 +50,7 @@
 
 ## 开发环境首次运行
 
-在 WF-012 生成正式带 tag 安装包前，使用当前源码构建和显式 DSN：
+源码开发或诊断仍可使用显式 DSN：
 
 ```powershell
 go build -o errkb.exe ./cmd/errkb
@@ -69,7 +69,7 @@ go build -o errkb.exe ./cmd/errkb
 .\errkb.exe ui --web
 ```
 
-安装器会部署 `start-errkb.cmd`，并创建运行 `errkb.exe ui --web` 的开始菜单快捷方式；不会留下可见终端。pipe 不可达时，Web 壳会读取安装目录的凭据与 migrations 来恢复 daemon。搜索、详情/编辑、统计/审计和设置页均已接入。当前剩余边界是 WF-012 的最终带 tag 发布，而不是 UI 功能接线。
+安装器会部署 `start-errkb.cmd`，并创建运行 `errkb.exe ui --web` 的开始菜单快捷方式；不会留下可见终端。pipe 不可达时，Web 壳会读取安装目录的凭据与 migrations 来恢复 daemon。搜索、详情/编辑、统计/审计和设置页均已接入，并随 v0.1.0 正式发布。
 
 ## 复用已有 PostgreSQL
 

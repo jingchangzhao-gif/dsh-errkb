@@ -1,15 +1,12 @@
-# Installation candidate, upgrade and uninstall
+# Install, upgrade and uninstall
 
 [简体中文](install.zh-CN.md)
 
-This page separates the **current installer source**, the **locally built acceptance
-candidate** and the **older release bundle**. They are not interchangeable.
+This page separates the official v0.1.0 release from disposable local build output.
 
-> **Status note (2026-10-22).** EKB-056 added `errkb db migrate`, the installer migration
-> step and HKCU logon startup to the current source. WF-011A/WF-011B now exercise that
-> lifecycle and deterministic recovery in Windows CI. The existing files under
-> `dist\release\errkb-0.1.0\` predate EKB-056 and must not be presented as the current
-> installer. There is no supported public release yet. See
+> **Status note (2026-10-23).** v0.1.0 is the supported public release. Download it only
+> from the [GitHub Release page](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0) and verify it with the attached `SHA256SUMS` file.
+> WF-011A/WF-011B exercise its lifecycle and deterministic recovery in Windows CI. See
 > [`project-status.md`](project-status.md) and [`acceptance-vm.md`](acceptance-vm.md).
 
 ## Requirements
@@ -104,9 +101,8 @@ errkb daemon: schema migration check failed: applied version "", expected "0008"
 (run `errkb db migrate` first)
 ```
 
-Until WF-012 creates and verifies one coherent tagged build, the supported route is the
-development flow: build the current source, run `db migrate`, start the daemon with an
-explicit DSN, and run `doctor`.
+For end-user installation, use the coherent tagged v0.1.0 bundle. The explicit DSN flow
+below remains supported for source development and diagnostics.
 
 ## Start the daemon
 

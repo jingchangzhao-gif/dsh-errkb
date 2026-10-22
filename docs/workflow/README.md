@@ -6,7 +6,7 @@ This directory is the single resume point for project repair and cleanup work. I
 
 ## Read in this order
 
-1. [Current workflow and open issues](current-workflow.md) — the unresolved queue. Start with the only `NEXT` row.
+1. [Current workflow and open issues](current-workflow.md) — the unresolved queue. When rows exist, start with the single `NEXT` row.
 2. [Historical first acceptance report](acceptance-report-2026-10-22.md) — the original failed baseline; its WF-011 conclusion is superseded by the Windows CI evidence.
 3. [File repair sequence](file-repair-sequence.md) — files, edits, tests and completion gates for each workflow ID.
 4. [Unused-code audit](unused-code-audit.md) — what is disposable, stale, dormant, compatibility-only or active.
