@@ -6,8 +6,8 @@
   Two modes, so the pipeline verifies before it builds:
 
     check    verifies the real Git tag and clean worktree, the version, the
-             changelog section and the clean-VM acceptance record. Nothing is
-             built.
+             changelog section and the successful Windows CI acceptance for
+             the same version. Nothing is built.
     package  repeats the checks, builds errkb.exe through build.ps1, and
              assembles the release directory:
                errkb.exe
@@ -57,10 +57,11 @@
   Build stamp embedded in the binary. Defaults to the commit timestamp
   (git log -1 --format=%cI), which is what makes rebuilds byte-identical.
 
-.PARAMETER VmAcceptanceVersion
-  Version accepted on a clean virtual machine. Defaults to the environment
-  variable VM_ACCEPTANCE_VERSION. The pipeline sets that variable from the
-  repository variable of the same name; publishing without it is refused.
+.PARAMETER WindowsAcceptanceVersion
+  Version accepted by the mandatory WF-011A/WF-011B Windows runner. Defaults
+  to WINDOWS_ACCEPTANCE_VERSION. The tag workflow sets it only after the
+  installer lifecycle and recovery job succeeds; publishing without it is
+  refused.
 
 .PARAMETER IncludeInstaller
   Also compile packaging\windows\installer.iss with Inno Setup and ship the
@@ -80,7 +81,7 @@ param(
     [string]$Tag = "",
     [string]$Commit = "",
     [string]$BuildTime = "",
-    [string]$VmAcceptanceVersion = $env:VM_ACCEPTANCE_VERSION,
+    [string]$WindowsAcceptanceVersion = $env:WINDOWS_ACCEPTANCE_VERSION,
     [switch]$IncludeInstaller,
     [string]$IsccPath = "",
     [string]$OutputDir = ""
@@ -179,16 +180,16 @@ function Assert-ChangelogSection([string]$ResolvedVersion) {
     }
 }
 
-function Assert-VmAcceptance([string]$ResolvedVersion) {
-    if ([string]::IsNullOrWhiteSpace($VmAcceptanceVersion)) {
-        Fail "no clean-VM acceptance record: run packaging\windows\vm-acceptance.ps1 on a clean Windows machine for $ResolvedVersion, then set VM_ACCEPTANCE_VERSION (or pass -VmAcceptanceVersion)"
+function Assert-WindowsAcceptance([string]$ResolvedVersion) {
+    if ([string]::IsNullOrWhiteSpace($WindowsAcceptanceVersion)) {
+        Fail "no Windows CI acceptance result: WF-011A and WF-011B must pass for $ResolvedVersion, then set WINDOWS_ACCEPTANCE_VERSION (or pass -WindowsAcceptanceVersion)"
     }
-    $accepted = $VmAcceptanceVersion.Trim()
+    $accepted = $WindowsAcceptanceVersion.Trim()
     if ($accepted.StartsWith("v")) {
         $accepted = $accepted.Substring(1)
     }
     if ($accepted -ne $ResolvedVersion) {
-        Fail "the clean-VM acceptance covers version '$accepted' but this release is '$ResolvedVersion'; publish only after the acceptance run for this version"
+        Fail "the Windows CI acceptance covers version '$accepted' but this release is '$ResolvedVersion'; publish only after WF-011A and WF-011B pass for this version"
     }
 }
 
@@ -294,7 +295,7 @@ function Get-ReleaseToolchain {
 function Invoke-ReleaseChecks([string]$ResolvedVersion, [string]$ResolvedTag) {
     $tagCommit = Assert-ReleaseGitState $ResolvedTag
     Assert-ChangelogSection $ResolvedVersion
-    Assert-VmAcceptance $ResolvedVersion
+    Assert-WindowsAcceptance $ResolvedVersion
     if ($IncludeInstaller) {
         Assert-InstallerVersion $ResolvedVersion
     }
@@ -302,7 +303,7 @@ function Invoke-ReleaseChecks([string]$ResolvedVersion, [string]$ResolvedTag) {
     Write-Output "release check: tag $ResolvedTag -> $tagCommit"
     Write-Output "release check: Git worktree clean"
     Write-Output "release check: changelog section present"
-    Write-Output "release check: clean-VM acceptance recorded for $ResolvedVersion"
+    Write-Output "release check: Windows CI acceptance passed for $ResolvedVersion"
 }
 
 function Write-ReleaseNotes([string]$ResolvedVersion, [string]$TargetPath) {
@@ -557,7 +558,7 @@ function New-Manifest([string]$Bundle, [string]$ResolvedVersion, [string]$Resolv
         references      = [ordered]@{
             changelog      = "CHANGELOG.md"
             upgrade_matrix = "spec/compat.cue (compat.upgrade)"
-            acceptance     = "docs/acceptance-vm.md"
+            acceptance     = "WF-011A/WF-011B in .github/workflows/release.yml; docs/acceptance-vm.md describes the boundary"
             signing        = "SIGNING.md"
         }
         artifacts       = $artifacts

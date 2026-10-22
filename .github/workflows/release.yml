@@ -1,8 +1,8 @@
 name: Release
 
 # A tag is the only release trigger. The pipeline refuses to publish when the
-# version, the changelog section or the clean-VM acceptance record disagrees
-# with the tag, and it rebuilds the same artifacts for the same tag.
+# version, changelog section or mandatory Windows acceptance disagrees with the
+# tag, and it rebuilds the same artifacts for the same tag.
 on:
   push:
     tags:
@@ -16,10 +16,66 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  windows-acceptance:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    outputs:
+      accepted-version: ${{ steps.accepted.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Windows packaging and runtime prerequisites
+        shell: pwsh
+        run: |
+          go install github.com/tc-hib/go-winres@v0.3.3
+          choco install innosetup postgresql16 --yes --no-progress --params "/Password:errkb-ci-only"
+          $pgBin = "C:\Program Files\PostgreSQL\16\bin"
+          if (-not (Test-Path (Join-Path $pgBin "pg_ctl.exe"))) {
+            throw "PostgreSQL 16 was not installed at $pgBin"
+          }
+          "ERRKB_PG_BIN=$pgBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build the tagged Windows installer
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          ./packaging/windows/build.ps1 -Version $version
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe is missing at $iscc" }
+          & $iscc ./packaging/windows/installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+      - name: Run WF-011A and WF-011B
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          ./packaging/windows/ci-acceptance.ps1 -ExpectedVersion $version -EvidenceDir artifacts/windows-acceptance
+
+      - name: Record the accepted version
+        id: accepted
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME.TrimStart("v")
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload Windows acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wf-011-windows-acceptance-${{ github.run_id }}
+          path: artifacts/windows-acceptance/**
+          if-no-files-found: error
+
   release:
+    needs: windows-acceptance
     runs-on: windows-latest
     env:
-      VM_ACCEPTANCE_VERSION: ${{ vars.VM_ACCEPTANCE_VERSION }}
+      WINDOWS_ACCEPTANCE_VERSION: ${{ needs.windows-acceptance.outputs.accepted-version }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4

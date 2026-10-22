@@ -26,6 +26,7 @@ Set-StrictMode -Version Latest
 
 $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $Harness = Join-Path $PSScriptRoot 'vm-acceptance.ps1'
+$RecoveryHarness = Join-Path $PSScriptRoot 'recovery-acceptance.ps1'
 $Shell = (Get-Command pwsh -ErrorAction Stop).Source
 if ([string]::IsNullOrWhiteSpace($Installer)) {
     $Installer = Join-Path $RepoRoot ("dist\errkb-{0}-setup.exe" -f $ExpectedVersion)
@@ -36,6 +37,7 @@ if ([string]::IsNullOrWhiteSpace($EvidenceDir)) {
 New-Item -ItemType Directory -Path $EvidenceDir -Force | Out-Null
 
 if (-not (Test-Path $Harness)) { throw "acceptance harness is missing: $Harness" }
+if (-not (Test-Path $RecoveryHarness)) { throw "recovery harness is missing: $RecoveryHarness" }
 if (-not (Test-Path $Installer)) { throw "installer is missing: $Installer" }
 $Installer = (Resolve-Path $Installer).Path
 $sha256 = (Get-FileHash -LiteralPath $Installer -Algorithm SHA256).Hash
@@ -77,17 +79,39 @@ function Invoke-AcceptanceStage {
     }
 }
 
+function Invoke-RecoveryStage {
+    $name = '06-recovery'
+    $stageDir = Join-Path $EvidenceDir $name
+    New-Item -ItemType Directory -Path $stageDir -Force | Out-Null
+    Write-Host ("`n######## {0} ########" -f $name) -ForegroundColor Cyan
+    & $Shell -NoProfile -File $RecoveryHarness -Port $Port -EvidenceDir $stageDir
+    $exitCode = $LASTEXITCODE
+    $resultPath = Join-Path $stageDir 'results.json'
+    $results = if (Test-Path $resultPath) { @(Get-Content $resultPath -Raw | ConvertFrom-Json) } else { @() }
+    $stages.Add([pscustomobject]@{
+            stage     = $name
+            phase     = 'recovery'
+            exit_code = $exitCode
+            results   = $results
+        })
+    if ($exitCode -ne 0) {
+        $stages | ConvertTo-Json -Depth 8 | Out-File (Join-Path $EvidenceDir 'results.json') -Encoding utf8
+        throw "WF-011B recovery stage failed with exit code $exitCode"
+    }
+}
+
 try {
     Invoke-AcceptanceStage '01-artifacts' 'artifacts' @('-ExpectedSha256', $sha256)
     Invoke-AcceptanceStage '02-preflight' 'preflight' @('-AllowAdmin', '-AllowDirtyHost')
     Invoke-AcceptanceStage '03-install' 'install'
     Invoke-AcceptanceStage '04-first-run' 'firstrun'
     Invoke-AcceptanceStage '05-error-reuse-loop' 'loop'
-    Invoke-AcceptanceStage '06-uninstall-keep' 'uninstall' @('-UninstallData', 'keep')
-    Invoke-AcceptanceStage '07-reinstall-retained' 'install' @('-ExpectedConnectorState', 'existing')
-    Invoke-AcceptanceStage '08-retained-first-run' 'firstrun' @('-ExpectedConnectorState', 'existing')
-    Invoke-AcceptanceStage '09-retained-data' 'retention' @('-ExpectedConnectorState', 'existing')
-    Invoke-AcceptanceStage '10-uninstall-delete' 'uninstall' @('-UninstallData', 'delete')
+    Invoke-RecoveryStage
+    Invoke-AcceptanceStage '07-uninstall-keep' 'uninstall' @('-UninstallData', 'keep')
+    Invoke-AcceptanceStage '08-reinstall-retained' 'install' @('-ExpectedConnectorState', 'existing')
+    Invoke-AcceptanceStage '09-retained-first-run' 'firstrun' @('-ExpectedConnectorState', 'existing')
+    Invoke-AcceptanceStage '10-retained-data' 'retention' @('-ExpectedConnectorState', 'existing')
+    Invoke-AcceptanceStage '11-uninstall-delete' 'uninstall' @('-UninstallData', 'delete')
 } finally {
     $stages | ConvertTo-Json -Depth 8 | Out-File (Join-Path $EvidenceDir 'results.json') -Encoding utf8
 }

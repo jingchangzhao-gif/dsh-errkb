@@ -18,6 +18,7 @@ $sourceScript = Join-Path $PSScriptRoot 'release.ps1'
 $installerScript = Join-Path $PSScriptRoot 'installer.iss'
 $vmAcceptanceScript = Join-Path $PSScriptRoot 'vm-acceptance.ps1'
 $ciAcceptanceScript = Join-Path $PSScriptRoot 'ci-acceptance.ps1'
+$recoveryAcceptanceScript = Join-Path $PSScriptRoot 'recovery-acceptance.ps1'
 $postgresScript = Join-Path $PSScriptRoot 'postgres.ps1'
 $shell = Get-Command pwsh -ErrorAction Stop
 $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
@@ -43,7 +44,7 @@ function Write-TestFile([string]$RelativePath, [string]$Content) {
 
 function Assert-ReleaseCheck([string]$Name, [bool]$ShouldPass, [string]$ExpectedPattern) {
     $output = @(& $shell.Source -NoProfile -File (Join-Path $testRoot 'packaging\windows\release.ps1') `
-            -Mode check -Version $version -Tag $tag -VmAcceptanceVersion $version 2>&1)
+            -Mode check -Version $version -Tag $tag -WindowsAcceptanceVersion $version 2>&1)
     $exitCode = $LASTEXITCODE
     $text = $output -join "`n"
 
@@ -61,13 +62,24 @@ function Assert-ReleaseCheck([string]$Name, [bool]$ShouldPass, [string]$Expected
 
 function Assert-MismatchedBuildCommitRejected {
     $output = @(& $shell.Source -NoProfile -File (Join-Path $testRoot 'packaging\windows\release.ps1') `
-            -Mode package -Version $version -Tag $tag -Commit 'deadbeef' -VmAcceptanceVersion $version 2>&1)
+            -Mode package -Version $version -Tag $tag -Commit 'deadbeef' -WindowsAcceptanceVersion $version 2>&1)
     $exitCode = $LASTEXITCODE
     $text = $output -join "`n"
     if ($exitCode -eq 0 -or $text -notmatch "does not match Git tag") {
         throw "mismatched explicit build commit was not rejected correctly (exit $exitCode):`n$text"
     }
     Write-Output 'PASS mismatched explicit build commit rejected'
+}
+
+function Assert-MissingWindowsAcceptanceRejected {
+    $output = @(& $shell.Source -NoProfile -File (Join-Path $testRoot 'packaging\windows\release.ps1') `
+            -Mode check -Version $version -Tag $tag -WindowsAcceptanceVersion '' 2>&1)
+    $exitCode = $LASTEXITCODE
+    $text = $output -join "`n"
+    if ($exitCode -eq 0 -or $text -notmatch 'no Windows CI acceptance result') {
+        throw "missing Windows acceptance was not rejected correctly (exit $exitCode):`n$text"
+    }
+    Write-Output 'PASS missing Windows CI acceptance rejected'
 }
 
 function Assert-SilentInstallDoesNotLaunchConsole {
@@ -165,17 +177,18 @@ function Assert-RetainedClusterCanBeReused {
 function Assert-CiAcceptanceCoversLifecycle {
     $source = Get-Content -LiteralPath $ciAcceptanceScript -Raw
     $orderedStages = @(
-        '03-install',
-        '04-first-run',
-        '05-error-reuse-loop',
-        '06-uninstall-keep',
-        '07-reinstall-retained',
-        '09-retained-data',
-        '10-uninstall-delete'
+        "Invoke-AcceptanceStage '03-install'",
+        "Invoke-AcceptanceStage '04-first-run'",
+        "Invoke-AcceptanceStage '05-error-reuse-loop'",
+        'Invoke-RecoveryStage',
+        "Invoke-AcceptanceStage '07-uninstall-keep'",
+        "Invoke-AcceptanceStage '08-reinstall-retained'",
+        "Invoke-AcceptanceStage '10-retained-data'",
+        "Invoke-AcceptanceStage '11-uninstall-delete'"
     )
     $offset = -1
     foreach ($stage in $orderedStages) {
-        $next = $source.IndexOf("'$stage'", $offset + 1, [System.StringComparison]::Ordinal)
+        $next = $source.IndexOf($stage, $offset + 1, [System.StringComparison]::Ordinal)
         if ($next -lt 0) {
             throw "WF-011A orchestrator is missing stage $stage"
         }
@@ -193,6 +206,26 @@ function Assert-CiAcceptanceCoversLifecycle {
     Write-Output 'PASS WF-011A covers the unattended Windows lifecycle'
 }
 
+function Assert-RecoveryAcceptanceCoversFailures {
+    $source = Get-Content -LiteralPath $recoveryAcceptanceScript -Raw
+    foreach ($required in @(
+            'autostart configuration',
+            'single instance after replay',
+            'daemon failure isolated',
+            'full failure simulated',
+            'health after recovery',
+            'knowledge after recovery')) {
+        if ($source -notmatch [regex]::Escape($required)) {
+            throw "WF-011B recovery acceptance is missing '$required'"
+        }
+    }
+    if ($source -notmatch 'postgres\.ps1' -or $source -notmatch 'Named Pipe' -or
+        $source -notmatch 'Get-InstalledDaemonProcesses') {
+        throw 'WF-011B must exercise PostgreSQL, the Named Pipe and exact installed-process counting'
+    }
+    Write-Output 'PASS WF-011B covers deterministic startup recovery'
+}
+
 try {
     Assert-SilentInstallDoesNotLaunchConsole
     Assert-AcceptanceWaitsForDirectProcessOnly
@@ -200,6 +233,7 @@ try {
     Assert-AcceptanceAllowsFreshConnectorState
     Assert-RetainedClusterCanBeReused
     Assert-CiAcceptanceCoversLifecycle
+    Assert-RecoveryAcceptanceCoversFailures
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'packaging\windows') -Force | Out-Null
     Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $testRoot 'packaging\windows\release.ps1')
     Write-TestFile 'CHANGELOG.md' "# Changelog`n`n## [$version] - 2099-01-01`n`n- Release gate fixture.`n"
@@ -229,8 +263,9 @@ try {
     Remove-Item -LiteralPath (Join-Path $testRoot 'untracked.txt') -Force
 
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
+    Assert-MissingWindowsAcceptanceRejected
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 11 passed, 0 failed'
+    Write-Output 'release gate tests: 13 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and

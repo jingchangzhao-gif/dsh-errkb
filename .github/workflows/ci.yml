@@ -222,7 +222,7 @@ jobs:
           & $iscc ./packaging/windows/installer.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
 
-      - name: Run WF-011A unattended acceptance
+      - name: Run WF-011A and WF-011B Windows acceptance
         shell: pwsh
         run: ./packaging/windows/ci-acceptance.ps1 -ExpectedVersion 0.1.0 -EvidenceDir artifacts/windows-acceptance
 
