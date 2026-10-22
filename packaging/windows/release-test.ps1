@@ -113,7 +113,7 @@ function Assert-SilentUninstallPersistsRetentionChoice {
         $postgresSource -notmatch 'if \(Test-Path \$marker\)') {
         throw 'postgres.ps1 must clear both transient choice markers before Inno final cleanup'
     }
-    if ($installerSource -notmatch 'Type:\s*dirifempty;\s*Name:\s*"\{app\}"') {
+    if ($installerSource -notmatch 'Type:[ ]*dirifempty;[ ]*Name:[ ]*"\{app\}"') {
         throw 'the uninstaller must register a safe final cleanup for an empty application root'
     }
     Write-Output 'PASS silent uninstall persists its retention choice'
@@ -176,8 +176,8 @@ function Assert-DeleteUninstallWaitsForCloneCleanup {
 
 function Assert-DeleteUninstallOwnsApplicationRootCleanup {
     $installerSource = Get-Content -LiteralPath $installerScript -Raw
-    if ($installerSource -notmatch '\[UninstallDelete\][\s\S]*?Type:\s*dirifempty;\s*Name:\s*"\{app\}"' -or
-        $installerSource -match 'Type:\s*filesandordirs;\s*Name:\s*"\{app\}"') {
+    if ($installerSource -notmatch '\[UninstallDelete\][\s\S]*?Type:[ ]*dirifempty;[ ]*Name:[ ]*"\{app\}"' -or
+        $installerSource -match 'Type:[ ]*filesandordirs;[ ]*Name:[ ]*"\{app\}"') {
         throw 'the uninstaller must remove only an empty application root so retained data is preserved safely'
     }
     Write-Output 'PASS uninstall safely removes an empty application root'
