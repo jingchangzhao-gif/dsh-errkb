@@ -92,6 +92,15 @@ function Assert-SilentInstallDoesNotLaunchConsole {
     Write-Output 'PASS silent install skips the interactive version command'
 }
 
+function Assert-SilentInstallReusesRetainedCluster {
+    $installerSource = Get-Content -LiteralPath $installerScript -Raw
+    if ($installerSource -notmatch '\(not WizardSilent\(\)\) and\s*\(MsgBox\(' -or
+        $installerSource -notmatch 'ClusterDataPresent\(\)') {
+        throw 'silent reinstall must reuse retained cluster data without opening an unsuppressible script dialog'
+    }
+    Write-Output 'PASS silent reinstall reuses retained cluster data'
+}
+
 function Assert-SilentUninstallPersistsRetentionChoice {
     $installerSource = Get-Content -LiteralPath $installerScript -Raw
     $postgresSource = Get-Content -LiteralPath $postgresScript -Raw
@@ -256,6 +265,7 @@ function Assert-RecoveryAcceptanceCoversFailures {
 
 try {
     Assert-SilentInstallDoesNotLaunchConsole
+    Assert-SilentInstallReusesRetainedCluster
     Assert-SilentUninstallPersistsRetentionChoice
     Assert-AcceptanceWaitsForDirectProcessOnly
     Assert-AcceptanceUsesAbsoluteEvidencePaths
@@ -295,7 +305,7 @@ try {
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MissingWindowsAcceptanceRejected
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 15 passed, 0 failed'
+    Write-Output 'release gate tests: 16 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and

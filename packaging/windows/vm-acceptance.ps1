@@ -161,7 +161,7 @@ function Start-And-Wait {
         # Windows. The installer intentionally leaves PostgreSQL running, so
         # -Wait would never return even after Setup itself exits. Wait on the
         # direct process handle instead.
-        Save-Evidence ("$Name.command.txt") (($FilePath, $Arguments) -join "`n") | Out-Null
+        Save-Evidence ("$Name.command.txt") ($FilePath + "`n" + ($Arguments -join "`n")) | Out-Null
         $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
         $process.WaitForExit()
         Save-Evidence ("$Name.exit.txt") ("exit code: {0}" -f $process.ExitCode) | Out-Null

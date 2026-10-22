@@ -183,8 +183,12 @@ begin
   begin
     if (ClusterPage.Values[0] or ClusterPage.Values[2]) and ClusterDataPresent() then
     begin
-      if MsgBox('A cluster already exists in ' + ExpandConstant('{app}\pg\data') + '.' + #13#10 +
-        'Continue and reuse it? Choose No to pick another data directory or remove it first.', mbConfirmation, MB_YESNO) = IDNO then
+      { Script MsgBox calls are not suppressed by /SUPPRESSMSGBOXES. A silent
+        reinstall deterministically reuses the retained cluster; interactive
+        setup keeps the confirmation so the user can go back. }
+      if (not WizardSilent()) and
+        (MsgBox('A cluster already exists in ' + ExpandConstant('{app}\pg\data') + '.' + #13#10 +
+          'Continue and reuse it? Choose No to pick another data directory or remove it first.', mbConfirmation, MB_YESNO) = IDNO) then
       begin
         Result := False;
         Exit;
