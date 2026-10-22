@@ -164,7 +164,7 @@ One binary, several subcommands:
 | `errkb markdown import\|export` | Exchange the legacy `ERRORS.md` format |
 | `errkb daemon` | Local background service: Named Pipe API, health document, redacted log |
 | `errkb ui` | Native tray/search host from the source tree; not the released Web toolbox |
-| `errkb ui --web` | In-progress local Web search shell; not present in current release artifacts |
+| `errkb ui --web` | Local Web toolbox (search, detail/edit, statistics, settings); shipped in the v0.1.0 installer and toolbox ZIP |
 | `errkb doctor` | Eight read-only environment and connector checks, with a fix per finding |
 | `errkb mcp` | MCP stdio server with eight tools |
 | `errkb version` | Version, commit, build time and Go toolchain |
@@ -271,3 +271,4 @@ Read the implementation plan first; work happens card by card (`EKB-nnn`), one p
 ## License
 
 [MIT](LICENSE) © jingchangzhao-gif
+

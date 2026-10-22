@@ -164,7 +164,7 @@ v0.1.0 安装器和便携工具箱都可以通过 `errkb ui --web` 打开内嵌�
 | `errkb markdown import\|export` | 导入或导出旧版 `ERRORS.md` 格式 |
 | `errkb daemon` | 本地后台服务：Named Pipe API、健康文档、脱敏日志 |
 | `errkb ui` | 源码树中的原生托盘/搜索宿主；不是已发布的 Web 工具箱 |
-| `errkb ui --web` | 本地开发中的 Web 搜索壳；当前发布物不包含 |
+| `errkb ui --web` | 本地 Web 工具箱（搜索、详情/编辑、统计、设置）；v0.1.0 安装器与工具箱 ZIP 已包含 |
 | `errkb doctor` | 八项只读环境与连接器检查，每条发现附修复建议 |
 | `errkb mcp` | 带八个工具的 MCP stdio 服务 |
 | `errkb version` | 版本、提交、构建时间与 Go 工具链 |
@@ -271,3 +271,4 @@ cue vet ./spec/...
 ## 许可证
 
 [MIT](LICENSE) © jingchangzhao-gif
+

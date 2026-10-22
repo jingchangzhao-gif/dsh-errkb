@@ -44,10 +44,10 @@ func runMarkdown(args []string, jsonMode bool, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	target, err := resolveDBTarget(*dsn, *credentials)
+	target, err := resolveMarkdownTarget(*dsn, *credentials)
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb markdown: %v\n", err)
-		return exitInternal
+		return exitUsage
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
@@ -136,4 +136,18 @@ func readMarkdownInput(path string) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// resolveMarkdownTarget uses the same defaults as db/doctor: --dsn first, then
+// the installer credentials next to errkb.exe, so the installed product works
+// from any working directory.
+func resolveMarkdownTarget(dsn, credentialsPath string) (dbTarget, error) {
+	resolved, _, err := resolveDaemonPaths(dsn, credentialsPath, "")
+	if err != nil {
+		return dbTarget{}, err
+	}
+	if resolved == "" {
+		return dbTarget{}, fmt.Errorf("no database: pass --dsn or --credentials (the installer writes pg\\credentials.json next to errkb.exe)")
+	}
+	return dbTarget{dsn: resolved, label: redactDSN(resolved)}, nil
 }

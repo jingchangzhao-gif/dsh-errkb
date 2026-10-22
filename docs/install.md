@@ -79,16 +79,19 @@ to put them elsewhere.
 
 ## Current source versus existing artifacts
 
-The current source contains the first-run plumbing:
+The installed layout resolves `pg\credentials.json` and `migrations\` next to
+`errkb.exe`, so the operational commands need no flags from an installation:
 
 ```powershell
-errkb db migrate --credentials "$env:LOCALAPPDATA\errkb\pg\credentials.json" `
-  --migrations "$env:LOCALAPPDATA\errkb\migrations"
+errkb db status
+errkb doctor
+errkb daemon
+errkb ui --web
 ```
 
-The installer source runs that command before registering HKCU startup. A missing or
-failed migration stops the install instead of leaving a nominally successful but unusable
-daemon.
+The installer source runs `errkb db migrate` with those explicit paths before
+registering HKCU startup. A missing or failed migration stops the install instead
+of leaving a nominally successful but unusable daemon.
 
 The older EXE in `dist\release\errkb-0.1.0\` does not contain the `db` command. If that
 binary is paired with a new installer definition, first run fails because the schema
@@ -106,6 +109,14 @@ below remains supported for source development and diagnostics.
 
 ## Start the daemon
 
+Installed layout (credentials and migrations next to `errkb.exe`):
+
+```powershell
+errkb daemon
+```
+
+Development tree (explicit connection):
+
 ```powershell
 errkb db migrate --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
 errkb daemon --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable"
@@ -119,7 +130,7 @@ with `Ctrl+C`; shutdown is graceful and waits for in-flight requests.
 Check the installation with:
 
 ```powershell
-errkb doctor --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
+errkb doctor
 ```
 
 The doctor reports eight checks — version and database connectivity, migration ledger,
@@ -175,6 +186,11 @@ The uninstaller asks whether to **keep data** or **delete data**:
   checks that no service, port or directory is left behind. The acceptance harness checks
   the residue: service, port, process and files.
 
+A silent uninstall cannot answer the dialog: `unins000.exe /VERYSILENT` keeps the data and
+`unins000.exe /VERYSILENT /DELETE_DATA=1` deletes it. The first uninstaller phase records
+the choice as a marker file that the second phase and `postgres.ps1` read, so the two
+phases cannot disagree.
+
 `packaging/windows/postgres.ps1 uninstall -DeleteData` refuses an implausibly short data
 path (a guard against deleting the wrong directory).
 
@@ -182,10 +198,9 @@ path (a guard against deleting the wrong directory).
 
 | Symptom | Likely cause and fix |
 | --- | --- |
-| `schema migration check failed` | The ledger is missing or behind. Use a current source build and run `errkb db migrate`; the older release-folder EXE has no `db` command. |
+| `schema migration check failed` | The ledger is missing or behind. Current installs resolve `pg\credentials.json` automatically, so run `errkb db status` and `errkb db migrate`; very old release binaries had no `db` command. |
 | `the local API is not reachable` | The daemon is not running or the pipe name differs. Start `errkb daemon` and check `errkb doctor`. |
 | `database: connection refused` | PostgreSQL is not running, or the DSN points at the wrong port. Check `errkb doctor`. |
-| `flag provided but not defined: -web` | The EXE does not contain the local Web-shell integration. Existing release binaries cannot open it. |
 | `ui --web` waits and exits 4 | The daemon could not be recovered from installed credentials. Check `pg\credentials.json`, the managed cluster and the daemon log; pass a DSN during development. |
 | Port 5433 already in use | Another cluster is listening. Choose another port in the wizard or stop the other instance. |
 | Daemon log shows an access error under `%TEMP%` | Windows denies log writes in that directory for this process. Leave the default paths under `%LOCALAPPDATA%`. |
