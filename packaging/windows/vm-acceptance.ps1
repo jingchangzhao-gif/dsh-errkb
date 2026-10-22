@@ -16,8 +16,9 @@
     the cause and keep both evidence folders.
 
 .PARAMETER Phase
-    artifacts, preflight, install, firstrun, loop, rebootprepare, afterreboot,
-    uninstall, or all (artifacts -> preflight -> install -> firstrun -> loop).
+    artifacts, preflight, install, firstrun, loop, retention, rebootprepare,
+    afterreboot, uninstall, or all (artifacts -> preflight -> install ->
+    firstrun -> loop).
 
 .PARAMETER Installer
     Path to errkb-<version>-setup.exe. The default resolves to dist\ of the
@@ -42,7 +43,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('all', 'artifacts', 'preflight', 'install', 'firstrun', 'loop', 'rebootprepare', 'afterreboot', 'uninstall')]
+    [ValidateSet('all', 'artifacts', 'preflight', 'install', 'firstrun', 'loop', 'retention', 'rebootprepare', 'afterreboot', 'uninstall')]
     [string]$Phase = 'all',
 
     [string]$Installer = '',
@@ -64,7 +65,11 @@ param(
     # Dry runs on a development host: relaxes "standard user" and "clean host".
     [switch]$AllowAdmin,
 
-    [switch]$AllowDirtyHost
+    [switch]$AllowDirtyHost,
+
+    # CI validates the unattended product path. Human-only UI and real reboot
+    # checks are retained in the report as explicit SKIP rows, never as PASS.
+    [switch]$Automated
 )
 
 $ErrorActionPreference = 'Stop'
@@ -113,7 +118,11 @@ function Add-Result {
 
 function Add-Manual {
     param([string]$Step, [string]$Expected)
-    Add-Result -Step $Step -Expected $Expected -Actual 'needs a human' -Pass $true -Status MANUAL
+    if ($Automated) {
+        Add-Result -Step $Step -Expected $Expected -Actual 'outside automated CI scope' -Pass $true -Status SKIP
+    } else {
+        Add-Result -Step $Step -Expected $Expected -Actual 'needs a human' -Pass $true -Status MANUAL
+    }
 }
 
 function Assert-Step {
@@ -315,7 +324,11 @@ function Step-Preflight {
     Write-Host "`n== preflight ==" -ForegroundColor Cyan
     $os = Get-CimInstance Win32_OperatingSystem
     $isAdmin = Test-IsAdmin
-    Assert-Step 'standard user' 'not an administrator' (((-not $isAdmin) -or $AllowAdmin)) ('admin={0}' -f $isAdmin)
+    if ($isAdmin -and $AllowAdmin) {
+        Add-Result -Step 'standard user' -Expected 'not an administrator' -Actual 'administrator runner allowed for CI' -Pass $true -Status SKIP
+    } else {
+        Assert-Step 'standard user' 'not an administrator' (-not $isAdmin) ('admin={0}' -f $isAdmin)
+    }
     Save-Evidence 'preflight-os.txt' (("OS: {0} {1} ({2})`nRAM: {3:N0} MB`nComputer: {4}" -f $os.Caption, $os.Version, $os.OSArchitecture, ($os.TotalVisibleMemorySize / 1024), $env:COMPUTERNAME)) | Out-Null
     $dirty = @()
     foreach ($tool in @('go', 'node', 'npm', 'pnpm', 'psql')) {
@@ -323,7 +336,11 @@ function Step-Preflight {
         if ($found) { $dirty += ("{0}={1}" -f $tool, $found.Source) }
     }
     if ($env:GOROOT -or $env:GOPATH) { $dirty += 'GOROOT/GOPATH set' }
-    Assert-Step 'clean host' 'no Go/Node/pnpm/psql development tools on PATH' (($dirty.Count -eq 0) -or $AllowDirtyHost) ($(if ($dirty.Count) { $dirty -join '; ' } else { 'clean' }))
+    if ($dirty.Count -gt 0 -and $AllowDirtyHost) {
+        Add-Result -Step 'clean host' -Expected 'no Go/Node/pnpm/psql development tools on PATH' -Actual 'ephemeral CI image contains build tools' -Pass $true -Status SKIP
+    } else {
+        Assert-Step 'clean host' 'no Go/Node/pnpm/psql development tools on PATH' ($dirty.Count -eq 0) ($(if ($dirty.Count) { $dirty -join '; ' } else { 'clean' }))
+    }
     $pgCandidates = @(
         (Join-Path $env:ProgramFiles 'PostgreSQL\16\bin\pg_ctl.exe'),
         (Join-Path ${env:ProgramFiles(x86)} 'PostgreSQL\16\bin\pg_ctl.exe'))
@@ -479,6 +496,27 @@ function Step-Loop {
     }
 }
 
+# ---------------------------------------------------------------- retention
+function Step-Retention {
+    Write-Host "`n== retained data after reinstall ==" -ForegroundColor Cyan
+    if (-not (Test-Path $Exe)) {
+        Assert-Step 'retention application' 'errkb.exe is installed again' $false 'errkb.exe missing'
+        return
+    }
+    $search = Invoke-Logged 'retention-search' { & $Exe search 'command exited with status 9' --json }
+    try { $report = $search.Output | ConvertFrom-Json } catch { $report = $null }
+    $hasCandidate = ($search.ExitCode -eq 0) -and ($null -ne $report) -and ($report.candidates.Count -ge 1)
+    Assert-Step 'retained issue searchable' 'the pre-uninstall issue is still returned after reinstall' $hasCandidate `
+        ('candidates=' + $(if ($report) { $report.candidates.Count } else { 'invalid json' })) $search.Evidence
+
+    $third = Invoke-Logged 'retention-run' {
+        & $Exe run --connector 'vm-acceptance' --session 'retained-data' --project 'vm-acceptance' --json -- cmd.exe /c 'exit 9'
+    }
+    $showsFix = $third.Output.Contains('Check the exit code and the command line before rerunning.')
+    Assert-Step 'retained solution reused' 'the known solution is returned after reinstall' $showsFix `
+        ('contains fix={0}' -f $showsFix) $third.Evidence
+}
+
 # ---------------------------------------------------------------- reboot
 function Step-RebootPrepare {
     Write-Host "`n== reboot prepare ==" -ForegroundColor Cyan
@@ -523,6 +561,9 @@ function Step-Uninstall {
     Assert-Step 'no errkb process left' 'no errkb.exe running' (-not (Get-Process -Name 'errkb' -ErrorAction SilentlyContinue)) 'checked'
     $services = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*errkb*' })
     Assert-Step 'no orphan service' 'no errkb service remains' ($services.Count -eq 0) ('{0} service(s)' -f $services.Count)
+    $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+    $runValue = Get-ItemProperty -Path $runKey -Name 'errkb-autostart' -ErrorAction SilentlyContinue
+    Assert-Step 'autostart removed' 'the per-user Run entry is absent' ($null -eq $runValue) ($(if ($runValue) { 'present' } else { 'absent' }))
     if ($keep) {
         Assert-Step 'application removed' 'the application directory is gone' (-not (Test-Path $Exe)) ('exe present=' + (Test-Path $Exe))
         Assert-Step 'data kept' 'the cluster data directory still exists' (Test-Path (Join-Path $AppDir 'pg\data\PG_VERSION')) 'kept'
@@ -530,6 +571,8 @@ function Step-Uninstall {
         Add-Manual 'data kept migration' 'reinstall once and confirm the retained cluster is detected and reused (the wizard offers to reuse it)'
     } else {
         Assert-Step 'data deleted' 'the data directory is gone' (-not (Test-Path (Join-Path $AppDir 'pg\data'))) 'deleted'
+        Assert-Step 'application directory deleted' 'the complete per-user application directory is gone' (-not (Test-Path $AppDir)) `
+            ($(if (Test-Path $AppDir) { 'present' } else { 'deleted' }))
     }
 }
 
@@ -544,6 +587,7 @@ foreach ($name in $phases) {
         'install' { Step-Install }
         'firstrun' { Step-FirstRun }
         'loop' { Step-Loop }
+        'retention' { Step-Retention }
         'rebootprepare' { Step-RebootPrepare }
         'afterreboot' { Step-AfterReboot }
         'uninstall' { Step-Uninstall }

@@ -17,6 +17,7 @@ $ErrorActionPreference = 'Stop'
 $sourceScript = Join-Path $PSScriptRoot 'release.ps1'
 $installerScript = Join-Path $PSScriptRoot 'installer.iss'
 $vmAcceptanceScript = Join-Path $PSScriptRoot 'vm-acceptance.ps1'
+$ciAcceptanceScript = Join-Path $PSScriptRoot 'ci-acceptance.ps1'
 $postgresScript = Join-Path $PSScriptRoot 'postgres.ps1'
 $shell = Get-Command pwsh -ErrorAction Stop
 $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
@@ -161,12 +162,44 @@ function Assert-RetainedClusterCanBeReused {
     Write-Output 'PASS retained cluster can be reused'
 }
 
+function Assert-CiAcceptanceCoversLifecycle {
+    $source = Get-Content -LiteralPath $ciAcceptanceScript -Raw
+    $orderedStages = @(
+        '03-install',
+        '04-first-run',
+        '05-error-reuse-loop',
+        '06-uninstall-keep',
+        '07-reinstall-retained',
+        '09-retained-data',
+        '10-uninstall-delete'
+    )
+    $offset = -1
+    foreach ($stage in $orderedStages) {
+        $next = $source.IndexOf("'$stage'", $offset + 1, [System.StringComparison]::Ordinal)
+        if ($next -lt 0) {
+            throw "WF-011A orchestrator is missing stage $stage"
+        }
+        if ($next -le $offset) {
+            throw "WF-011A lifecycle stages are not in the required order"
+        }
+        $offset = $next
+    }
+    if ($source -notmatch "'-UninstallData', 'keep'" -or
+        $source -notmatch "'-UninstallData', 'delete'" -or
+        $source -notmatch "ExpectedConnectorState', 'existing'" -or
+        $source -notmatch "results\.json") {
+        throw 'WF-011A must cover both uninstall choices, retained-state validation and combined evidence'
+    }
+    Write-Output 'PASS WF-011A covers the unattended Windows lifecycle'
+}
+
 try {
     Assert-SilentInstallDoesNotLaunchConsole
     Assert-AcceptanceWaitsForDirectProcessOnly
     Assert-AcceptanceUsesInstalledMigrations
     Assert-AcceptanceAllowsFreshConnectorState
     Assert-RetainedClusterCanBeReused
+    Assert-CiAcceptanceCoversLifecycle
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'packaging\windows') -Force | Out-Null
     Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $testRoot 'packaging\windows\release.ps1')
     Write-TestFile 'CHANGELOG.md' "# Changelog`n`n## [$version] - 2099-01-01`n`n- Release gate fixture.`n"
@@ -197,7 +230,7 @@ try {
 
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 10 passed, 0 failed'
+    Write-Output 'release gate tests: 11 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and
