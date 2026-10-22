@@ -16,6 +16,7 @@ $ErrorActionPreference = 'Stop'
 
 $sourceScript = Join-Path $PSScriptRoot 'release.ps1'
 $installerScript = Join-Path $PSScriptRoot 'installer.iss'
+$vmAcceptanceScript = Join-Path $PSScriptRoot 'vm-acceptance.ps1'
 $shell = Get-Command pwsh -ErrorAction Stop
 $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
 $testRoot = Join-Path $tempBase ('errkb-release-test-' + [guid]::NewGuid().ToString('N'))
@@ -77,8 +78,18 @@ function Assert-SilentInstallDoesNotLaunchConsole {
     Write-Output 'PASS silent install skips the interactive version command'
 }
 
+function Assert-AcceptanceWaitsForDirectProcessOnly {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    if ($acceptanceSource -match 'Start-Process\s+-FilePath\s+\$FilePath[^\r\n]*\s-Wait\b' -or
+        $acceptanceSource -notmatch '\$process\.WaitForExit\(\)') {
+        throw 'VM acceptance must wait for the installer process only; -Wait hangs on the persistent PostgreSQL descendant'
+    }
+    Write-Output 'PASS VM acceptance ignores persistent installer descendants'
+}
+
 try {
     Assert-SilentInstallDoesNotLaunchConsole
+    Assert-AcceptanceWaitsForDirectProcessOnly
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'packaging\windows') -Force | Out-Null
     Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $testRoot 'packaging\windows\release.ps1')
     Write-TestFile 'CHANGELOG.md' "# Changelog`n`n## [$version] - 2099-01-01`n`n- Release gate fixture.`n"
@@ -109,7 +120,7 @@ try {
 
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 6 passed, 0 failed'
+    Write-Output 'release gate tests: 7 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and

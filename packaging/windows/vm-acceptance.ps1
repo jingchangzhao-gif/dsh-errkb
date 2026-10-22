@@ -140,7 +140,12 @@ function Invoke-Logged {
 function Start-And-Wait {
     param([string]$FilePath, [string[]]$Arguments, [string]$Name)
     try {
-        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru
+        # Start-Process -Wait waits for the complete descendant process tree on
+        # Windows. The installer intentionally leaves PostgreSQL running, so
+        # -Wait would never return even after Setup itself exits. Wait on the
+        # direct process handle instead.
+        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
+        $process.WaitForExit()
         Save-Evidence ("$Name.exit.txt") ("exit code: {0}" -f $process.ExitCode) | Out-Null
         return [pscustomobject]@{ ExitCode = [int]$process.ExitCode; Evidence = (Join-Path $EvidenceDir ("$Name.exit.txt")) }
     } catch {
