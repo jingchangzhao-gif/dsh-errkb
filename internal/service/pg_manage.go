@@ -925,6 +925,10 @@ func writeCredentials(path string, credentials Credentials) error {
 	if err := os.WriteFile(temp, append(encoded, '\n'), 0o600); err != nil {
 		return fmt.Errorf("credentials: %w", err)
 	}
+	if err := restrictCredentialFile(temp); err != nil {
+		_ = os.Remove(temp)
+		return fmt.Errorf("credentials: restrict file: %w", err)
+	}
 	if err := os.Rename(temp, path); err != nil {
 		_ = os.Remove(temp)
 		return fmt.Errorf("credentials: %w", err)

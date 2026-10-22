@@ -325,9 +325,16 @@ function Step-Install {
     Assert-Step 'credentials file' 'credentials.json present' (Test-Path $Credentials) $Credentials
     if (Test-Path $Credentials) {
         $acl = Get-Acl $Credentials
-        $users = @($acl.Access | ForEach-Object { $_.IdentityReference.Value })
-        $restricted = ($users.Count -le 3) -and ($users -join '; ' -match 'SYSTEM') -and (($users | Where-Object { $_ -match [regex]::Escape($env:USERNAME) }).Count -ge 1)
-        Assert-Step 'credentials restricted' 'only the current user and SYSTEM can read it' $restricted ($users -join '; ')
+        $sids = @($acl.Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique)
+        $allowed = @(
+            [Security.Principal.WindowsIdentity]::GetCurrent().User.Value,
+            'S-1-5-18',
+            'S-1-5-32-544'
+        ) | Sort-Object -Unique
+        $unexpected = @($sids | Where-Object { $_ -notin $allowed })
+        $missing = @($allowed | Where-Object { $_ -notin $sids })
+        $restricted = $unexpected.Count -eq 0 -and $missing.Count -eq 0 -and $acl.AreAccessRulesProtected
+        Assert-Step 'credentials restricted' 'only the current user, SYSTEM and Administrators with inheritance disabled' $restricted (($acl.Access | ForEach-Object { $_.IdentityReference.Value }) -join '; ')
     }
     Add-Manual 'first-run wizard' 'run the interactive installer once: pick "Create a dedicated cluster", confirm the database page and the default 5433 port; the wizard must reach the finished page without an error box'
 }
