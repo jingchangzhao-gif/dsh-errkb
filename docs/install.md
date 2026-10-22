@@ -2,10 +2,10 @@
 
 [简体中文](install.zh-CN.md)
 
-This page separates the official v0.1.0 release from disposable local build output.
+This page separates the official v0.1.1 release from disposable local build output.
 
-> **Status note (2026-10-23).** v0.1.0 is the supported public release. Download it only
-> from the [GitHub Release page](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0) and verify it with the attached `SHA256SUMS` file.
+> **Status note (2026-10-23).** v0.1.1 is the supported public release. Download it only
+> from the [GitHub Release page](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1) and verify it with the attached `SHA256SUMS` file.
 > WF-011A/WF-011B exercise its lifecycle and deterministic recovery in Windows CI. See
 > [`project-status.md`](project-status.md) and [`acceptance-vm.md`](acceptance-vm.md).
 
@@ -104,7 +104,7 @@ errkb daemon: schema migration check failed: applied version "", expected "0008"
 (run `errkb db migrate` first)
 ```
 
-For end-user installation, use the coherent tagged v0.1.0 bundle. The explicit DSN flow
+For end-user installation, use the coherent tagged v0.1.1 bundle. The explicit DSN flow
 below remains supported for source development and diagnostics.
 
 ## Start the daemon

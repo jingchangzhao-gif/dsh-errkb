@@ -4,7 +4,7 @@
 
 > **Recycles errors: the same failure is diagnosed once, recorded, and handed back as a known fix the next time it appears — locally, without calling a model.**
 
-**Project status (2026-10-23): v0.1.0 released.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Windows Web toolbox are available in the first verified Windows release. WF-011A/WF-011B enforce the installed lifecycle and deterministic recovery in CI. Download the installer or portable toolbox from the [v0.1.0 release](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0).
+**Project status (2026-10-23): v0.1.1 released.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Windows Web toolbox are available in the first verified Windows release. WF-011A/WF-011B enforce the installed lifecycle and deterministic recovery in CI. Download the installer or portable toolbox from the [v0.1.1 release](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1).
 
 The **Error Knowledge Base** (`error-knowledge-base`) is a local platform with several interfaces: a command-line client, a background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, host connectors and an embedded Windows Web toolbox. Every interface uses the same core and the same knowledge base; classification, redaction, normalisation, fingerprinting, storage, retrieval and fix trust are not reimplemented per host. The command remains `errkb`, and the DSH adapter package retains the name `dsh-errkb`.
 
@@ -56,8 +56,8 @@ The project uses three different words deliberately:
 | DSH, Codex CLI and Claude Code connectors | Measured with pinned versions | See the connector matrix; unsupported host behavior is not implied |
 | Windows installer and recovery | Implemented; WF-011A/WF-011B are mandatory CI | The real installer, migration, knowledge loop, HKCU recovery and both uninstall choices are exercised on an ephemeral Windows runner |
 | Embedded Web toolbox | Implemented and automated-test covered | Search, detail/edit, statistics/audit and settings routes are wired through `ui --web` |
-| Release provenance | Implemented and release-verified | Missing/mismatched tags and dirty source are rejected; accepted tag `v0.1.0` points to commit `1438473` |
-| Release bundle | Released as v0.1.0 | The GitHub Release contains the verified installer, portable toolbox, standalone EXE, manifest, SBOM and checksums |
+| Release provenance | Implemented and release-verified | Missing/mismatched tags and dirty source are rejected; accepted tag `v0.1.1` points to commit `1438473` |
+| Release bundle | Released as v0.1.1 | The GitHub Release contains the verified installer, portable toolbox, standalone EXE, manifest, SBOM and checksums |
 
 ## Feature overview
 
@@ -142,7 +142,7 @@ Generic log and manual hosts use the template in [`connectors/templates/cli-log/
 
 5. **Record the fix** through the MCP server (`err_record_solution`) or a connector, then run the same command again; the wrapper prints the known fix, its source and its trust.
 
-The embedded toolbox is available through `errkb ui --web` in the v0.1.0 installer and portable toolbox. It resolves installed credentials and migrations when it must recover a missing daemon.
+The embedded toolbox is available through `errkb ui --web` in the v0.1.1 installer and portable toolbox. It resolves installed credentials and migrations when it must recover a missing daemon.
 
 The full loop, including the recorded output, is in [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md).
 
@@ -164,7 +164,7 @@ One binary, several subcommands:
 | `errkb markdown import\|export` | Exchange the legacy `ERRORS.md` format |
 | `errkb daemon` | Local background service: Named Pipe API, health document, redacted log |
 | `errkb ui` | Native tray/search host from the source tree; not the released Web toolbox |
-| `errkb ui --web` | Local Web toolbox (search, detail/edit, statistics, settings); shipped in the v0.1.0 installer and toolbox ZIP |
+| `errkb ui --web` | Local Web toolbox (search, detail/edit, statistics, settings); shipped in the v0.1.1 installer and toolbox ZIP |
 | `errkb doctor` | Eight read-only environment and connector checks, with a fix per finding |
 | `errkb mcp` | MCP stdio server with eight tools |
 | `errkb version` | Version, commit, build time and Go toolchain |
@@ -209,7 +209,7 @@ Defaults: Named Pipe on, HTTP off, capture on, notices on, search limit 3, captu
 
 ## Installing and uninstalling
 
-The released installer installs per user into `%LOCALAPPDATA%\errkb`, can create a dedicated PostgreSQL cluster on port 5433, applies migrations, registers per-user logon recovery, installs `start-errkb.cmd` and creates a Start-menu toolbox shortcut. Uninstalling can keep or delete the data. WF-011A/WF-011B exercise these paths in Windows CI. Use only the assets attached to the v0.1.0 GitHub Release; ignored local `dist/` files remain disposable build output.
+The released installer installs per user into `%LOCALAPPDATA%\errkb`, can create a dedicated PostgreSQL cluster on port 5433, applies migrations, registers per-user logon recovery, installs `start-errkb.cmd` and creates a Start-menu toolbox shortcut. Uninstalling can keep or delete the data. WF-011A/WF-011B exercise these paths in Windows CI. Use only the assets attached to the v0.1.1 GitHub Release; ignored local `dist/` files remain disposable build output.
 
 Full steps, data locations and silent-install behavior are in [`docs/install.md`](docs/install.md). Required Windows CI acceptance and optional clean-machine review are in [`docs/acceptance-vm.md`](docs/acceptance-vm.md). The release is not code-signed; verify artifacts against `SHA256SUMS` in the release bundle.
 

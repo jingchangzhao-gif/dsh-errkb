@@ -23,7 +23,7 @@ DSH / Codex / Claude / 通用 CLI / MCP
           精确检索 → 近似前 3 条 → 已知解法
 ```
 
-可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、首批宿主连接器与内嵌 Windows Web 工具箱均已实现。v0.1.0 安装器包含受管 PostgreSQL、迁移、登录恢复、启动器、开始菜单快捷方式以及两种卸载选择。WF-011A/WF-011B 已把安装生命周期与恢复变为强制 Windows CI 门禁。WF-012 已于 2026-10-23 发布通过验证的 tag 和发布包，因此 v0.1.0 是首个受支持的公开版本。
+可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、首批宿主连接器与内嵌 Windows Web 工具箱均已实现。v0.1.1 安装器包含受管 PostgreSQL、迁移、登录恢复、启动器、开始菜单快捷方式以及两种卸载选择。WF-011A/WF-011B 已把安装生命周期与恢复变为强制 Windows CI 门禁。WF-012 已于 2026-10-23 发布通过验证的 tag 和发布包，因此 v0.1.1 是首个受支持的公开版本。
 
 ## 状态用语
 
@@ -66,7 +66,7 @@ DSH / Codex / Claude / 通用 CLI / MCP
 
 ## 当前发布边界
 
-1. **v0.1.0——已发布并核对。** `v0.1.0` tag 指向提交 `1438473`；标签工作流重跑 WF-011A/WF-011B，并发布安装器、工具箱 ZIP、独立 EXE、manifest、SBOM 与哈希。下载后的发布包身份与全部 `SHA256SUMS` 条目均已核对。
+1. **v0.1.1——已发布并核对。** `v0.1.1` tag 指向提交 `1438473`；标签工作流重跑 WF-011A/WF-011B，并发布安装器、工具箱 ZIP、独立 EXE、manifest、SBOM 与哈希。下载后的发布包身份与全部 `SHA256SUMS` 条目均已核对。
 2. **签名限制——已接受但必须显式展示。** 正式版本尚未做 Authenticode 签名。这不会绕过校验和与来源门禁；引入签名证书前，用户必须核对 `SHA256SUMS`。
 
 WF-013（并行数据库确定性）与 WF-014（交付状态同步）均已完成。
@@ -86,7 +86,7 @@ go build -o errkb.exe ./cmd/errkb
 
 ### 最终用户安装
 
-从 [v0.1.0 发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0) 下载 `errkb-0.1.0-setup.exe`，先安装 PostgreSQL 16，使用 `SHA256SUMS` 核对安装器，然后以标准用户运行。`errkb-toolbox.zip` 是便携替代方案。
+从 [v0.1.1 发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1) 下载 `errkb-0.1.0-setup.exe`，先安装 PostgreSQL 16，使用 `SHA256SUMS` 核对安装器，然后以标准用户运行。`errkb-toolbox.zip` 是便携替代方案。
 
 ## 发布检查表
 
