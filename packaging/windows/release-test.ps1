@@ -116,6 +116,15 @@ function Assert-AcceptanceWaitsForDirectProcessOnly {
     Write-Output 'PASS VM acceptance ignores persistent installer descendants'
 }
 
+function Assert-AcceptanceUsesAbsoluteEvidencePaths {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    if ($acceptanceSource -notmatch '\$EvidenceDir\s*=\s*\(Get-Item\s+-LiteralPath\s+\$EvidenceDir\)\.FullName' -or
+        $acceptanceSource -notmatch '\$Name\.command\.txt') {
+        throw 'VM acceptance must resolve evidence paths before passing /LOG to the cloned Inno uninstaller and retain the invoked command'
+    }
+    Write-Output 'PASS VM acceptance uses absolute evidence paths'
+}
+
 function Assert-AcceptanceUsesInstalledMigrations {
     $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
     if ($acceptanceSource -notmatch '\$Migrations\s*=\s*Join-Path\s+\$AppDir\s+''migrations''' -or
@@ -249,6 +258,7 @@ try {
     Assert-SilentInstallDoesNotLaunchConsole
     Assert-SilentUninstallPersistsRetentionChoice
     Assert-AcceptanceWaitsForDirectProcessOnly
+    Assert-AcceptanceUsesAbsoluteEvidencePaths
     Assert-AcceptanceUsesInstalledMigrations
     Assert-AcceptanceAllowsFreshConnectorState
     Assert-RetainedClusterCanBeReused
@@ -285,7 +295,7 @@ try {
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MissingWindowsAcceptanceRejected
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 14 passed, 0 failed'
+    Write-Output 'release gate tests: 15 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and

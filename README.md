@@ -230,6 +230,7 @@ Everything stays on the machine. The core never calls a model and makes no outbo
 | [`docs/toolbox-ui.md`](docs/toolbox-ui.md) / [中文](docs/toolbox-ui.zh-CN.md) | Toolbox UI architecture, implementation status and remaining cards |
 | [`docs/privacy.md`](docs/privacy.md) / [中文](docs/privacy.zh-CN.md) | Data flow, redaction, retention, deletion |
 | [`docs/benchmarks.md`](docs/benchmarks.md) / [中文](docs/benchmarks.zh-CN.md) | Performance gate, dataset, plans, environment |
+| [`docs/test-record.md`](docs/test-record.md) / [中文](docs/test-record.zh-CN.md) | Durable full-suite and Windows acceptance runs |
 | [`docs/acceptance-vm.md`](docs/acceptance-vm.md) / [中文](docs/acceptance-vm.zh-CN.md) | Required Windows CI acceptance, evidence and optional manual review |
 | [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md) / [中文](docs/e2e-cli-loop.zh-CN.md) | The generic CLI loop, end to end, without a model |
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in each release |

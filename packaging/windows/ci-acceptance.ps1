@@ -35,6 +35,7 @@ if ([string]::IsNullOrWhiteSpace($EvidenceDir)) {
     $EvidenceDir = Join-Path $RepoRoot 'artifacts\windows-acceptance'
 }
 New-Item -ItemType Directory -Path $EvidenceDir -Force | Out-Null
+$EvidenceDir = (Get-Item -LiteralPath $EvidenceDir).FullName
 
 if (-not (Test-Path $Harness)) { throw "acceptance harness is missing: $Harness" }
 if (-not (Test-Path $RecoveryHarness)) { throw "recovery harness is missing: $RecoveryHarness" }

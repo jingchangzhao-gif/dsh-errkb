@@ -230,6 +230,7 @@ retention:
 | [`docs/toolbox-ui.zh-CN.md`](docs/toolbox-ui.zh-CN.md) / [English](docs/toolbox-ui.md) | 工具箱 UI 架构、实施状态和剩余任务 |
 | [`docs/privacy.zh-CN.md`](docs/privacy.zh-CN.md) / [English](docs/privacy.md) | 数据流向、脱敏、保留期、删除 |
 | [`docs/benchmarks.zh-CN.md`](docs/benchmarks.zh-CN.md) / [English](docs/benchmarks.md) | 性能门槛、数据集、查询计划、环境 |
+| [`docs/test-record.zh-CN.md`](docs/test-record.zh-CN.md) / [English](docs/test-record.md) | 长期保存的完整测试与 Windows 验收记录 |
 | [`docs/acceptance-vm.zh-CN.md`](docs/acceptance-vm.zh-CN.md) / [English](docs/acceptance-vm.md) | 强制 Windows CI 验收、证据与可选人工检查 |
 | [`docs/e2e-cli-loop.zh-CN.md`](docs/e2e-cli-loop.zh-CN.md) / [English](docs/e2e-cli-loop.md) | 通用 CLI 闭环，全程不经过模型 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 每个版本改了什么 |

@@ -88,6 +88,10 @@ if ([string]::IsNullOrWhiteSpace($EvidenceDir)) {
     $EvidenceDir = Join-Path $env:TEMP ('errkb-vm-acceptance-{0}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
 }
 New-Item -ItemType Directory -Force -Path $EvidenceDir | Out-Null
+# Inno's uninstaller executes the actual removal from a clone under %TEMP%.
+# A relative /LOG path is therefore resolved against a different working
+# directory and aborts the uninstaller before InitializeUninstall can run.
+$EvidenceDir = (Get-Item -LiteralPath $EvidenceDir).FullName
 
 $script:Results = New-Object System.Collections.Generic.List[object]
 
@@ -157,6 +161,7 @@ function Start-And-Wait {
         # Windows. The installer intentionally leaves PostgreSQL running, so
         # -Wait would never return even after Setup itself exits. Wait on the
         # direct process handle instead.
+        Save-Evidence ("$Name.command.txt") (($FilePath, $Arguments) -join "`n") | Out-Null
         $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
         $process.WaitForExit()
         Save-Evidence ("$Name.exit.txt") ("exit code: {0}" -f $process.ExitCode) | Out-Null
