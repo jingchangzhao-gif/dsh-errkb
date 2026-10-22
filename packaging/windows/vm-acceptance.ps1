@@ -410,7 +410,10 @@ function Step-FirstRun {
     Assert-Step 'doctor connectors' $connectorExpected $connectorStateOK `
         ('status={0}, count={1}' -f $(if ($connectorCheck) { $connectorCheck.status } else { 'missing' }), $(if ($connectorCheck) { $connectorCheck.detail.count } else { '?' }))
     $pipeCheck = $byName['pipe']
-    Add-Result -Step 'doctor default: Named Pipe' -Expected 'pipe enabled by default' -Actual ('config: ' + $(if ($pipeCheck) { $pipeCheck.summary } else { 'unknown' })) -Pass $true -Status MANUAL
+    $pipeDefaultOk = ($null -ne $pipeCheck) -and ($pipeCheck.status -eq 'ok') -and
+        ($pipeCheck.summary -match [regex]::Escape('\\.\pipe\'))
+    Assert-Step 'doctor default: Named Pipe' 'pipe enabled by default' $pipeDefaultOk `
+        ('config: ' + $(if ($pipeCheck) { $pipeCheck.summary } else { 'unknown' })) $doctor.Evidence
     $process = $null
     try {
         $process = Start-ErkbDaemon
@@ -553,7 +556,10 @@ function Step-Uninstall {
     $keep = ($UninstallData -eq 'keep')
     $log = Join-Path $EvidenceDir 'uninstall.log'
     $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="' + $log + '"'))
-    if (-not $keep) { $arguments += '/DELETE_DATA=1' }
+    # InitializeUninstall asks whether retained data should be kept. Silent
+    # automation must answer explicitly: the suppressed three-way prompt uses
+    # Cancel as its safe default, which exits before the uninstall log opens.
+    $arguments += $(if ($keep) { '/KEEP_DATA=1' } else { '/DELETE_DATA=1' })
     $run = Start-And-Wait -FilePath $uninstaller -Arguments $arguments -Name 'uninstall'
     Assert-Step 'uninstaller exit code' '0' ($run.ExitCode -eq 0) ("exit {0}" -f $run.ExitCode) $run.Evidence
     Assert-Step 'port released' ("port {0} is free" -f $Port) (-not (Test-PortOpen -TargetPort $Port)) ('open=' + (Test-PortOpen -TargetPort $Port))
