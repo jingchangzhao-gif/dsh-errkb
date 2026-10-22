@@ -4,6 +4,8 @@
 
 状态：**未通过——禁止发布**
 
+> 历史记录：这是提交 `2571903` 上的首次验收。文中 WF-011 干净 VM 结论已经由强制 `windows-acceptance` CI 作业中的 WF-011A/WF-011B 取代；本文保留原样作为当时证据，当前状态以 [`../project-status.zh-CN.md`](../project-status.zh-CN.md) 与 [`current-workflow.zh-CN.md`](current-workflow.zh-CN.md) 为准。
+
 本文记录实施序列完成后的第一轮验收，明确区分已经验证的产品行为、仍未通过的测试门禁、文档门禁和环境门禁。报告不会保存数据库明文凭据。
 
 ## 源码与产物身份

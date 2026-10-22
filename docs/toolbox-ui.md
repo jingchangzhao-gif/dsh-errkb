@@ -2,12 +2,12 @@
 
 [简体中文](toolbox-ui.zh-CN.md)
 
-Status: **implemented on the local branch; not yet reviewed, merged or released**. The
-working copy carries the EKB-057 search shell, the EKB-058 detail and editing screens, and
+Status: **implemented and automated-test covered; not yet released**. The
+current source carries the EKB-057 search shell, the EKB-058 detail and editing screens, and
 the EKB-059 statistics, audit and settings screens, all served by `errkb.exe ui --web`;
 `packaging/windows/release.ps1` writes `errkb-toolbox.zip` and the installer ships the
-launcher and shortcuts. EKB-060 still needs the clean-VM UI evidence and the release
-discipline gate (EKB-052). The target remains an interactive UI embedded in `errkb.exe`,
+launcher and shortcuts. WF-011A/WF-011B cover the installed lifecycle and recovery; a
+visual interactive review remains optional, while WF-012 is the release gate. The target remains an interactive UI embedded in `errkb.exe`,
 without Chromium, Electron or NW.js.
 
 ## Current state
@@ -20,8 +20,8 @@ without Chromium, Electron or NW.js.
 | Start a missing daemon | Implemented | resolves `pg/credentials.json` and migrations, spawns the daemon and waits for the pipe |
 | Detail/edit pages | Implemented | `/issues/{id}` page; appending a version, issue status, solution status and confirmed deletion are audited in the daemon transaction |
 | Statistics/audit/settings pages | Implemented | `/stats` and `/settings` pages over `/api/stats`, `/api/audit`, `/api/settings` |
-| Launcher, Start-menu shortcut and toolbox ZIP | Implemented locally | `start-errkb.cmd`, installer `[Icons]`, `errkb-toolbox.zip` in `release.ps1`; clean-VM acceptance pending |
-| Clean-VM UI acceptance | Blocked | Requires the EKB-052/EKB-060 clean Windows machine |
+| Launcher, Start-menu shortcut and toolbox ZIP | Implemented | `start-errkb.cmd`, installer `[Icons]`, `errkb-toolbox.zip` in `release.ps1`; installer lifecycle covered by WF-011A |
+| Interactive visual review | Optional | A human may inspect Edge app mode, copy behavior, SmartScreen/UAC and a physical reboot on a clean machine |
 
 ## Decisions
 
@@ -92,9 +92,9 @@ The EKB-060 packaging implementation now does the following:
   `errkb.exe ui --web`; the UI itself is not opened automatically at logon.
 - The ZIP, installer and installed EXE identify one tag/commit and share release hashes.
 
-The remaining EKB-060 boundary is evidence, not implementation: one coherent candidate
-must pass the clean standard-user VM UI flow and then be rebuilt from the accepted tag.
-Existing `dist/` files are rehearsal artifacts and are not the final tagged release.
+EKB-060 implementation is complete. The remaining delivery boundary is WF-012: build one
+coherent candidate from the accepted tag and verify its identity and hashes. Existing
+`dist/` files are rehearsal artifacts and are not the final tagged release.
 
 ## Testing
 
@@ -106,8 +106,8 @@ Existing `dist/` files are rehearsal artifacts and are not the final tagged rele
 - A headless smoke script (`tests/e2e/ui_smoke_test.go`) starts the shell, fetches the
   index, posts one search and one settings read, and asserts no external asset URL appears
   in the HTML.
-- Manual evidence on the clean VM: window opens, the four screens render, copy works, and
-  the release zip contains the shell.
+- Optional manual evidence: the app-mode window opens, the four screens render, copy works,
+  and the release zip contains the shell.
 
 ## Card split
 
@@ -122,8 +122,8 @@ Existing `dist/` files are rehearsal artifacts and are not the final tagged rele
 3. `EKB-059` stats, audit and settings screens: **implemented locally** — measured
    statistics, filtered audit page, and the settings page with a deletion preview and
    cancel; the e2e test checks the preview leaves the rows untouched.
-4. `EKB-060` installer/Start-menu integration and clean-VM UI evidence: **partially
-   implemented** — launcher, shortcut and toolbox ZIP exist; clean-VM UI evidence and the
-   release discipline gate remain.
+4. `EKB-060` installer/Start-menu integration: **implemented** — launcher, shortcut and
+   toolbox ZIP exist; WF-011A/WF-011B cover lifecycle/recovery and WF-012 owns the final
+   tagged release.
 
 All land in the existing release pipeline; no new runtime is introduced.

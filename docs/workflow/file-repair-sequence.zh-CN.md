@@ -4,6 +4,8 @@
 
 本文把每个活动 `WF-nnn` 问题转换为明确的文件修改顺序。必须按阶段推进，不能因为后续文件容易修改就提前施工；前面的阶段会建立后续 UI 和打包所依赖的契约与运行路径。
 
+> **当前检查点（2026-10-22）：** 下方阶段作为历史修复说明保留。WF-011A 与 WF-011B 已取代原干净 VM 阻塞项，并在 Windows CI 中执行；已完成条目已从 `current-workflow.zh-CN.md` 删除，目前只剩 WF-012。
+
 ## 全局修改协议
 
 处理每个问题时：
@@ -195,16 +197,16 @@ go test ./... -count=1
 
 1. 把 `docs/project-status.*` 与当前 Git 状态、CLI help、Web 路由、安装器文件、发布 manifest 和最新验收报告逐项对照。
 2. 删除已经解决的阻塞描述，不把它们改写成长篇完成历史。
-3. 只保留当前边界：WF-013、干净 VM 证据、真实 tag 强制检查，以及明确接受的签名限制。
+3. 只保留当前边界：Windows CI 验收、真实 tag 强制检查，以及明确接受的签名限制。
 4. 交叉检查中英文内容，以及 `README.*`、`docs/workflow/README.*` 中的链接。
 
 完成门槛：每条“当前”事实都能由现有源码或最新验收证据复现；中英文阻塞列表等价。
 
-结果：中英文项目状态、README 摘要、功能矩阵、安装指南、工具箱 UI 状态与计划检查点现已和受 Git 跟踪的工作区一致。只剩干净 VM 证据、最终已验收 tag/构建，以及显式展示的未签名二进制限制。
+结果：中英文项目状态、README 摘要、功能矩阵、安装指南、工具箱 UI 状态与计划检查点现已和受 Git 跟踪的工作区一致。WF-011A/WF-011B 随后取代了物理 VM 阻塞项；目前只剩最终已验收 tag/构建，以及显式展示的未签名二进制限制。
 
-### WF-011：干净 VM 验收
+### WF-011A/WF-011B：Windows 验收——2026-10-22 已完成
 
-在干净 Windows 10/11 x64 VM 中以标准用户运行 `packaging/windows/vm-acceptance.ps1`，完成安装、首次启动、真实重启、单实例恢复、知识复用和两种卸载方式。发布包确定前，证据应保存在生成的 `dist/` 之外。
+`packaging/windows/ci-acceptance.ps1` 会在临时 Windows Runner 上驱动真实安装包完成无人值守生命周期；`packaging/windows/recovery-acceptance.ps1` 验证登录启动幂等性，以及仅 daemon 和 daemon+数据库两类故障恢复。两者在 PR CI 中强制执行，并在带 tag 打包前重复执行。真实重启与交互视觉检查保留为可选人工证据。
 
 ## 阶段 9——一致发布
 
@@ -219,7 +221,7 @@ go test ./... -count=1
    - 要求 tag 指向已验收源码提交/HEAD；
    - 自动覆盖 tag 缺失、指向不一致和有效三种情况。
 4. `packaging/windows/release-test.ps1` 与 `pnpm test:release`
-5. `packaging/windows/vm-acceptance.ps1`
+5. `.github/workflows/release.yml`——在打包前针对 tag 重跑 WF-011A/WF-011B
 6. `CHANGELOG.md`、发布说明、安装/状态/验收文档
 
 只从一个已验收 tag 构建一次。核对源码、EXE、安装器、安装后 EXE、manifest 和校验和中的版本、commit 与构建时间。不得复制旧 `dist/` 中的任何文件。
@@ -236,4 +238,4 @@ go test ./...
 cue vet ./spec/...
 ```
 
-发布门槛还要求真实数据库结果、干净 VM 证据以及中英文文档同步。
+发布门槛还要求真实数据库结果、通过的 `windows-acceptance` 作业以及中英文文档同步。

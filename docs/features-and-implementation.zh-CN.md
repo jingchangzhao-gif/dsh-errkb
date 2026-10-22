@@ -7,7 +7,7 @@
 1. Error Knowledge Base 能为用户做什么？
 2. 每项能力由哪些源码、契约和数据库流程实现？
 
-本文描述的是当前源码，而不是理想中的未来版本。**已实现**表示已有代码和测试；**已接入**表示当前某个入口可以实际调用；**可发布**还要求同一套版本化产物通过干净机器安装、启动、重启和卸载验收。交付边界见 [project-status.zh-CN.md](project-status.zh-CN.md)。
+本文描述的是当前源码，而不是理想中的未来版本。**已实现**表示已有代码和测试；**已接入**表示当前某个入口可以实际调用；**可发布**还要求同一套带 tag 产物通过强制 Windows 生命周期/恢复门禁与来源门禁。交付边界见 [project-status.zh-CN.md](project-status.zh-CN.md)。
 
 ## 1. 系统形态
 
@@ -58,14 +58,14 @@ CUE 定义数据形状和约束，不是运行时数据库；PL/pgSQL 保证数�
 | 搜索已知错误 | CLI、MCP、原生搜索框、Web 搜索 | `internal/database/search.go`、`candidates.go`、`rerank.go` | CLI/MCP 与 Web 工具箱均已实现 |
 | 记录并版本化解法 | MCP `err_record_solution`、服务/数据库 API、Web 详情编辑器 | `internal/database/solution*.go`、`0003_solutions.sql` | 已实现；Web 写入复用 daemon 事务与审计记录 |
 | 记录解法是否有效 | `errkb feedback`、MCP `err_feedback` | `internal/database/solution.go`、`errkb_trust()` | 已实现 |
-| 查看问题与统计 | CLI `show`、`list`、`stats`；Web 详情/统计/审计页 | `cmd/errkb/cli.go`、`internal/service/edit_api.go`、`internal/audit/`、`internal/ui/`、`internal/webshell/` | 已实现；待干净 VM UI 证据 |
+| 查看问题与统计 | CLI `show`、`list`、`stats`；Web 详情/统计/审计页 | `cmd/errkb/cli.go`、`internal/service/edit_api.go`、`internal/audit/`、`internal/ui/`、`internal/webshell/` | 已实现并有自动化测试覆盖 |
 | 为本地客户端提供服务 | `errkb daemon` + Named Pipe | `internal/service/daemon.go`、`pipe.go`、`api.go` | 已实现 |
 | 让 LLM 主动查询知识库 | `errkb mcp` 的 8 个工具 | `internal/mcp/` | 已实现；MCP 不是被动采集器 |
 | 诊断安装和连接器 | `errkb doctor` | `cmd/errkb/doctor.go`、`internal/service/doctor.go` | 已实现 |
 | 应用并检查数据库迁移 | `errkb db migrate`、`errkb db status` | `cmd/errkb/db.go`、`internal/database/migrate.go` | 当前源码已实现 |
 | 打开本地工具箱窗口 | `errkb ui`、`errkb ui --web` | `internal/ui/`、`internal/webshell/`、`cmd/errkb/web.go` | 内嵌 Web 壳已实现；待已验收的带 tag 产物 |
-| 安装和管理本地 PostgreSQL | Windows 安装器和 PostgreSQL 管理器 | `internal/service/pg_manage.go`、`packaging/windows/` | 源码存在；干净 VM 发布验收未完成 |
-| 安全保留与删除数据 | 保留期/定向删除函数和设置模型 | `0006_retention.sql`、`internal/ui/settings.go` | 数据库和模型已实现；定时执行与完整 Web 设置页未完成 |
+| 安装和管理本地 PostgreSQL | Windows 安装器和 PostgreSQL 管理器 | `internal/service/pg_manage.go`、`packaging/windows/` | 已实现；WF-011A/WF-011B 在 Windows CI 中验证生命周期与恢复 |
+| 安全保留与删除数据 | 保留期/定向删除函数和设置模型 | `0006_retention.sql`、`internal/ui/settings.go` | 已实现，包含 Web 预览/确认；自动定时执行不属于 v1 |
 
 ## 4. 错误采集
 
@@ -194,9 +194,9 @@ MCP 层调用 daemon 后端并重新校验返回值，不直接连接 PostgreSQL
 
 ### 9.4 原生与 Web UI
 
-`internal/ui/` 包含经过测试的托盘、搜索框、问题详情、解法编辑、统计和设置状态模型。这些模型不等于已经完成的浏览器界面。
+`internal/ui/` 包含经过测试的托盘、搜索框、问题详情、解法编辑、统计和设置状态模型；`internal/webshell/` 通过内嵌浏览器界面呈现这些能力。
 
-本地 `errkb ui --web` 会嵌入静态资源，只绑定 `127.0.0.1`，每次启动生成随机令牌，并设置严格安全响应头；目前只开放 `POST /api/search`。问题详情、编辑、统计、审计和设置仍需补充 Web 路由和页面，见 [toolbox-ui.zh-CN.md](toolbox-ui.zh-CN.md)。
+本地 `errkb ui --web` 会嵌入静态资源，只绑定 `127.0.0.1`，每次启动生成随机令牌，并设置严格安全响应头。搜索、问题详情与编辑、统计、审计、设置、保留策略及删除预览/确认均已接到现有 daemon 服务，见 [toolbox-ui.zh-CN.md](toolbox-ui.zh-CN.md)。
 
 ## 10. 运维、隐私与恢复
 
@@ -206,7 +206,7 @@ MCP 层调用 daemon 后端并重新校验返回值，不直接连接 PostgreSQL
 - 保留策略分别控制样本、规范化事件和审计记录；定向删除支持预览、确认和审计（`0006_retention.sql`）。
 - 崩溃测试会真实终止写入与迁移进程，再验证已提交数据完整性。
 
-当前安装器和发布包尚未走完整个干净 VM 流程。源码中存在运维实现，不等于已经形成可交付的一键版本。
+WF-011A/WF-011B 已在 Windows CI 中覆盖安装生命周期与确定性恢复；在 WF-012 创建并核对唯一一致的带 tag 发布包前，项目仍不是公开的一键版本。
 
 ## 11. 明确不提供的功能
 

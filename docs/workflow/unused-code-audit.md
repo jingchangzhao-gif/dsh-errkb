@@ -6,7 +6,7 @@ Audit date: **2026-10-22**
 
 This file marks material that is unnecessary to the current runtime without pretending that every unreachable source file is garbage. It is an annotation and cleanup guide only; the audit did not delete project files.
 
-> **Execution note (2026-10-22):** cleanup was requested after this audit. The current agent execution policy rejected filesystem deletion commands, so no target was falsely marked removed. `.gitignore` now blocks repeat Claude probe spills, and `packaging/windows/cleanup-local.ps1` provides a repository-bounded preview/apply path for the confirmed targets.
+> **Execution note (2026-10-22):** the two accidental Claude probe files are now absent. `coverage/` and `dist/` remain local regeneratable output and are still shown by `packaging/windows/cleanup-local.ps1` in preview mode. No production source file is currently marked `DELETE-SAFE`.
 
 ## Labels
 
@@ -54,7 +54,7 @@ The two root probe files are the strongest “completely useless” files in the
 | --- | --- | --- | --- |
 | `dist/errkb.exe` and root installer/checksum/resource files | `STALE-ARTIFACT` | Built at a different implementation point from the release subdirectory; the binary does not expose the local Web route | Remove before rebuilding from a tagged commit |
 | `dist/release/errkb-0.1.0/` | `STALE-ARTIFACT` | Old release bundle; its EXE has a different command surface from the root EXE and current source | Archive externally only if historical evidence is needed; otherwise delete locally |
-| Whole `dist/` directory | `REGENERATABLE` | Ignored build output, currently about 53 MB and internally inconsistent | Prefer clearing the entire directory before EKB-060, then build it once from one commit |
+| Whole `dist/` directory | `REGENERATABLE` | Ignored build output, currently about 53 MB and internally inconsistent | Clear the entire directory before WF-012, then build it once from the accepted tag |
 
 Do not preserve selected binaries from these directories and combine them with newly generated installer files. The next accepted release must generate EXE, installer, manifest, SBOM and checksums from the same tagged commit.
 
@@ -66,20 +66,18 @@ Do not preserve selected binaries from these directories and combine them with n
 | `lib/` | `ACTIVE` | Published DSH bundle; `package.json.exports` and `files` point to it | Keep for package/store review; regenerate with `pnpm build` when source changes |
 | `lib/index.js.map` | `REGENERATABLE` | Local sourcemap ignored by `.gitignore` | Optional locally; do not treat `lib/index.js` or `lib/index.d.ts` the same way |
 
-## D. Dormant source code: currently unreachable, but not yet safe to delete
+## D. Previously dormant code — reconciled 2026-10-22
 
-The following production files have no current production constructor/caller from `cmd/errkb`. Together they contain about **6,348 lines**. Their tests prove behavior, but tests do not make a feature reachable to users.
+Most items from the original audit are now production-reachable and must not be removed:
 
-| Area and paths | Approx. lines | Why unreachable today | Decision before deletion |
-| --- | ---: | --- | --- |
-| Detail/settings/stats/notification UI models: `internal/ui/detail.go`, `settings.go`, `stats.go`, `notify.go` | 1,523 | `errkb ui` calls tray/status/omnibox only; `ui --web` calls search only | Keep for EKB-058/059 and wire them to Web routes, or delete together with those planned features |
-| Detail and notification services: `internal/service/edit_api.go`, `notifications.go` | 924 | No production call to `NewDetailService` or `NewNoticeService` | Keep for EKB-058/059; delete only if detail/edit/notifications leave the product scope |
-| Audit/statistics view backend: `internal/audit/log.go`, `stats.go` | 595 | Reached only by the dormant stats model and tests | Keep for EKB-059, then expose through daemon/API/Web UI |
-| Generic log tailer: `internal/capture/tail.go` | 565 | No command, daemon startup path or connector currently calls `NewTailer` | Either integrate a configured log connector or remove the claimed generic-log feature |
-| Legacy Markdown import/export: `internal/database/markdown.go` | 1,190 | No CLI/API command calls import/export; current use is compatibility and seed testing | Mark `TEST-COMPAT`; keep while v0 Markdown compatibility is promised |
-| PostgreSQL manager and backup library: `internal/service/pg_manage.go`, `internal/database/backup.go` | 1,551 | No Go command constructs `PGManager`; installer uses separate PowerShell scripts | Decide in EKB-060 whether Go or PowerShell owns lifecycle logic; remove the losing duplicate only after clean-VM tests cover the winner |
+| Area and paths | Current production path | Label |
+| --- | --- | --- |
+| Detail/settings/stats models and edit service | `internal/webshell` → daemon API/backend → `NewDetailService`, stats, audit and settings | `ACTIVE` |
+| Generic log tailer | `errkb tail --file` → `cmd/errkb/tail.go` → `capture.NewTailer` | `ACTIVE` |
+| Legacy Markdown exchange | `errkb markdown import|export` → `cmd/errkb/markdown.go` | `ACTIVE` + `TEST-COMPAT` |
+| PostgreSQL manager and backup/upgrade helpers | `errkb pg` → `service.NewPGManager`; `postgres.ps1` is now only the installer argument adapter | `ACTIVE` |
 
-These files are the largest source-cleanup opportunity, but deleting them now would silently remove planned EKB-058/059 behavior, compatibility guarantees or rollback logic. They should be treated as an integration backlog, not immediately erased.
+The remaining genuinely dormant pair is `internal/ui/notify.go` plus `internal/service/notifications.go`: both are tested, but no production path constructs `NewNoticeService` or `NewNotification`. Keep them as `DORMANT-CODE` until desktop notification delivery is either connected or explicitly removed from scope. Do not treat the now-wired UI, tail, Markdown or PostgreSQL code as cleanup candidates.
 
 ## E. Historical and test-only material that must not be mistaken for junk
 
@@ -88,11 +86,11 @@ These files are the largest source-cleanup opportunity, but deleting them now wo
 | `db/migrations/testdata/upgrade/` | `TEST-COMPAT` | Real older schema/config/Markdown/capability fixtures used to prove upgrades |
 | `seeds/ERRORS.seed.md`, `seeds/ERRORS.seed.json` | `TEST-COMPAT` | Source and generated seed pair used by TypeScript and Go compatibility tests |
 | `spec/corpus/` | `TEST-COMPAT` | Cross-language behavior and false-merge corpus |
-| `.md workflow/` | `ACTIVE-WORK` | Four unfinished or partially accepted cards remain: EKB-052, EKB-055, EKB-056 and EKB-060 |
+| `.md workflow/` | `DELETE-SAFE` after WF-011A/WF-011B pass | The four cards are superseded by durable evidence in the implementation plan and workflow documents |
 | `connectors/*/probe.md` and `capability.json` | `TEST-COMPAT` | Evidence behind host support claims |
 | `docs/*.md` language pairs | `ACTIVE` | User-requested bilingual project, status and implementation documentation |
 
-On 2026-10-22, 56 completed EKB cards were deleted after their durable evidence was confirmed in `implementation-plan.*`. Delete each of the four remaining cards when its acceptance condition passes; remove the directory after the last card closes.
+On 2026-10-22, 56 completed EKB cards were deleted after their durable evidence was confirmed in `implementation-plan.*`. The final four local cards can be removed after the green WF-011A/WF-011B run; WF-012 is tracked in `current-workflow.*`.
 
 ## F. Active code that should not be removed
 
@@ -103,7 +101,7 @@ On 2026-10-22, 56 completed EKB cards were deleted after their durable evidence 
 - `internal/service/api.go`, `backend.go`, `client.go`, `daemon.go`, `doctor.go`, `pipe.go`, `queue.go`, `search_api.go`.
 - `internal/ui/status.go`, `tray.go`, `omnibox.go`, `omnibox_win.go`.
 - `internal/mcp/` and `internal/webshell/`.
-- `packaging/windows/`: still required to produce and test the intended Windows artifact, although EKB-060 must reconcile it with the current Web UI.
+- `packaging/windows/`: produces, installs and tests the Windows artifact; WF-011A/WF-011B exercise its lifecycle and recovery.
 
 ## Recommended cleanup order
 
@@ -122,10 +120,9 @@ pwsh -File packaging/windows/cleanup-local.ps1 -Apply
 1. Delete the two accidental Claude probe files.
 2. Clear `coverage/` and the four explicit `dist` scratch/helper areas in section A.
 3. Treat the rest of `dist/` as invalid and rebuild it only after a real Git worktree and one target commit exist.
-4. Complete EKB-058 and EKB-059. Remove only those dormant UI/service files that the final Web implementation genuinely replaces.
-5. In EKB-060, choose one PostgreSQL lifecycle implementation. Keeping two implementations in Go and PowerShell without a shared runtime path is maintenance debt.
-6. Add a supported import/export command or formally retire Markdown interoperability; until then keep the compatibility implementation and fixtures.
-7. Add a real log-connector entry point or remove generic log capture from the supported-feature wording.
+4. Keep the wired Web UI, tailer, Markdown and PostgreSQL manager code; their production entry points now exist.
+5. Decide separately whether to connect or remove the still-dormant desktop notification model/service.
+6. Remove the four superseded local EKB cards after WF-011A/WF-011B are green; keep WF-012 in the live workflow files.
 
 ## Deletion gate
 

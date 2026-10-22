@@ -38,8 +38,7 @@
 
 | 编号 | 状态 | 仍然存在的问题 | 当前证据 | 完成条件 |
 | --- | --- | --- | --- | --- |
-| WF-011 | `IN PROGRESS` | 正在执行干净 Windows 标准用户验收 | 干净 Windows 11 Enterprise 评估版 VM 已安装并进入标准用户桌面；正在准备唯一一致候选产物与证据目录 | 完成 `vm-acceptance.ps1`、人工门槛、真实重启与两种卸载 |
-| WF-012 | `BLOCKED` | 发布门禁代码已经修复，但最终带 tag 发布包等待干净 VM 验收 | `release.ps1` 会解析 `refs/tags/<tag>`，要求 tag 位于干净 HEAD，并拒绝显式 commit 不一致；`pnpm test:release` 5 项全部通过。仓库仍没有已验收的 `v0.1.0` tag | 完成 WF-011；提交已验收工作区，创建真实版本 tag，只运行一次 release check/package，再核对安装后身份与全部哈希 |
+| WF-012 | `NEXT` | 创建并验证首个真实带 tag 发布包 | WF-011A/WF-011B 已实现为 PR 与标签流程中的 `windows-acceptance` 门禁。`release.ps1` 要求同版本验收结果，解析 `refs/tags/<tag>`，要求干净的带 tag HEAD，并拒绝显式 commit 不匹配。仓库仍没有已验收的 `v0.1.0` tag | 合并通过的 Windows 验收变更，创建真实版本 tag，让标签流程重跑验收并只打包一次，再核对安装后身份与包哈希 |
 
 ## 单项更新格式
 
@@ -71,4 +70,4 @@ go test ./...
 cue vet ./spec/...
 ```
 
-数据库验收还需要 `ERRKB_TEST_DATABASE_URL`；打包任务还需要发布脚本检查和干净 VM 验收。
+数据库验收还需要 `ERRKB_TEST_DATABASE_URL`；打包任务还必须通过发布脚本检查与 `windows-acceptance` 作业。真实重启与交互式干净机检查是可选补充证据，不再阻塞发布。

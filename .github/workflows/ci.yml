@@ -226,11 +226,11 @@ jobs:
         shell: pwsh
         run: ./packaging/windows/ci-acceptance.ps1 -ExpectedVersion 0.1.0 -EvidenceDir artifacts/windows-acceptance
 
-      - name: Upload WF-011A evidence
+      - name: Upload WF-011A and WF-011B evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: wf-011a-windows-acceptance-${{ github.run_id }}
+          name: wf-011-windows-acceptance-${{ github.run_id }}
           path: artifacts/windows-acceptance/**
           if-no-files-found: error
 

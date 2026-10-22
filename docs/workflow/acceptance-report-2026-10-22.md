@@ -4,6 +4,8 @@
 
 Status: **FAILED — release blocked**
 
+> Historical record: this was the first acceptance pass at commit `2571903`. Its WF-011 clean-VM conclusion has been superseded by WF-011A/WF-011B in the mandatory `windows-acceptance` CI job. The report remains unchanged as evidence of that earlier run; use [`../project-status.md`](../project-status.md) and [`current-workflow.md`](current-workflow.md) for current status.
+
 This report records the first acceptance pass after the implementation sequence was completed. It separates verified product behavior from remaining test, documentation and environment gates. Database credentials are intentionally omitted.
 
 ## Source and artifact identity

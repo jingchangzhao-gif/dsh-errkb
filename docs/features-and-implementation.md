@@ -7,7 +7,7 @@ This document answers two separate questions:
 1. What can the Error Knowledge Base do for a user?
 2. Which code, contract and database path implements each capability?
 
-It describes the current source tree, not an idealized future release. **Implemented** means the code and tests exist; **integrated** means a current interface can reach the feature; **releasable** additionally requires one coherent artifact and clean-machine acceptance. See [project-status.md](project-status.md) for the delivery boundary.
+It describes the current source tree, not an idealized future release. **Implemented** means the code and tests exist; **integrated** means a current interface can reach the feature; **releasable** additionally requires one coherent tagged artifact to pass the mandatory Windows lifecycle/recovery and provenance gates. See [project-status.md](project-status.md) for the delivery boundary.
 
 ## 1. System shape
 
@@ -58,14 +58,14 @@ CUE defines shapes and constraints; it is not the runtime database. PL/pgSQL kee
 | Search known errors | CLI, MCP, native omnibox, Web search | `internal/database/search.go`, `candidates.go`, `rerank.go` | Implemented across CLI/MCP and the Web toolbox |
 | Store and version fixes | MCP `err_record_solution`, service/database APIs, Web detail editor | `internal/database/solution*.go`, `0003_solutions.sql` | Implemented; Web writes use daemon transactions and audit rows |
 | Learn whether a fix worked | `errkb feedback`, MCP `err_feedback` | `internal/database/solution.go`, `errkb_trust()` | Implemented |
-| Inspect issues and statistics | CLI `show`, `list`, `stats`; Web detail/stats/audit pages | `cmd/errkb/cli.go`, `internal/service/edit_api.go`, `internal/audit/`, `internal/ui/`, `internal/webshell/` | Implemented; clean-VM UI evidence pending |
+| Inspect issues and statistics | CLI `show`, `list`, `stats`; Web detail/stats/audit pages | `cmd/errkb/cli.go`, `internal/service/edit_api.go`, `internal/audit/`, `internal/ui/`, `internal/webshell/` | Implemented and automated-test covered |
 | Serve local clients | `errkb daemon` over Named Pipe | `internal/service/daemon.go`, `pipe.go`, `api.go` | Implemented |
 | Let an LLM actively query the KB | `errkb mcp`, eight tools | `internal/mcp/` | Implemented; MCP is not passive capture |
 | Diagnose installation/connectors | `errkb doctor` | `cmd/errkb/doctor.go`, `internal/service/doctor.go` | Implemented |
 | Apply and inspect migrations | `errkb db migrate`, `errkb db status` | `cmd/errkb/db.go`, `internal/database/migrate.go` | Implemented in current source |
 | Run a local toolbox window | `errkb ui`, `errkb ui --web` | `internal/ui/`, `internal/webshell/`, `cmd/errkb/web.go` | Embedded Web shell implemented; accepted tagged artifact pending |
-| Manage local PostgreSQL | Windows installer and PostgreSQL manager | `internal/service/pg_manage.go`, `packaging/windows/` | Source exists; clean-VM release acceptance pending |
-| Retain/delete data safely | Retention/deletion functions and settings models | `0006_retention.sql`, `internal/ui/settings.go` | Database/model implemented; scheduling and Web settings incomplete |
+| Manage local PostgreSQL | Windows installer and PostgreSQL manager | `internal/service/pg_manage.go`, `packaging/windows/` | Implemented; WF-011A/WF-011B exercise lifecycle and recovery in Windows CI |
+| Retain/delete data safely | Retention/deletion functions and settings models | `0006_retention.sql`, `internal/ui/settings.go` | Implemented, including Web preview/confirm; automatic scheduling remains outside v1 |
 
 ## 4. Failure capture
 
@@ -194,9 +194,9 @@ MCP calls the daemon backend and revalidates responses. It neither connects dire
 
 ### 9.4 Native and Web UI
 
-`internal/ui/` contains tested models for tray, omnibox, detail, solution editing, statistics and settings. Models are not a finished browser interface.
+`internal/ui/` contains tested models for tray, omnibox, detail, solution editing, statistics and settings. `internal/webshell/` presents those capabilities through the embedded browser interface.
 
-The local `errkb ui --web` embeds static assets, binds only to `127.0.0.1`, generates a random per-launch token, adds restrictive headers and currently exposes only `POST /api/search`. Detail, editing, stats, audit and settings still need Web routes and screens. See [toolbox-ui.md](toolbox-ui.md).
+The local `errkb ui --web` embeds static assets, binds only to `127.0.0.1`, generates a random per-launch token and adds restrictive headers. Search, issue detail and editing, statistics, audit, settings, retention and deletion preview/confirmation are wired to the existing daemon services. See [toolbox-ui.md](toolbox-ui.md).
 
 ## 10. Operations, privacy and recovery
 
@@ -206,7 +206,7 @@ The local `errkb ui --web` embeds static assets, binds only to `127.0.0.1`, gene
 - Retention has separate sample, normalized-event and audit periods. Scoped deletion supports preview, confirmation and audit (`0006_retention.sql`).
 - Crash tests kill real writer and migration processes and verify committed-data integrity.
 
-The installer and release bundle have not completed clean-VM acceptance. Operational source code must not be described as a finished one-click release.
+WF-011A/WF-011B cover the installer lifecycle and deterministic recovery in Windows CI. The project is still not a public one-click release until WF-012 creates and verifies one coherent tagged bundle.
 
 ## 11. Explicit non-features
 

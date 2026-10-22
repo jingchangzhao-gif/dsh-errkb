@@ -176,6 +176,7 @@ function Assert-RetainedClusterCanBeReused {
 
 function Assert-CiAcceptanceCoversLifecycle {
     $source = Get-Content -LiteralPath $ciAcceptanceScript -Raw
+    $phaseSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
     $orderedStages = @(
         "Invoke-AcceptanceStage '03-install'",
         "Invoke-AcceptanceStage '04-first-run'",
@@ -202,6 +203,9 @@ function Assert-CiAcceptanceCoversLifecycle {
         $source -notmatch "ExpectedConnectorState', 'existing'" -or
         $source -notmatch "results\.json") {
         throw 'WF-011A must cover both uninstall choices, retained-state validation and combined evidence'
+    }
+    if ($phaseSource -notmatch [regex]::Escape("if (`$keep) { '/KEEP_DATA=1' } else { '/DELETE_DATA=1' }")) {
+        throw 'WF-011A silent uninstall must answer both sides of the retention prompt explicitly'
     }
     Write-Output 'PASS WF-011A covers the unattended Windows lifecycle'
 }
