@@ -110,8 +110,11 @@ function Assert-SilentUninstallPersistsRetentionChoice {
         }
     }
     if ($postgresSource -notmatch 'if \(Test-Path \$keepMarker\)' -or
-        $postgresSource -notmatch 'if \(-not \$removeData -and \(Test-Path \$marker\)\)') {
-        throw 'postgres.ps1 must clear keep-data markers while preserving the delete marker for Inno final cleanup'
+        $postgresSource -notmatch 'if \(Test-Path \$marker\)') {
+        throw 'postgres.ps1 must clear both transient choice markers before Inno final cleanup'
+    }
+    if ($installerSource -notmatch 'Type:\s*dirifempty;\s*Name:\s*"\{app\}"') {
+        throw 'the uninstaller must register a safe final cleanup for an empty application root'
     }
     Write-Output 'PASS silent uninstall persists its retention choice'
 }
@@ -173,13 +176,11 @@ function Assert-DeleteUninstallWaitsForCloneCleanup {
 
 function Assert-DeleteUninstallOwnsApplicationRootCleanup {
     $installerSource = Get-Content -LiteralPath $installerScript -Raw
-    if ($installerSource -notmatch '\[UninstallDelete\][\s\S]*?Type:\s*filesandordirs;\s*Name:\s*"\{app\}";\s*Check:\s*DeleteApplicationRoot' -or
-        $installerSource -notmatch 'function DeleteApplicationRoot\(\): Boolean;' -or
-        $installerSource -notmatch 'DeleteDataOnUninstall\s*:=\s*FileExists\(DeleteMarker\)' -or
-        $installerSource -notmatch [regex]::Escape("FileExists(ExpandConstant('{app}\.errkb-delete-data'))")) {
-        throw 'delete-data uninstall must remove the exact application root while keep-data uninstall preserves it'
+    if ($installerSource -notmatch '\[UninstallDelete\][\s\S]*?Type:\s*dirifempty;\s*Name:\s*"\{app\}"' -or
+        $installerSource -match 'Type:\s*filesandordirs;\s*Name:\s*"\{app\}"') {
+        throw 'the uninstaller must remove only an empty application root so retained data is preserved safely'
     }
-    Write-Output 'PASS delete-data uninstall owns application-root cleanup'
+    Write-Output 'PASS uninstall safely removes an empty application root'
 }
 
 function Assert-AcceptanceAllowsFreshConnectorState {

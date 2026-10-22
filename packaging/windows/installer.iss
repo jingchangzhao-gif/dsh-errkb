@@ -90,9 +90,11 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 [UninstallDelete]
 ; A retained-data reinstall starts with an application directory that already
 ; exists, so Inno does not own every parent directory created during that run.
-; On the explicit delete-data path, remove the exact per-user application root
-; after [UninstallRun] has stopped PostgreSQL and deleted its data.
-Type: filesandordirs; Name: "{app}"; Check: DeleteApplicationRoot
+; Always register a safe, non-recursive final cleanup. The keep-data path leaves
+; pg\data in place, so the directory is not empty and remains available for a
+; later reinstall. The delete-data path removes the cluster in [UninstallRun],
+; allowing Inno to remove the now-empty application root as its final step.
+Type: dirifempty; Name: "{app}"
 
 [Code]
 var
@@ -264,15 +266,6 @@ begin
     SaveStringToFile(DeleteMarker, '1', False)
   else
     SaveStringToFile(KeepMarker, '1', False);
-end;
-
-function DeleteApplicationRoot(): Boolean;
-begin
-  { The actual uninstall runs in a cloned second process, so do not rely only
-    on a Pascal global set in the first phase. The delete marker deliberately
-    remains until this [UninstallDelete] entry removes the complete root. }
-  Result := DeleteDataOnUninstall or
-    FileExists(ExpandConstant('{app}\.errkb-delete-data'));
 end;
 
 function InitializeUninstall(): Boolean;

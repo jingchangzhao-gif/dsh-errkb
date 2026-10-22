@@ -602,8 +602,16 @@ function Step-Uninstall {
         # clone removes unins000.exe and the now-empty application directory.
         # Give that documented second-phase cleanup a short bounded grace period.
         $appDirectoryDeleted = Wait-PathAbsent -Path $AppDir
+        $applicationDirectoryActual = 'deleted'
+        if (-not $appDirectoryDeleted) {
+            $inventoryPath = Join-Path $EvidenceDir 'remaining-application-files.txt'
+            Get-ChildItem -LiteralPath $AppDir -Recurse -Force -ErrorAction SilentlyContinue |
+                ForEach-Object { $_.FullName } |
+                Out-File -FilePath $inventoryPath -Encoding utf8
+            $applicationDirectoryActual = 'present; inventory=' + $inventoryPath
+        }
         Assert-Step 'application directory deleted' 'the complete per-user application directory is gone' $appDirectoryDeleted `
-            ($(if (Test-Path $AppDir) { 'present' } else { 'deleted' }))
+            $applicationDirectoryActual
     }
 }
 

@@ -89,11 +89,11 @@ if ($Action -eq 'uninstall') {
     } else {
         Write-Output 'kept       the cluster data was kept (run uninstall with -DeleteData to remove it)'
     }
-    # Keep the delete marker for Inno's later [UninstallDelete] phase. Its
-    # second-phase process cannot rely on Pascal globals set before cloning;
-    # the marker is removed with the exact application root. Keep-data cleanup
-    # has no later recursive delete, so remove its transient marker here.
+    # Both markers are transient communication between the first and cloned
+    # uninstaller phases. Remove them before Inno's final, non-recursive
+    # dirifempty cleanup: retained data keeps the application directory
+    # non-empty, while the delete path leaves it safe to remove.
     if (Test-Path $keepMarker) { Remove-Item -Force $keepMarker }
-    if (-not $removeData -and (Test-Path $marker)) { Remove-Item -Force $marker }
+    if (Test-Path $marker) { Remove-Item -Force $marker }
 }
 exit 0
