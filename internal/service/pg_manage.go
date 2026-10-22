@@ -782,11 +782,11 @@ func (m *PGManager) Uninstall(ctx context.Context, instance Instance, deleteData
 			return report, err
 		}
 		report.DataRemoved = true
-	}
-	if err := os.Remove(instance.CredentialsFile); err == nil {
-		report.Credentials = true
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return report, fmt.Errorf("uninstall: credentials: %w", err)
+		if err := os.Remove(instance.CredentialsFile); err == nil {
+			report.Credentials = true
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return report, fmt.Errorf("uninstall: credentials: %w", err)
+		}
 	}
 	deadline := m.now().Add(15 * time.Second)
 	for portOpen(instance.Port) {
@@ -924,6 +924,10 @@ func writeCredentials(path string, credentials Credentials) error {
 	temp := path + ".tmp"
 	if err := os.WriteFile(temp, append(encoded, '\n'), 0o600); err != nil {
 		return fmt.Errorf("credentials: %w", err)
+	}
+	if err := restrictCredentialFile(temp); err != nil {
+		_ = os.Remove(temp)
+		return fmt.Errorf("credentials: restrict file: %w", err)
 	}
 	if err := os.Rename(temp, path); err != nil {
 		_ = os.Remove(temp)

@@ -182,7 +182,7 @@ go test ./... -count=1
 
 Also run the performance smoke, crash safety and CLI loop named in `docs/benchmarks.*` and `docs/e2e-cli-loop.*`. Save commands, versions, durations and failures; never save a plaintext password.
 
-### WF-013: make the live-database gate deterministic
+### WF-013: make the live-database gate deterministic — completed 2026-10-22
 
 Edit order:
 
@@ -193,7 +193,9 @@ Edit order:
 
 Completion gate: the original documented parallel command passes at least three consecutive fresh runs; removing `-p 1` does not reintroduce the false failure, and the test still fails when the ErrKB migration lock really survives.
 
-### WF-014: reconcile delivery-status documentation
+Result: the assertion is scoped to the crash-helper backend; its regression both ignores an unrelated held lock and detects the same held lock when attributed to the helper. The focused crash pair passed 3/3 and the original parallel full command passed 3/3 fresh runs with PostgreSQL 16.
+
+### WF-014: reconcile delivery-status documentation — completed 2026-10-22
 
 Edit order:
 
@@ -203,6 +205,8 @@ Edit order:
 4. Cross-check both languages and all links from `README.*` and `docs/workflow/README.*`.
 
 Completion gate: every “current” claim is reproducible from the present tree or the latest acceptance evidence, and the English and Chinese blocker lists are equivalent.
+
+Result: the bilingual status, README summaries, feature matrix, install guide, toolbox UI status and plan checkpoint now agree with the tracked worktree. Only clean-VM evidence, the final accepted tag/build and the visible unsigned-binary limitation remain.
 
 ### WF-011: clean-VM acceptance
 

@@ -38,11 +38,11 @@
 
 | 门禁 | 结果 | 证据 |
 | --- | --- | --- |
-| 带真实 DSN 的 `go test ./... -count=1` | **失败** | `internal/database.TestCrashSafety`：“1 advisory locks survived the crash” |
-| `go test ./internal/database/ -run '^TestCrashSafety$' -v -count=3` | 通过 | 连续 3/3 通过，约 28 秒 |
-| 带真实 DSN 的 `go test -p 1 ./... -count=1` | 通过 | 数据库、服务、Web 壳和 E2E 等全部包通过 |
+| 带真实 DSN 的 `go test ./... -count=1` | 通过 | 连续 3/3 次全新并行运行通过；数据库、服务、Web 壳和 E2E 等全部包通过 |
+| `go test ./internal/database/ -run '^TestCrash' -count=3` | 通过 | 连续 3/3 通过，约 30 秒 |
+| 无关锁回归测试 | 通过 | 无关后端持有的 advisory lock 被忽略；归属于 crash helper 的锁仍会被检出 |
 
-结论：崩溃测试统计整个数据库中的 advisory lock，而 Go 会并行测试不同 package，所以另一个迁移测试持有的锁可能被误报为崩溃 helper 泄漏。串行运行证明产品回滚路径正常，但文档规定的并行发布门禁仍然不稳定。该问题记为 WF-013。
+结论（WF-013 已解决）：崩溃断言已经从统计整个数据库改为只检查被终止的 helper 后端。文档规定的并行发布门禁无需 `-p 1` 即可重复通过。
 
 ## 发布包检查
 
@@ -63,8 +63,8 @@
 
 ## 文档一致性
 
-`docs/project-status.zh-CN.md` 仍把多个已经解决的事项列为当前阻塞项，包括缺少 Git 工作区、启动器、使用安装凭据恢复 daemon，以及 Web 详情/统计/设置界面。在它依据当前源码和本报告完成同步前，不能继续作为交付事实来源。该问题记为 WF-014。
+结论（WF-014 已解决）：`docs/project-status.*` 及其关联的当前状态摘要已经依据受 Git 跟踪的工作区、CLI help、Web 路由、安装器源码、发布 manifest 与本报告同步。中英文均已删除过时的工作区、启动器、安装凭据和 Web 页面阻塞项。
 
 ## 验收决定
 
-当前实现可以继续进行后续验收，但 **0.1.0 暂不接受发布**。先解决 WF-013 与 WF-014，再在干净 VM 完成 WF-011，最后由 WF-012 强制使用真实存在且已经验收的 Git tag，只构建一次最终发布包。
+当前实现可以继续进行后续验收，但 **0.1.0 暂不接受发布**。先在干净 VM 完成 WF-011，再由 WF-012 使用真实的已验收 Git tag 只重建一次最终发布包。

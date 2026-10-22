@@ -38,11 +38,11 @@ PostgreSQL 16 was running locally. The test DSN came from the documented develop
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| `go test ./... -count=1` with live DSN | **Fail** | `internal/database.TestCrashSafety`: “1 advisory locks survived the crash” |
-| `go test ./internal/database/ -run '^TestCrashSafety$' -v -count=3` | Pass | 3/3 passes, about 28 seconds |
-| `go test -p 1 ./... -count=1` with live DSN | Pass | every package including database, service, Web shell and E2E passes |
+| `go test ./... -count=1` with live DSN | Pass | 3/3 consecutive fresh parallel runs; every package including database, service, Web shell and E2E passes |
+| `go test ./internal/database/ -run '^TestCrash' -count=3` | Pass | 3/3 passes, about 30 seconds |
+| Unrelated-lock regression | Pass | an unrelated held advisory lock is ignored; a lock attributed to the crash helper is detected |
 
-Finding: the crash test counts advisory locks across the database while Go tests different packages concurrently. A lock held by another migration test can therefore be reported as a crash-helper leak. Serial execution proves the product rollback path, but the documented parallel release gate remains nondeterministic. This is tracked as WF-013.
+Finding resolved (WF-013): the crash assertion is scoped to the killed helper backend instead of the whole database. The documented parallel release gate now passes repeatedly without `-p 1`.
 
 ## Release-bundle checks
 
@@ -63,8 +63,8 @@ The local `artifacts` phase passed 3/3. The local `preflight` rehearsal passed 5
 
 ## Documentation consistency
 
-`docs/project-status.md` still lists several resolved items as current blockers, including the missing Git worktree, launcher, installed-credential daemon recovery and Web detail/statistics/settings surfaces. The status document cannot serve as the delivery authority until it is reconciled with the current source and this report. This is tracked as WF-014.
+Resolved (WF-014): `docs/project-status.*` and linked current-state summaries were reconciled with the tracked worktree, CLI help, Web routes, installer source, release manifest and this report. The obsolete worktree, launcher, installed-credential and Web-surface blockers were removed in both languages.
 
 ## Decision
 
-The implementation is suitable for continued acceptance testing, but **version 0.1.0 is not accepted for release**. Resolve WF-013 and WF-014, complete WF-011 on a clean VM, then close WF-012 by enforcing a real accepted Git tag and rebuilding the final bundle once.
+The implementation is suitable for continued acceptance testing, but **version 0.1.0 is not accepted for release**. Complete WF-011 on the clean VM, then close WF-012 with a real accepted Git tag and one final rebuild.

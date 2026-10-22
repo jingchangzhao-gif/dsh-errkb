@@ -54,9 +54,9 @@ be rebuilt once from one tagged Git commit.
    migrations `0001`–`0008`, registers the per-user logon command, and copies `errkb.exe`,
    the migrations and lifecycle scripts into the install directory.
 
-The current installer does **not** create a toolbox launcher or Start-menu shortcut. That
-is EKB-060 work. Running `errkb.exe` without a subcommand prints CLI usage; it does not
-open the toolbox.
+The installer includes `start-errkb.cmd` and a Start-menu shortcut that launches
+`errkb.exe ui --web` without leaving a visible terminal. Running `errkb.exe` without a
+subcommand still prints CLI usage; it does not guess which interface the user intended.
 
 ## Silent install
 

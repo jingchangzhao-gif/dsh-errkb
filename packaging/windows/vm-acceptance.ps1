@@ -32,7 +32,7 @@
 
 .PARAMETER UninstallData
     keep (default, what a silent uninstall chooses) or delete. The delete path
-    is a MANUAL step: the wizard's MsgBox cannot be answered non-interactively.
+    passes /DELETE_DATA=1 to the uninstaller so both choices are repeatable.
 
 .NOTES
     Run from an ordinary (non-elevated) PowerShell window on the clean VM.
@@ -53,6 +53,9 @@ param(
 
     [int]$Port = 5433,
 
+    [ValidateSet('fresh', 'existing')]
+    [string]$ExpectedConnectorState = 'fresh',
+
     [ValidateSet('keep', 'delete')]
     [string]$UninstallData = 'keep',
 
@@ -70,6 +73,7 @@ $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $AppDir = Join-Path $env:LOCALAPPDATA 'errkb'
 $Exe = Join-Path $AppDir 'errkb.exe'
 $Credentials = Join-Path $AppDir 'pg\credentials.json'
+$Migrations = Join-Path $AppDir 'migrations'
 $PipeName = 'errkb'
 
 if ([string]::IsNullOrWhiteSpace($Installer)) {
@@ -140,7 +144,12 @@ function Invoke-Logged {
 function Start-And-Wait {
     param([string]$FilePath, [string[]]$Arguments, [string]$Name)
     try {
-        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -Wait -PassThru
+        # Start-Process -Wait waits for the complete descendant process tree on
+        # Windows. The installer intentionally leaves PostgreSQL running, so
+        # -Wait would never return even after Setup itself exits. Wait on the
+        # direct process handle instead.
+        $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru
+        $process.WaitForExit()
         Save-Evidence ("$Name.exit.txt") ("exit code: {0}" -f $process.ExitCode) | Out-Null
         return [pscustomobject]@{ ExitCode = [int]$process.ExitCode; Evidence = (Join-Path $EvidenceDir ("$Name.exit.txt")) }
     } catch {
@@ -191,6 +200,22 @@ function Get-Dsn {
     return ('postgres://{0}:{1}@127.0.0.1:{2}/{3}?sslmode=disable' -f $cred.superuser, $cred.password, $cred.port, $cred.database)
 }
 
+function Stop-InstalledDaemon {
+    $exeFull = [System.IO.Path]::GetFullPath($Exe)
+    foreach ($candidate in @(Get-CimInstance Win32_Process -Filter "Name = 'errkb.exe'" -ErrorAction SilentlyContinue)) {
+        if ($candidate.ExecutablePath -and
+            ([System.IO.Path]::GetFullPath($candidate.ExecutablePath) -eq $exeFull)) {
+            Stop-Process -Id $candidate.ProcessId -Force -ErrorAction SilentlyContinue
+        }
+    }
+    $deadline = (Get-Date).AddSeconds(10)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Test-Pipe $PipeName -TimeoutMs 200)) { return }
+        Start-Sleep -Milliseconds 200
+    }
+    throw 'the installer-started daemon did not release the Named Pipe within 10 seconds'
+}
+
 # One-shot MCP call: initialize, then tools/call, then close stdin. The server
 # answers in order and exits on EOF; each call is independent of the next.
 function Invoke-Mcp {
@@ -228,10 +253,15 @@ function Invoke-Mcp {
 }
 
 function Start-ErkbDaemon {
+    # Setup starts the production daemon immediately. Stop that exact installed
+    # executable before starting the evidence-scoped instance below; otherwise
+    # two different mutex names still contend for the same Named Pipe.
+    Stop-InstalledDaemon
     $dsn = Get-Dsn
     $health = Join-Path $EvidenceDir 'health.json'
     $log = Join-Path $EvidenceDir 'daemon.log'
-    $arguments = @('daemon', '--dsn', ('"' + $dsn + '"'), '--pipe', ('"\\.\pipe\' + $PipeName + '"'),
+    $arguments = @('daemon', '--dsn', ('"' + $dsn + '"'), '--migrations', ('"' + $Migrations + '"'),
+        '--pipe', ('"\\.\pipe\' + $PipeName + '"'),
         '--lock-name', 'Local\errkb-vm-acceptance', '--health-file', ('"' + $health + '"'), '--log-file', ('"' + $log + '"'))
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru -WindowStyle Hidden
     $deadline = (Get-Date).AddSeconds(45)
@@ -320,9 +350,16 @@ function Step-Install {
     Assert-Step 'credentials file' 'credentials.json present' (Test-Path $Credentials) $Credentials
     if (Test-Path $Credentials) {
         $acl = Get-Acl $Credentials
-        $users = @($acl.Access | ForEach-Object { $_.IdentityReference.Value })
-        $restricted = ($users.Count -le 3) -and ($users -join '; ' -match 'SYSTEM') -and (($users | Where-Object { $_ -match [regex]::Escape($env:USERNAME) }).Count -ge 1)
-        Assert-Step 'credentials restricted' 'only the current user and SYSTEM can read it' $restricted ($users -join '; ')
+        $sids = @($acl.Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique)
+        $allowed = @(
+            [Security.Principal.WindowsIdentity]::GetCurrent().User.Value,
+            'S-1-5-18',
+            'S-1-5-32-544'
+        ) | Sort-Object -Unique
+        $unexpected = @($sids | Where-Object { $_ -notin $allowed })
+        $missing = @($allowed | Where-Object { $_ -notin $sids })
+        $restricted = $unexpected.Count -eq 0 -and $missing.Count -eq 0 -and $acl.AreAccessRulesProtected
+        Assert-Step 'credentials restricted' 'only the current user, SYSTEM and Administrators with inheritance disabled' $restricted (($acl.Access | ForEach-Object { $_.IdentityReference.Value }) -join '; ')
     }
     Add-Manual 'first-run wizard' 'run the interactive installer once: pick "Create a dedicated cluster", confirm the database page and the default 5433 port; the wizard must reach the finished page without an error box'
 }
@@ -331,16 +368,30 @@ function Step-Install {
 function Step-FirstRun {
     Write-Host "`n== first run ==" -ForegroundColor Cyan
     try { $dsn = Get-Dsn } catch { Assert-Step 'credential file readable' 'read the DSN from credentials.json' $false $_.Exception.Message; return }
-    $doctor = Invoke-Logged 'doctor-first' { & $Exe doctor --dsn $dsn --json }
+    $doctor = Invoke-Logged 'doctor-first' { & $Exe doctor --dsn $dsn --migrations $Migrations --json }
     try { $report = $doctor.Output | ConvertFrom-Json } catch { $report = $null }
     if ($null -eq $report) { Assert-Step 'doctor output' 'valid JSON' $false 'doctor did not print JSON'; return }
     $byName = @{}
     foreach ($check in $report.checks) { $byName[$check.name] = $check }
-    foreach ($required in @('database', 'migrations', 'extension', 'connectors')) {
+    foreach ($required in @('database', 'migrations', 'extension')) {
         $check = $byName[$required]
         $ok = ($null -ne $check) -and ($check.status -eq 'ok')
         Assert-Step ("doctor " + $required) 'status ok' $ok ('status=' + $(if ($check) { $check.status } else { 'missing' }))
     }
+    $connectorCheck = $byName['connectors']
+    $connectorCount = if ($connectorCheck) { [int]$connectorCheck.detail.count } else { -1 }
+    $connectorStateOK = if ($ExpectedConnectorState -eq 'fresh') {
+        ($null -ne $connectorCheck) -and ($connectorCheck.status -eq 'degraded') -and ($connectorCount -eq 0)
+    } else {
+        ($null -ne $connectorCheck) -and ($connectorCheck.status -eq 'ok') -and ($connectorCount -ge 1)
+    }
+    $connectorExpected = if ($ExpectedConnectorState -eq 'fresh') {
+        'degraded with zero registered connectors on a fresh install'
+    } else {
+        'ok with at least one connector preserved after reinstall'
+    }
+    Assert-Step 'doctor connectors' $connectorExpected $connectorStateOK `
+        ('status={0}, count={1}' -f $(if ($connectorCheck) { $connectorCheck.status } else { 'missing' }), $(if ($connectorCheck) { $connectorCheck.detail.count } else { '?' }))
     $pipeCheck = $byName['pipe']
     Add-Result -Step 'doctor default: Named Pipe' -Expected 'pipe enabled by default' -Actual ('config: ' + $(if ($pipeCheck) { $pipeCheck.summary } else { 'unknown' })) -Pass $true -Status MANUAL
     $process = $null
@@ -355,9 +406,23 @@ function Step-FirstRun {
         Assert-Step 'pipe listening' ("\\.\pipe\{0} accepts a client" -f $PipeName) (Test-Pipe $PipeName) ('pipe reachable=' + (Test-Pipe $PipeName))
         $listeners = @(Get-NetTCPConnection -OwningProcess $process.Id -State Listen -ErrorAction SilentlyContinue)
         Assert-Step 'HTTP disabled' 'the daemon opens no TCP listener' ($listeners.Count -eq 0) ('{0} listener(s)' -f $listeners.Count)
-        $doctor2 = Invoke-Logged 'doctor-daemon' { & $Exe doctor --dsn (Get-Dsn) --json }
+        $doctor2 = Invoke-Logged 'doctor-daemon' { & $Exe doctor --dsn (Get-Dsn) --migrations $Migrations --json }
         try { $report2 = $doctor2.Output | ConvertFrom-Json } catch { $report2 = $null }
-        Assert-Step 'doctor all green' 'status ok with the daemon running' (($null -ne $report2) -and ($report2.status -eq 'ok')) ('status=' + $(if ($report2) { $report2.status } else { 'invalid json' }))
+        $nonOK = if ($report2) { @($report2.checks | Where-Object { $_.status -ne 'ok' }) } else { @() }
+        $expectedRuntimeState = if ($ExpectedConnectorState -eq 'fresh') {
+            ($null -ne $report2) -and ($report2.status -eq 'degraded') -and
+                ($nonOK.Count -eq 1) -and ($nonOK[0].name -eq 'connectors') -and
+                ($nonOK[0].status -eq 'degraded') -and ([string]$nonOK[0].detail.count -eq '0')
+        } else {
+            ($null -ne $report2) -and ($report2.status -eq 'ok') -and ($nonOK.Count -eq 0)
+        }
+        $runtimeExpected = if ($ExpectedConnectorState -eq 'fresh') {
+            'all runtime checks ok; only zero connectors is degraded'
+        } else {
+            'all checks ok with the retained connector'
+        }
+        Assert-Step 'doctor operational' $runtimeExpected $expectedRuntimeState `
+            ('status={0}, non-ok={1}' -f $(if ($report2) { $report2.status } else { 'invalid json' }), $(if ($nonOK.Count) { ($nonOK.name -join ',') } else { 'none' }))
     } finally {
         Stop-ErkbDaemon -Process $process
     }
@@ -449,7 +514,9 @@ function Step-Uninstall {
     if (-not (Test-Path $uninstaller)) { Assert-Step 'uninstaller present' 'unins000.exe exists' $false $uninstaller; return }
     $keep = ($UninstallData -eq 'keep')
     $log = Join-Path $EvidenceDir 'uninstall.log'
-    $run = Start-And-Wait -FilePath $uninstaller -Arguments @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="' + $log + '"')) -Name 'uninstall'
+    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="' + $log + '"'))
+    if (-not $keep) { $arguments += '/DELETE_DATA=1' }
+    $run = Start-And-Wait -FilePath $uninstaller -Arguments $arguments -Name 'uninstall'
     Assert-Step 'uninstaller exit code' '0' ($run.ExitCode -eq 0) ("exit {0}" -f $run.ExitCode) $run.Evidence
     Assert-Step 'port released' ("port {0} is free" -f $Port) (-not (Test-PortOpen -TargetPort $Port)) ('open=' + (Test-PortOpen -TargetPort $Port))
     Assert-Step 'no postgres process left' 'no postgres.exe serving the app data directory' (-not (Get-CimInstance Win32_Process -Filter "Name = 'postgres.exe'" | Where-Object { $_.CommandLine -like ('*' + $AppDir + '*') })) 'checked'
@@ -459,6 +526,7 @@ function Step-Uninstall {
     if ($keep) {
         Assert-Step 'application removed' 'the application directory is gone' (-not (Test-Path $Exe)) ('exe present=' + (Test-Path $Exe))
         Assert-Step 'data kept' 'the cluster data directory still exists' (Test-Path (Join-Path $AppDir 'pg\data\PG_VERSION')) 'kept'
+        Assert-Step 'credentials kept' 'protected credentials remain with retained data for reinstall' (Test-Path $Credentials) ($(if (Test-Path $Credentials) { 'kept' } else { 'missing' }))
         Add-Manual 'data kept migration' 'reinstall once and confirm the retained cluster is detected and reused (the wizard offers to reuse it)'
     } else {
         Assert-Step 'data deleted' 'the data directory is gone' (-not (Test-Path (Join-Path $AppDir 'pg\data'))) 'deleted'
@@ -489,7 +557,9 @@ $skipped = @($script:Results | Where-Object { $_.Status -eq 'SKIP' })
 Write-Host "`n== summary ==" -ForegroundColor Cyan
 $script:Results | Format-Table -AutoSize Step, Status, Expected, Actual | Out-String -Width 220 | Write-Host
 Write-Host ('passed: {0}  failed: {1}  manual: {2}  skipped: {3}' -f (($script:Results.Count - $failures.Count - $manual.Count - $skipped.Count), $failures.Count, $manual.Count, $skipped.Count))
-$script:Results | ConvertTo-Json -Depth 4 | Out-File -FilePath (Join-Path $EvidenceDir 'results.json') -Encoding utf8
+$resultsJSON = $script:Results | ConvertTo-Json -Depth 4
+$resultsJSON | Out-File -FilePath (Join-Path $EvidenceDir ('results-{0}.json' -f $Phase)) -Encoding utf8
+$resultsJSON | Out-File -FilePath (Join-Path $EvidenceDir 'results.json') -Encoding utf8
 Write-Host ('evidence: {0}' -f $EvidenceDir)
 if ($failures.Count -gt 0) {
     Write-Host 'RESULT: FAIL -- fix or record each failure with its evidence before calling the card accepted' -ForegroundColor Red

@@ -55,15 +55,15 @@ CUE 定义数据形状和约束，不是运行时数据库；PL/pgSQL 保证数�
 | 入库前删除敏感信息 | 所有采集与记录路径 | `spec/redact.cue`、`internal/redact/`、`src/redact.ts` | 已实现并通过语料测试 |
 | 对技术失败分类 | 采集流水线 | `internal/core/classify.go`、`src/capture.ts` | 已实现，范围限于可观察技术错误 |
 | 合并重复失败 | 按项目和指纹记录事件 | `internal/core/fingerprint.go`、`db/migrations/0002_record.sql` | 已实现 |
-| 搜索已知错误 | CLI、MCP、原生搜索框、Web 搜索 | `internal/database/search.go`、`candidates.go`、`rerank.go` | 核心已实现；Web 目前只有搜索 |
-| 记录并版本化解法 | MCP `err_record_solution`、服务/数据库 API | `internal/database/solution*.go`、`0003_solutions.sql` | 已实现；Web 编辑器未接入 |
+| 搜索已知错误 | CLI、MCP、原生搜索框、Web 搜索 | `internal/database/search.go`、`candidates.go`、`rerank.go` | CLI/MCP 与 Web 工具箱均已实现 |
+| 记录并版本化解法 | MCP `err_record_solution`、服务/数据库 API、Web 详情编辑器 | `internal/database/solution*.go`、`0003_solutions.sql` | 已实现；Web 写入复用 daemon 事务与审计记录 |
 | 记录解法是否有效 | `errkb feedback`、MCP `err_feedback` | `internal/database/solution.go`、`errkb_trust()` | 已实现 |
-| 查看问题与统计 | CLI `show`、`list`、`stats`；页面模型 | `cmd/errkb/cli.go`、`internal/service/edit_api.go`、`internal/audit/`、`internal/ui/` | CLI 已实现；完整 Web 页面未接入 |
+| 查看问题与统计 | CLI `show`、`list`、`stats`；Web 详情/统计/审计页 | `cmd/errkb/cli.go`、`internal/service/edit_api.go`、`internal/audit/`、`internal/ui/`、`internal/webshell/` | 已实现；待干净 VM UI 证据 |
 | 为本地客户端提供服务 | `errkb daemon` + Named Pipe | `internal/service/daemon.go`、`pipe.go`、`api.go` | 已实现 |
 | 让 LLM 主动查询知识库 | `errkb mcp` 的 8 个工具 | `internal/mcp/` | 已实现；MCP 不是被动采集器 |
 | 诊断安装和连接器 | `errkb doctor` | `cmd/errkb/doctor.go`、`internal/service/doctor.go` | 已实现 |
 | 应用并检查数据库迁移 | `errkb db migrate`、`errkb db status` | `cmd/errkb/db.go`、`internal/database/migrate.go` | 当前源码已实现 |
-| 打开本地工具箱窗口 | `errkb ui`、本地 `errkb ui --web` | `internal/ui/`、`internal/webshell/`、`cmd/errkb/web.go` | 原生模型存在；本地 Web 壳不完整且未进入一致发布物 |
+| 打开本地工具箱窗口 | `errkb ui`、`errkb ui --web` | `internal/ui/`、`internal/webshell/`、`cmd/errkb/web.go` | 内嵌 Web 壳已实现；待已验收的带 tag 产物 |
 | 安装和管理本地 PostgreSQL | Windows 安装器和 PostgreSQL 管理器 | `internal/service/pg_manage.go`、`packaging/windows/` | 源码存在；干净 VM 发布验收未完成 |
 | 安全保留与删除数据 | 保留期/定向删除函数和设置模型 | `0006_retention.sql`、`internal/ui/settings.go` | 数据库和模型已实现；定时执行与完整 Web 设置页未完成 |
 

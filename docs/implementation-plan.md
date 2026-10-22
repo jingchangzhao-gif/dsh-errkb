@@ -4,7 +4,7 @@
 
 This document is the sole execution baseline for upgrading the existing DSH plugin into a multi-host technical-error reuse toolbox. Start at `EKB-001` and proceed in numeric order. A card is complete only after both its automated checks and its manual acceptance pass.
 
-> **Execution checkpoint (2026-10-22).** Cards EKB-002–056 record the historical implementation sequence, but the present local directory is not a Git worktree and its release artifacts are inconsistent. Use [`project-status.md`](project-status.md) for current delivery truth. Before continuing, restore a real clone at the recorded upstream revision and preserve the local-only Web UI changes on an EKB-057 branch. The active delivery sequence is now EKB-057 → 058 → 059 → 060; EKB-052 and EKB-056 remain unaccepted until clean-VM evidence exists.
+> **Execution checkpoint (2026-10-22).** Cards EKB-002–060 record the historical implementation sequence. The present directory is a tracked Git worktree, and the Web toolbox, launcher, installer integration and provenance gate are implemented. Existing `dist/` files remain rehearsal artifacts. Use [`project-status.md`](project-status.md) for current delivery truth; the active sequence is WF-011 clean-VM acceptance followed by WF-012 final tagged packaging.
 
 For a capability-oriented view of the current source and the implementation path behind each user feature, read [`features-and-implementation.md`](features-and-implementation.md). For the live unresolved queue and per-file repair order, start at [`workflow/README.md`](workflow/README.md). This plan remains the product-decision and historical task authority.
 

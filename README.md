@@ -4,9 +4,9 @@
 
 > **Recycles errors: the same failure is diagnosed once, recorded, and handed back as a known fix the next time it appears — locally, without calling a model.**
 
-**Project status (2026-10-22): development snapshot, not an end-user release.** The reusable error core, PostgreSQL schema, CLI, daemon, MCP server and measured DSH/Codex/Claude connectors are implemented. The one-click Windows toolbox is not yet deliverable: the Web UI exists only in the local working copy, current release artifacts do not contain its launch route, and clean-VM acceptance is still pending. See [`docs/project-status.md`](docs/project-status.md) for the exact boundary between implemented, verified and releasable.
+**Project status (2026-10-22): acceptance candidate, not yet a public release.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Windows Web toolbox are implemented. The remaining gates are one coherent clean-VM acceptance run and the final build from a real accepted Git tag. See [`docs/project-status.md`](docs/project-status.md) for the exact boundary between implemented, verified and releasable.
 
-The **Error Knowledge Base** (`error-knowledge-base`) is a local platform with several interfaces: a command-line client, a background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, host connectors and, when the remaining UI cards are complete, a Windows toolbox window. Every interface uses the same core and the same knowledge base; classification, redaction, normalisation, fingerprinting, storage, retrieval and fix trust are not reimplemented per host. The command remains `errkb`, and the DSH adapter package retains the name `dsh-errkb`.
+The **Error Knowledge Base** (`error-knowledge-base`) is a local platform with several interfaces: a command-line client, a background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, host connectors and an embedded Windows Web toolbox. Every interface uses the same core and the same knowledge base; classification, redaction, normalisation, fingerprinting, storage, retrieval and fix trust are not reimplemented per host. The command remains `errkb`, and the DSH adapter package retains the name `dsh-errkb`.
 
 ## Contents
 
@@ -54,10 +54,10 @@ The project uses three different words deliberately:
 | PostgreSQL schema and retrieval | Implemented; integration tests require a real database | Migrations `0001`–`0008`, exact/fuzzy retrieval, solutions and outcomes exist |
 | CLI, daemon and MCP | Implemented | Usable from a development build when a migrated PostgreSQL instance and DSN are available |
 | DSH, Codex CLI and Claude Code connectors | Measured with pinned versions | See the connector matrix; unsupported host behavior is not implied |
-| Windows installer migration and logon start | Implemented in current source; clean-VM acceptance pending | `db migrate` and HKCU Run wiring exist, but do not yet constitute a public release |
-| Web toolbox search shell | Partially implemented in this local working copy | Search-only; not present in the current GitHub `main` launch path or release binaries |
-| Detail, solution editing, statistics and settings pages | Not wired into the Web toolbox | Service/page models exist, but the browser UI and HTTP routes remain EKB-058/059 work |
-| Release bundle | Not releasable | Local `dist` artifacts were produced at different revisions and must not be mixed |
+| Windows installer and recovery | Implemented in current source; clean-VM acceptance pending | Migration, HKCU logon recovery, launcher, shortcut and both uninstall choices exist |
+| Embedded Web toolbox | Implemented and automated-test covered | Search, detail/edit, statistics/audit and settings routes are wired through `ui --web` |
+| Release provenance | Implemented and tested | Missing/mismatched tags and dirty source are rejected; the accepted `v0.1.0` tag does not exist yet |
+| Release bundle | Not releasable | Existing `dist` files are rehearsal artifacts; one tagged build must pass the clean VM |
 
 ## Feature overview
 
@@ -142,7 +142,7 @@ Generic log and manual hosts use the template in [`connectors/templates/cli-log/
 
 5. **Record the fix** through the MCP server (`err_record_solution`) or a connector, then run the same command again; the wrapper prints the known fix, its source and its trust.
 
-The local working copy also contains an in-progress search shell under `errkb ui --web`. It is not an installation instruction: the current release binaries and GitHub `main` do not expose that route, and its daemon fallback still needs installed-credential handling.
+The embedded toolbox is available from a current source build through `errkb ui --web`. It resolves installed credentials and migrations when it must recover a missing daemon. Until WF-011 and WF-012 pass, use it for development and acceptance only, not as a supported public installation.
 
 The full loop, including the recorded output, is in [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md).
 
@@ -209,9 +209,9 @@ Defaults: Named Pipe on, HTTP off, capture on, notices on, search limit 3, captu
 
 ## Installing and uninstalling
 
-The current installer source installs per user into `%LOCALAPPDATA%\errkb`, can create a dedicated PostgreSQL cluster on port 5433, applies migrations and registers a per-user logon command. Uninstalling can keep or delete the data. However, the checked-in/local release artifacts are not one coherent build, no Start-menu toolbox shortcut is created, and the clean-VM run has not passed. Treat the installer as an acceptance candidate rather than a supported release.
+The installer source installs per user into `%LOCALAPPDATA%\errkb`, can create a dedicated PostgreSQL cluster on port 5433, applies migrations, registers per-user logon recovery, installs `start-errkb.cmd` and creates a Start-menu toolbox shortcut. Uninstalling can keep or delete the data. Existing `dist/` files are rehearsal artifacts, and the clean-VM run has not yet passed, so treat the installer as an acceptance candidate rather than a supported release.
 
-Full steps, data locations, silent-install behavior and the current first-run gap are in [`docs/install.md`](docs/install.md). The clean-VM acceptance is blocked; its findings and harness are in [`docs/acceptance-vm.md`](docs/acceptance-vm.md). The release is not code-signed; verify artifacts against `SHA256SUMS` in the release bundle.
+Full steps, data locations and silent-install behavior are in [`docs/install.md`](docs/install.md). The clean-VM procedure and evidence requirements are in [`docs/acceptance-vm.md`](docs/acceptance-vm.md). The release is not code-signed; verify artifacts against `SHA256SUMS` in the release bundle.
 
 ## Privacy
 
@@ -239,13 +239,10 @@ Everything stays on the machine. The core never calls a model and makes no outbo
 
 These are release blockers or deliberate boundaries, not hidden capabilities:
 
-- **There is no coherent one-click toolbox artifact yet.** Local source, `dist`, the installed EXE and `dist/release` represent different revisions.
-- **The Web toolbox is not connected to distribution.** The local search shell is not on the current GitHub launch path; the installer creates no launcher or Start-menu shortcut.
-- **The Web UI cannot self-recover from a stopped daemon.** Its fallback uses `ERRKB_DSN`/`--dsn` and does not yet read the installed credentials file.
-- **Clean-VM acceptance is pending.** Source-level migration and HKCU logon startup exist, but installation, actual reboot, standard-user launch and uninstall must be repeated on a clean Windows VM.
+- **There is no accepted one-click toolbox artifact yet.** Existing `dist` files are rehearsal outputs; the final bundle must be rebuilt once from the accepted tag.
+- **Clean-VM acceptance is pending.** Installation, toolbox launch, knowledge reuse, an actual reboot and both uninstall choices must pass as a standard user on the clean Windows VM.
 - **The release is not code-signed.** SmartScreen may warn; verify `SHA256SUMS`.
 - **PostgreSQL is a prerequisite.** The core needs a local PostgreSQL 16 server; the installer creates one, but the database is not embedded in the application.
-- **The Web toolbox is search-only today.** Issue detail, solution editing, settings, statistics and audit have tested service/model layers but no Web routes or screens yet.
 - **The DSH plugin is pending store review.** Installing it by hand is the supported path for now.
 - **Two measured gaps in the connector matrix:** the DSH `tools/result` live path and the Codex `PostToolUse` hook are unverified.
 

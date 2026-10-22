@@ -4,11 +4,11 @@
 
 Status date: 2026-10-22
 
-This document answers one question: **what can be trusted and used in the project right now?** The implementation plan describes the target and task order; this page records the current delivery reality. If a status claim here conflicts with an older completion note, re-test the behavior and update both documents in the same change.
+This page is the current delivery authority: it states what exists in the present Git worktree, what has been exercised, and what still prevents a public release. Historical task notes describe how the project arrived here; they do not override this page.
 
 ## Executive summary
 
-The Error Knowledge Base is no longer only a DSH plugin. Its core architecture is a local, multi-host error-reuse platform:
+Error Knowledge Base is a local, multi-host error-reuse toolbox rather than a DeepSeek-only plugin:
 
 ```text
 DSH / Codex / Claude / generic CLI / MCP
@@ -23,107 +23,95 @@ DSH / Codex / Claude / generic CLI / MCP
           exact search → fuzzy top 3 → known fix
 ```
 
-The core, database, CLI, daemon, MCP server and first host connectors are substantially implemented. The project is **not yet a finished Windows toolbox product** because the executable, launcher, installer and release bundle do not yet represent one consistent revision.
+The reusable core, PostgreSQL schema, CLI, daemon, MCP server, first host connectors and embedded Windows Web toolbox are implemented. The installer source includes managed PostgreSQL setup, migrations, logon recovery, a launcher, a Start-menu shortcut and both uninstall choices. The project is still an **acceptance candidate**, not a public release: the clean standard-user VM run and the final build from a real accepted Git tag remain open.
 
 ## Status vocabulary
 
 | Word | Meaning |
 | --- | --- |
 | Implemented | Source code and automated tests exist |
-| Verified | The behavior ran successfully in the stated real environment |
-| Accepted | All card-specific and common gates passed, including required manual checks |
-| Releasable | One versioned artifact passed clean-machine install, launch, restart, upgrade and uninstall |
+| Verified | The behavior ran successfully in the stated environment |
+| Accepted | Feature-specific, common and required manual gates passed |
+| Releasable | One tagged artifact passed clean-machine install, launch, restart and uninstall |
 
-An implemented feature is not automatically verified, accepted or releasable.
+Implemented does not automatically mean verified, accepted or releasable.
 
-## What is implemented
+## Implemented now
 
 - Deterministic classification, headline extraction, redaction, normalisation and fingerprinting.
-- PostgreSQL migrations `0001`–`0008`, idempotent event recording, solution versioning, outcomes, trust calculation, exact search and trigram/Jaccard retrieval.
-- Windows daemon with a Named Pipe API, health document, redacted log and single-instance lock.
-- CLI commands for search, show, record, list, feedback, stats, wrapping commands, database migration/status, doctor, MCP and version output.
-- MCP stdio server and the DSH, Codex CLI and Claude Code connector paths documented in the compatibility matrix.
-- Native tray/search models and service models for issue detail, settings, statistics, auditing and notifications.
-- Installer-source support for schema migration and per-user HKCU logon startup.
+- PostgreSQL migrations `0001`–`0008`, idempotent recording, versioned solutions, outcomes, trust, exact search and trigram/Jaccard retrieval.
+- Windows daemon with owner-scoped Named Pipe access, a health document, redacted logging and a single-instance lock.
+- CLI search/show/record/list/feedback/stats/run/tail/Markdown exchange, database and PostgreSQL management, doctor, MCP, UI and version commands.
+- MCP stdio plus documented DSH, Codex CLI, Claude Code and generic CLI connector paths.
+- Embedded loopback Web toolbox for search, issue detail, solution/status writes, statistics, audit, connector/privacy settings and scoped deletion.
+- Credential-aware daemon recovery: `ui --web` resolves `pg/credentials.json` and the installed migrations directory before starting a missing daemon.
+- Per-user Windows installer source with schema migration, logon recovery, launcher, Start-menu shortcut, keep-data uninstall and delete-data uninstall.
+- Release provenance gate that rejects a missing tag, a tag on another commit, a dirty worktree and an explicit commit mismatch.
 
-## What is verified
+## Verified now
 
-| Area | Evidence level |
+| Area | Evidence |
 | --- | --- |
-| TypeScript adapter | 733 tests pass; 99.4% statement/line coverage in the 2026-10-22 local check |
-| Go packages without a required live database | `go test ./...`, `go vet ./...` and a fresh build pass locally |
+| TypeScript adapter | 733 tests; 99.4% statement/line coverage in the 2026-10-22 acceptance run |
+| Go and PostgreSQL | Full package-parallel `go test ./... -count=1` with PostgreSQL 16 passed three consecutive fresh runs after WF-013 |
+| Crash safety | Four real process-kill scenarios pass; the regression ignores an unrelated advisory lock but detects a crash-helper lock |
 | CUE contracts | `cue vet ./spec/...` passes locally |
-| Repository formatting | `pnpm format:check` passes on 2026-10-22; historical task cards are treated as an archive |
-| Generic CLI loop | Recorded in `e2e-cli-loop.md`; live-database tests require `ERRKB_TEST_DATABASE_URL` |
-| DSH / Codex / Claude connectors | Measured with the pinned versions in `connector-matrix.md`; unmeasured fields remain marked |
-| Installer migration and logon startup | Rehearsed on the development host; clean standard-user VM evidence is still missing |
+| Repository quality | typecheck, lint, format, build and `go vet ./...` passed in the recorded acceptance run |
+| CLI reuse loop | Real database record → search → solution → reuse → feedback evidence is recorded in `e2e-cli-loop.md` |
+| DSH / Codex / Claude connectors | Measured versions and any unverified cells are explicit in `connector-matrix.md` |
+| Installer/release rehearsal | Artifact checks, installer migration/logon behavior and the five provenance tests pass on the development host |
 
-Database-dependent Go tests skip when `ERRKB_TEST_DATABASE_URL` is absent. A green unit-test run without that variable is therefore not proof of the complete persistence/retrieval loop.
+The installer rehearsal is not a substitute for the clean-VM run.
 
-## Current release blockers
+## Current release boundaries
 
-1. **The repository copy is not a Git worktree.** The local directory has no `.git`, so builds report `commit local` or `commit unknown`, rollback is unavailable and local-only UI changes cannot be traced safely.
-2. **The Web toolbox is not on the current remote launch path.** The local copy contains `cmd/errkb/web.go`, embedded assets and a `ui --web` dispatch, but the current GitHub `main` and existing release binaries reject `--web`.
-3. **The installer creates no toolbox launcher.** There is no `[Icons]` section in `installer.iss`, and `start-errkb.cmd` is not installed or included in the current release bundle.
-4. **The UI cannot recover the installed daemon reliably.** When the pipe is unavailable, the Web shell starts a daemon with `ERRKB_DSN`/`--dsn`; it does not read `%LOCALAPPDATA%\errkb\pg\credentials.json`, and its default migration path depends on the current working directory.
-5. **Release artifacts disagree.** `dist\errkb.exe`, the installed EXE and `dist\release\errkb-0.1.0\errkb.exe` were built at different revisions; the release-folder binary does not contain `errkb db`.
-6. **The Web UI is search-only.** Issue detail, editing, statistics, audit and settings routes/screens remain to be implemented.
-7. **Clean-VM acceptance is blocked.** A real standard-user install, reboot, toolbox launch and both uninstall choices still need evidence.
+1. **WF-011 — clean Windows acceptance.** One coherent candidate must be installed by a standard user on the clean Windows 11 VM, launched, used for the knowledge-reuse loop, recovered after a real reboot, and uninstalled once with data retained and once with data deleted. The evidence directory must be saved outside generated `dist/`.
+2. **WF-012 — real tagged release.** This repository has no accepted `v0.1.0` tag yet. Existing files under `dist/` are rehearsal artifacts and must not be published. After WF-011 passes, commit the accepted tree, create the real tag, build the release once from that tag, and verify that source, EXE, installer, installed EXE, manifest and hashes identify the same version, commit and build time.
+3. **Signing limitation — accepted but visible.** The candidate is not Authenticode-signed. This is not hidden and does not weaken the checksum/provenance gates; users must verify `SHA256SUMS` until a signing certificate is introduced.
 
-## Safe ways to use the project now
+WF-013 (parallel database determinism) and WF-014 (delivery-status reconciliation) are complete.
 
-### Development use
+## Safe use now
 
-Use a binary built from the current source, a PostgreSQL 16 instance and an explicit DSN:
+### Development and acceptance
+
+Build from the current worktree and use an explicit PostgreSQL 16 DSN, or use the installer only as the WF-011 acceptance candidate. The CLI, MCP server and measured connectors may be exercised; do not present the rehearsal bundle as an official release.
 
 ```powershell
 go build -o errkb.exe ./cmd/errkb
 .\errkb.exe db migrate --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
 .\errkb.exe daemon --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
-.\errkb.exe doctor --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
+.\errkb.exe ui --web --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
 ```
-
-Then use the CLI, MCP server or one of the measured connectors.
 
 ### End-user installation
 
-There is no supported end-user installation yet. Existing setup files are diagnostic/acceptance artifacts, not a public release. Do not publish or redistribute them as v0.1.0 until one clean build passes the release checklist below.
-
-## Ordered path to a releasable toolbox
-
-1. Restore a real Git worktree from the current GitHub `main` and preserve the local-only UI changes on a named branch.
-2. Complete EKB-057: integrate `ui --web`, credential-aware daemon startup, search smoke tests and the portable toolbox bundle.
-3. Complete EKB-058: issue detail and solution editing in the Web shell.
-4. Complete EKB-059: statistics, audit and connector/privacy settings in the Web shell.
-5. Complete EKB-060: installer files, Start-menu shortcut, portable ZIP and clean-VM UI evidence.
-6. Run all quality gates with a real PostgreSQL database and remove the untracked probe artifacts.
-7. Build once from a tagged commit and verify that the EXE, installer, manifest, checksums and installed binary identify the same revision.
+There is no supported public installer yet. The next valid transition is WF-011 clean-VM acceptance followed by WF-012 tagged packaging; no feature implementation cards are waiting ahead of those gates.
 
 ## Release checklist
 
-A release is ready only when all answers are yes:
+A release is ready only when every answer is yes:
 
-- Does `errkb version` report the intended tag and commit?
-- Does the installer contain that exact EXE?
-- Does the Start-menu shortcut open the toolbox without a terminal?
-- Can the toolbox start or reconnect to its managed PostgreSQL and daemon using installed credentials?
-- Do search, detail/edit, statistics/audit and settings work through the local pipe?
+- Does `errkb version` report the intended tag and accepted commit?
+- Does the installer contain that exact EXE and does the installed EXE have the same hash?
+- Does the Start-menu shortcut open the toolbox without a visible terminal?
+- Can the toolbox start or reconnect to its managed PostgreSQL and daemon from installed credentials?
+- Do search, detail/edit, statistics/audit and settings work through the intended local interfaces?
 - Does the same known error return its recorded fix without a model call?
 - Does a real reboot restore the cluster and daemon for the same standard user?
 - Do keep-data and delete-data uninstall paths behave as documented?
-- Are all database integration tests, formatting checks, privacy checks and release hashes green?
+- Are database integration tests, formatting/privacy checks and release hashes green?
 - Are the English and Chinese documents synchronized?
 
 ## Document authority
 
 | Document | Purpose |
 | --- | --- |
-| `project-status.md` | Current delivery truth and blockers |
-| `workflow/README.md` | Control center for active issues, file repair order and cleanup decisions |
-| `features-and-implementation.md` | User capabilities and their source, contract and data implementation paths |
+| `project-status.md` | Current delivery truth and release boundaries |
+| `workflow/README.md` | Active-work control center and repair order |
+| `features-and-implementation.md` | User capabilities and implementation paths |
 | `implementation-plan.md` | Product decisions, task order and acceptance criteria |
-| `toolbox-ui.md` | UI architecture and EKB-057–060 scope |
-| `acceptance-vm.md` | Clean-machine evidence and remaining manual gates |
+| `toolbox-ui.md` | UI architecture, routes and delivery evidence |
+| `acceptance-vm.md` | Clean-machine procedure and evidence |
 | `connector-matrix.md` | Host/version capability evidence |
 | `README.md` | Short project entry point |
-

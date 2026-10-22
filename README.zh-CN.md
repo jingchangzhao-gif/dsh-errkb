@@ -4,9 +4,9 @@
 
 > **回收报错：同一个失败只诊断一次，记录下来，下次出现时作为已知解法交回 —— 全程本地完成，不调用模型。**
 
-**项目状态（2026-10-22）：开发快照，不是面向最终用户的正式版本。** 可复用错误核心、PostgreSQL schema、CLI、后台服务、MCP 服务以及 DSH/Codex/Claude 连接器已经实现；但“一键安装、双击打开”的 Windows 工具箱仍不可交付：Web UI 只存在于本地工作副本，当前发布物没有接入它的启动路由，干净虚拟机验收也尚未完成。准确边界见 [`docs/project-status.zh-CN.md`](docs/project-status.zh-CN.md)。
+**项目状态（2026-10-22）：验收候选，尚未正式发布。** 可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、已实测的 DSH/Codex/Claude 连接器和内嵌 Windows Web 工具箱均已实现。剩余门槛是用同一套一致产物完成干净 VM 验收，以及从真实、已验收的 Git tag 构建最终发布包。准确边界见 [`docs/project-status.zh-CN.md`](docs/project-status.zh-CN.md)。
 
-**错误知识库**（`error-knowledge-base`）是一个本地平台，有多种使用入口：命令行客户端、后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件、宿主连接器，以及在剩余 UI 任务完成后提供的 Windows 工具箱窗口。所有入口共用同一套核心与知识库；分类、脱敏、规范化、指纹、存储、检索和解法可信度不会在每个宿主里重复实现。命令仍是 `errkb`，DSH 适配器包继续使用 `dsh-errkb`。
+**错误知识库**（`error-knowledge-base`）是一个本地平台，有多种使用入口：命令行客户端、后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件、宿主连接器与内嵌 Windows Web 工具箱。所有入口共用同一套核心与知识库；分类、脱敏、规范化、指纹、存储、检索和解法可信度不会在每个宿主里重复实现。命令仍是 `errkb`，DSH 适配器包继续使用 `dsh-errkb`。
 
 ## 目录
 
@@ -54,10 +54,10 @@
 | PostgreSQL schema 与检索 | 已实现；集成测试需要真实数据库 | 已有 0001–0008 迁移、精确/近似检索、解法与结果 |
 | CLI、后台服务与 MCP | 已实现 | 有已迁移的 PostgreSQL 和 DSN 时，可使用开发构建运行 |
 | DSH、Codex CLI、Claude Code 连接器 | 已按固定版本实测 | 只承诺连接器矩阵中已经验证的能力 |
-| Windows 安装迁移与登录自启动 | 当前源码已实现；干净 VM 未验收 | 已有 `db migrate` 和 HKCU Run 接线，但还不是正式发布 |
-| Web 工具箱搜索壳 | 仅在本地工作副本中部分实现 | 只有搜索；当前 GitHub `main` 的启动入口和发布二进制都不包含它 |
-| 详情、解法编辑、统计和设置页 | 尚未接入 Web 工具箱 | 服务和页面模型存在，浏览器页面与 HTTP 路由仍属于 EKB-058/059 |
-| 发布包 | 不可发布 | 本地 `dist` 中的产物来自不同修订，不能混用 |
+| Windows 安装器与恢复 | 当前源码已实现；干净 VM 未验收 | 已有迁移、HKCU 登录恢复、启动器、快捷方式和两种卸载选择 |
+| 内嵌 Web 工具箱 | 已实现并有自动化测试覆盖 | 搜索、详情/编辑、统计/审计和设置路由均已接入 `ui --web` |
+| 发布来源门禁 | 已实现并通过测试 | 会拒绝缺失/不匹配 tag 与脏源码；尚无已验收的 `v0.1.0` tag |
+| 发布包 | 不可发布 | 现有 `dist` 是彩排产物；必须让一次带 tag 构建通过干净 VM |
 
 ## 功能总览
 
@@ -142,7 +142,7 @@
 
 5. **记录解法** —— 通过 MCP 服务（`err_record_solution`）或连接器 —— 再跑同一条命令，包装器就会打印已知解法及其来源与可信度。
 
-本地工作副本还包含开发中的 `errkb ui --web` 搜索壳。它不是安装说明：当前发布二进制与 GitHub `main` 都没有暴露该路由，而且后台服务停止时，它尚不能从安装凭据中自行恢复。
+当前源码构建可以通过 `errkb ui --web` 打开内嵌工具箱；daemon 缺失时，它会解析安装凭据与 migrations 进行恢复。在 WF-011 与 WF-012 通过前，该入口只用于开发和验收，不是受支持的公开安装方式。
 
 含真实输出的完整闭环见 [`docs/e2e-cli-loop.zh-CN.md`](docs/e2e-cli-loop.zh-CN.md)。
 
@@ -209,9 +209,9 @@ retention:
 
 ## 安装与卸载
 
-当前安装器源码按用户安装到 `%LOCALAPPDATA%\errkb`，可在 5433 端口创建专用 PostgreSQL 实例、应用迁移并登记当前用户登录自启动；卸载时可以保留或删除数据。但当前本地发布产物并非同一次完整构建，安装器没有创建工具箱启动器或开始菜单快捷方式，干净 VM 也还没有验收。因此它应被视为验收候选，而不是正式版本。
+安装器源码按用户安装到 `%LOCALAPPDATA%\errkb`，可在 5433 端口创建专用 PostgreSQL 实例、应用迁移、登记当前用户登录恢复、安装 `start-errkb.cmd` 并创建开始菜单工具箱快捷方式；卸载时可以保留或删除数据。现有 `dist/` 文件只是彩排产物，干净 VM 也尚未验收，因此安装器仍是验收候选，而不是正式版本。
 
-完整步骤、数据位置、静默安装行为与当前首次运行缺口见 [`docs/install.md`](docs/install.md)。干净虚拟机验收处于阻塞状态，其发现与验收脚本见 [`docs/acceptance-vm.md`](docs/acceptance-vm.md)。发布物未做代码签名；请用发布包里的 `SHA256SUMS` 校验。
+完整步骤、数据位置与静默安装行为见 [`docs/install.md`](docs/install.md)。干净虚拟机流程与证据要求见 [`docs/acceptance-vm.zh-CN.md`](docs/acceptance-vm.zh-CN.md)。发布物未做代码签名；请用发布包里的 `SHA256SUMS` 校验。
 
 ## 隐私
 
@@ -239,13 +239,10 @@ retention:
 
 以下是发布阻塞项或刻意保留的边界，不是隐藏能力：
 
-- **还没有一致的一键工具箱产物。** 本地源码、`dist`、已安装 EXE 与 `dist/release` 分别代表不同修订。
-- **Web 工具箱尚未接入交付。** 本地搜索壳不在当前 GitHub 启动路径中；安装器也不创建启动器或开始菜单快捷方式。
-- **Web UI 不能自行恢复已停止的 daemon。** 回退启动只读取 `ERRKB_DSN`/`--dsn`，尚未读取安装目录的凭据文件。
-- **干净 VM 验收未完成。** 源码已有迁移与 HKCU 登录启动，但仍需在干净 Windows VM 上重新验证标准用户安装、真实重启、启动和卸载。
+- **还没有已验收的一键工具箱产物。** 现有 `dist` 文件是彩排输出；最终发布包必须从已验收 tag 只重新构建一次。
+- **干净 VM 验收未完成。** 标准用户必须在干净 Windows VM 完成安装、工具箱启动、知识复用、真实重启与两种卸载。
 - **发布物未做代码签名。** SmartScreen 可能告警；请核对 `SHA256SUMS`。
 - **PostgreSQL 是前置条件。** 核心需要本地 PostgreSQL 16 服务；安装器会创建实例，但数据库不内嵌在程序里。
-- **Web 工具箱目前只有搜索页。** 问题详情、解法编辑、设置、统计与审计已有服务/模型层，但没有 Web 路由和页面。
 - **DSH 插件仍在等待商店审核。** 目前以手动安装为受支持路径。
 - **连接器矩阵里有两处实测缺口：** DSH 的 `tools/result` 实时路径与 Codex 的 `PostToolUse` Hook 尚未验证。
 

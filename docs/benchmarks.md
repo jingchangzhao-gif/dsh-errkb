@@ -26,6 +26,7 @@ reproducible with `internal/database/bench_test.go`.
 | `pg_trgm` candidates p95 | pass (81.7 ms) |
 | Full retrieval p95 | pass (84.5 ms) |
 | Crash safety (four kill scenarios) | pass |
+| Parallel live-database gate (WF-013) | pass, 3/3 fresh full runs |
 | Status of EKB-027 | **accepted** |
 
 The first 100k run (same generator, same method) produced p95 **155.3 ms** for the
@@ -235,6 +236,16 @@ added. On Windows the server cannot notice a dead client during a long statement
 (`client_connection_check_interval` must be 0 on this platform), so the migration
 probe sleeps 8 seconds and the helper cleanup allows 45 seconds; the kill itself is
 still a real process kill, not a mock.
+
+WF-013 removed a test-only source of nondeterminism found during the 2026-10-22
+release review. The lock assertion now inspects advisory locks owned by the killed
+`errkb-crash-helper` backend instead of counting every advisory lock in the shared
+database. `TestCrashLockAssertionIgnoresUnrelatedAdvisoryLocks` holds a lock on an
+unrelated backend, proves that it is ignored, then identifies that backend as the
+crash helper and proves that the scoped check detects it. The focused crash pair
+passed three consecutive runs, followed by three consecutive fresh parallel
+`ERRKB_TEST_DATABASE_URL=<redacted> go test ./... -count=1` runs. No `-p 1`
+serialization was used.
 
 ## CI layering
 
