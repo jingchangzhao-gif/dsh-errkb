@@ -227,17 +227,29 @@ begin
   end;
 end;
 
-procedure SetDeleteDataMarker(Remove: Boolean);
+function UninstallChoicePresent(): Boolean;
 var
-  Marker: String;
+  DeleteMarker: String;
+  KeepMarker: String;
 begin
-  Marker := ExpandConstant('{app}\.errkb-delete-data');
+  DeleteMarker := ExpandConstant('{app}\.errkb-delete-data');
+  KeepMarker := ExpandConstant('{app}\.errkb-keep-data');
+  Result := FileExists(DeleteMarker) or FileExists(KeepMarker);
+end;
+
+procedure SetUninstallChoice(Remove: Boolean);
+var
+  DeleteMarker: String;
+  KeepMarker: String;
+begin
+  DeleteMarker := ExpandConstant('{app}\.errkb-delete-data');
+  KeepMarker := ExpandConstant('{app}\.errkb-keep-data');
+  if FileExists(DeleteMarker) then DeleteFile(DeleteMarker);
+  if FileExists(KeepMarker) then DeleteFile(KeepMarker);
   if Remove then
-  begin
-    if FileExists(Marker) then DeleteFile(Marker);
-  end
+    SaveStringToFile(DeleteMarker, '1', False)
   else
-    SaveStringToFile(Marker, '1', False);
+    SaveStringToFile(KeepMarker, '1', False);
 end;
 
 function InitializeUninstall(): Boolean;
@@ -248,16 +260,25 @@ begin
   if ClusterDataPresent() then
   begin
     { A dialog answer cannot travel to the second uninstaller phase that runs
-      the uninstall commands, so the choice is written as a marker file next
-      to the database and postgres.ps1 reads it. }
+      the uninstall commands, so either choice is written as a marker file.
+      The cloned phase sees the marker and does not ask a second time. }
+    if UninstallChoicePresent() then
+      Exit;
     if UninstallParam('/delete_data') or UninstallParam('/delete_data=1') then
     begin
-      SetDeleteDataMarker(False);
+      SetUninstallChoice(True);
       Exit;
     end;
     if UninstallParam('/keep_data') or UninstallParam('/keep_data=1') then
     begin
-      SetDeleteDataMarker(True);
+      SetUninstallChoice(False);
+      Exit;
+    end;
+    { MsgBox is intentionally not suppressible by /SUPPRESSMSGBOXES. A silent
+      uninstall therefore needs a deterministic default before reaching it. }
+    if UninstallSilent() then
+    begin
+      SetUninstallChoice(False);
       Exit;
     end;
     Choice := MsgBox('Keep the local database data?', mbConfirmation, MB_YESNOCANCEL);
@@ -266,7 +287,7 @@ begin
       Result := False;
       Exit;
     end;
-    SetDeleteDataMarker(Choice = IDYES);
+    SetUninstallChoice(Choice = IDNO);
   end;
 end;
 

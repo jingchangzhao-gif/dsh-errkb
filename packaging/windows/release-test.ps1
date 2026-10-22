@@ -92,6 +92,21 @@ function Assert-SilentInstallDoesNotLaunchConsole {
     Write-Output 'PASS silent install skips the interactive version command'
 }
 
+function Assert-SilentUninstallPersistsRetentionChoice {
+    $installerSource = Get-Content -LiteralPath $installerScript -Raw
+    $postgresSource = Get-Content -LiteralPath $postgresScript -Raw
+    foreach ($required in @('UninstallChoicePresent', '.errkb-delete-data', '.errkb-keep-data', 'UninstallSilent()')) {
+        if ($installerSource -notmatch [regex]::Escape($required)) {
+            throw "silent uninstall must persist its retention choice across the uninstaller clone (missing $required)"
+        }
+    }
+    if ($postgresSource -notmatch '\$keepMarker' -or
+        $postgresSource -notmatch 'foreach \(\$choiceMarker in @\(\$marker, \$keepMarker\)\)') {
+        throw 'postgres.ps1 must remove both transient uninstall-choice markers after lifecycle cleanup'
+    }
+    Write-Output 'PASS silent uninstall persists its retention choice'
+}
+
 function Assert-AcceptanceWaitsForDirectProcessOnly {
     $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
     if ($acceptanceSource -match 'Start-Process\s+-FilePath\s+\$FilePath[^\r\n]*\s-Wait\b' -or
@@ -232,6 +247,7 @@ function Assert-RecoveryAcceptanceCoversFailures {
 
 try {
     Assert-SilentInstallDoesNotLaunchConsole
+    Assert-SilentUninstallPersistsRetentionChoice
     Assert-AcceptanceWaitsForDirectProcessOnly
     Assert-AcceptanceUsesInstalledMigrations
     Assert-AcceptanceAllowsFreshConnectorState
@@ -269,7 +285,7 @@ try {
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MissingWindowsAcceptanceRejected
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 13 passed, 0 failed'
+    Write-Output 'release gate tests: 14 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and

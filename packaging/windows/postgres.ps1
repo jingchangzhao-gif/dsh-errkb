@@ -41,6 +41,7 @@ if (-not (Test-Path $Exe)) {
 # {param:} does not read uninstaller command lines, so postgres.ps1 cannot see
 # /DELETE_DATA directly.
 $marker = Join-Path (Split-Path -Parent $root) '.errkb-delete-data'
+$keepMarker = Join-Path (Split-Path -Parent $root) '.errkb-keep-data'
 $removeData = $DeleteData -or ($Choice -in @('delete', '1', 'true', 'yes', 'delete_data')) -or (Test-Path $marker)
 
 $effectiveAction = $Action
@@ -84,10 +85,12 @@ if ($Action -eq 'uninstall') {
                 if (Test-Path $extra) { Remove-Item -Recurse -Force $extra -ErrorAction SilentlyContinue }
             }
         }
-        if (Test-Path $marker) { Remove-Item -Force $marker }
         Write-Output 'deleted    the cluster data was removed'
     } else {
         Write-Output 'kept       the cluster data was kept (run uninstall with -DeleteData to remove it)'
+    }
+    foreach ($choiceMarker in @($marker, $keepMarker)) {
+        if (Test-Path $choiceMarker) { Remove-Item -Force $choiceMarker }
     }
 }
 exit 0
