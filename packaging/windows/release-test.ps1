@@ -109,9 +109,9 @@ function Assert-SilentUninstallPersistsRetentionChoice {
             throw "silent uninstall must persist its retention choice across the uninstaller clone (missing $required)"
         }
     }
-    if ($postgresSource -notmatch '\$keepMarker' -or
-        $postgresSource -notmatch 'foreach \(\$choiceMarker in @\(\$marker, \$keepMarker\)\)') {
-        throw 'postgres.ps1 must remove both transient uninstall-choice markers after lifecycle cleanup'
+    if ($postgresSource -notmatch 'if \(Test-Path \$keepMarker\)' -or
+        $postgresSource -notmatch 'if \(-not \$removeData -and \(Test-Path \$marker\)\)') {
+        throw 'postgres.ps1 must clear keep-data markers while preserving the delete marker for Inno final cleanup'
     }
     Write-Output 'PASS silent uninstall persists its retention choice'
 }
@@ -175,7 +175,8 @@ function Assert-DeleteUninstallOwnsApplicationRootCleanup {
     $installerSource = Get-Content -LiteralPath $installerScript -Raw
     if ($installerSource -notmatch '\[UninstallDelete\][\s\S]*?Type:\s*filesandordirs;\s*Name:\s*"\{app\}";\s*Check:\s*DeleteApplicationRoot' -or
         $installerSource -notmatch 'function DeleteApplicationRoot\(\): Boolean;' -or
-        $installerSource -notmatch 'DeleteDataOnUninstall\s*:=\s*FileExists\(DeleteMarker\)') {
+        $installerSource -notmatch 'DeleteDataOnUninstall\s*:=\s*FileExists\(DeleteMarker\)' -or
+        $installerSource -notmatch [regex]::Escape("FileExists(ExpandConstant('{app}\.errkb-delete-data'))")) {
         throw 'delete-data uninstall must remove the exact application root while keep-data uninstall preserves it'
     }
     Write-Output 'PASS delete-data uninstall owns application-root cleanup'

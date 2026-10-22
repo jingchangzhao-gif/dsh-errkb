@@ -89,8 +89,11 @@ if ($Action -eq 'uninstall') {
     } else {
         Write-Output 'kept       the cluster data was kept (run uninstall with -DeleteData to remove it)'
     }
-    foreach ($choiceMarker in @($marker, $keepMarker)) {
-        if (Test-Path $choiceMarker) { Remove-Item -Force $choiceMarker }
-    }
+    # Keep the delete marker for Inno's later [UninstallDelete] phase. Its
+    # second-phase process cannot rely on Pascal globals set before cloning;
+    # the marker is removed with the exact application root. Keep-data cleanup
+    # has no later recursive delete, so remove its transient marker here.
+    if (Test-Path $keepMarker) { Remove-Item -Force $keepMarker }
+    if (-not $removeData -and (Test-Path $marker)) { Remove-Item -Force $marker }
 }
 exit 0

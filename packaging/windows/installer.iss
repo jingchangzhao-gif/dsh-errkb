@@ -268,7 +268,11 @@ end;
 
 function DeleteApplicationRoot(): Boolean;
 begin
-  Result := DeleteDataOnUninstall;
+  { The actual uninstall runs in a cloned second process, so do not rely only
+    on a Pascal global set in the first phase. The delete marker deliberately
+    remains until this [UninstallDelete] entry removes the complete root. }
+  Result := DeleteDataOnUninstall or
+    FileExists(ExpandConstant('{app}\.errkb-delete-data'));
 end;
 
 function InitializeUninstall(): Boolean;
