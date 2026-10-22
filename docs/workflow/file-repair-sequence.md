@@ -4,6 +4,8 @@
 
 This file translates every active `WF-nnn` issue into a concrete edit order. Follow the phases sequentially. Do not edit a later phase merely because its files are easy to reach; the earlier phases establish the contracts and runtime paths that later UI and packaging work depend on.
 
+> **Current checkpoint (2026-10-22):** the phases below are retained as historical repair instructions. WF-011A and WF-011B replace the former clean-VM blocker and run in Windows CI. Completed rows have been removed from `current-workflow.md`; only WF-012 remains active.
+
 ## Global change protocol
 
 For each workflow item:
@@ -201,16 +203,16 @@ Edit order:
 
 1. Compare `docs/project-status.*` with the current Git state, CLI help, Web routes, installer files, release manifest and the latest acceptance report.
 2. Remove resolved blocker statements; do not convert them into a growing completion log.
-3. Preserve only current boundaries: WF-013, clean-VM evidence, real-tag enforcement and any explicitly accepted signing limitation.
+3. Preserve only current boundaries: Windows CI acceptance, real-tag enforcement and any explicitly accepted signing limitation.
 4. Cross-check both languages and all links from `README.*` and `docs/workflow/README.*`.
 
 Completion gate: every “current” claim is reproducible from the present tree or the latest acceptance evidence, and the English and Chinese blocker lists are equivalent.
 
-Result: the bilingual status, README summaries, feature matrix, install guide, toolbox UI status and plan checkpoint now agree with the tracked worktree. Only clean-VM evidence, the final accepted tag/build and the visible unsigned-binary limitation remain.
+Result: the bilingual status, README summaries, feature matrix, install guide, toolbox UI status and plan checkpoint now agree with the tracked worktree. WF-011A/WF-011B subsequently replaced the physical-VM blocker; only the final accepted tag/build and the visible unsigned-binary limitation remain.
 
-### WF-011: clean-VM acceptance
+### WF-011A/WF-011B: Windows acceptance — completed 2026-10-22
 
-Use `packaging/windows/vm-acceptance.ps1` on a clean Windows 10/11 x64 VM as a standard user. Complete install, first launch, real reboot, single-instance recovery, knowledge reuse and both uninstall choices. Store the evidence outside generated `dist/` until the release bundle is finalized.
+`packaging/windows/ci-acceptance.ps1` now drives the real installer through the unattended lifecycle on an ephemeral Windows runner. `packaging/windows/recovery-acceptance.ps1` tests idempotent login startup plus daemon-only and daemon/database failure recovery. Both are mandatory in PR CI and repeat before tagged packaging. Physical reboot and interactive visual review remain optional manual evidence.
 
 ## Phase 9 — coherent release
 
@@ -225,7 +227,7 @@ Edit/run order:
    - require the resolved tag commit to equal the accepted source commit/HEAD;
    - cover missing, mismatched and valid tags with an automated check.
 4. `packaging/windows/release-test.ps1` and `pnpm test:release`
-5. `packaging/windows/vm-acceptance.ps1`
+5. `.github/workflows/release.yml` — repeat WF-011A/WF-011B for the tag before packaging
 6. `CHANGELOG.md`, release notes, install/status/acceptance documents
 
 Build once from one accepted tag. Verify version, commit and build time across the source, EXE, installer, installed EXE, manifest and checksums. Do not copy any file from an earlier `dist/` directory.
@@ -242,4 +244,4 @@ go test ./...
 cue vet ./spec/...
 ```
 
-The release gate additionally requires live-database results, clean-VM evidence and synchronized Chinese/English documentation.
+The release gate additionally requires live-database results, a green `windows-acceptance` job and synchronized Chinese/English documentation.

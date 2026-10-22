@@ -187,6 +187,53 @@ jobs:
       # keeps the fix honest instead of trusting an ubuntu run.
       - name: Store lock and mtime cases
         run: pnpm exec vitest run tests/state.test.ts tests/store.test.ts
+
+  # WF-011A: an ephemeral Windows runner exercises the same setup executable
+  # users receive. This is a required, unattended product acceptance path; its
+  # evidence is uploaded even when a stage fails.
+  windows-acceptance:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Windows packaging and runtime prerequisites
+        shell: pwsh
+        run: |
+          go install github.com/tc-hib/go-winres@v0.3.3
+          choco install innosetup postgresql16 --yes --no-progress --params "/Password:errkb-ci-only"
+          $pgBin = Join-Path $env:ProgramFiles "PostgreSQL\16\bin"
+          if (-not (Test-Path (Join-Path $pgBin "pg_ctl.exe"))) {
+            throw "PostgreSQL 16 was not installed at $pgBin"
+          }
+          "ERRKB_PG_BIN=$pgBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Build the Windows installer
+        shell: pwsh
+        run: |
+          ./packaging/windows/build.ps1 -Version 0.1.0
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "ISCC.exe is missing at $iscc" }
+          & $iscc ./packaging/windows/installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+      - name: Run WF-011A and WF-011B Windows acceptance
+        shell: pwsh
+        run: ./packaging/windows/ci-acceptance.ps1 -ExpectedVersion 0.1.0 -EvidenceDir artifacts/windows-acceptance
+
+      - name: Upload WF-011A and WF-011B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wf-011-windows-acceptance-${{ github.run_id }}
+          path: artifacts/windows-acceptance/**
+          if-no-files-found: error
+
   # EKB-011: schema compatibility gate. The checker lives inline because the
   # card's scope is spec/compat.cue plus this workflow; if it outgrows this job,
   # move it into spec/ under an explicit scope change.

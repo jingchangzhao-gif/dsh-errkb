@@ -4,7 +4,7 @@
 
 > **Recycles errors: the same failure is diagnosed once, recorded, and handed back as a known fix the next time it appears — locally, without calling a model.**
 
-**Project status (2026-10-22): acceptance candidate, not yet a public release.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Windows Web toolbox are implemented. The remaining gates are one coherent clean-VM acceptance run and the final build from a real accepted Git tag. See [`docs/project-status.md`](docs/project-status.md) for the exact boundary between implemented, verified and releasable.
+**Project status (2026-10-22): acceptance candidate, not yet a public release.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Windows Web toolbox are implemented. WF-011A/WF-011B now enforce the installed Windows lifecycle and deterministic recovery in CI; the remaining delivery gate is the final build from a real accepted Git tag. See [`docs/project-status.md`](docs/project-status.md) for the exact boundary between implemented, verified and releasable.
 
 The **Error Knowledge Base** (`error-knowledge-base`) is a local platform with several interfaces: a command-line client, a background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, host connectors and an embedded Windows Web toolbox. Every interface uses the same core and the same knowledge base; classification, redaction, normalisation, fingerprinting, storage, retrieval and fix trust are not reimplemented per host. The command remains `errkb`, and the DSH adapter package retains the name `dsh-errkb`.
 
@@ -46,7 +46,7 @@ The project uses three different words deliberately:
 
 - **Implemented** means source code and automated tests exist.
 - **Verified** means the behavior has been exercised in the stated real environment.
-- **Releasable** means one coherent, versioned artifact has passed clean-machine installation, launch, restart and uninstall acceptance.
+- **Releasable** means one coherent, versioned artifact has passed the mandatory Windows lifecycle/recovery and provenance gates.
 
 | Area | Current state | What that means |
 | --- | --- | --- |
@@ -54,10 +54,10 @@ The project uses three different words deliberately:
 | PostgreSQL schema and retrieval | Implemented; integration tests require a real database | Migrations `0001`–`0008`, exact/fuzzy retrieval, solutions and outcomes exist |
 | CLI, daemon and MCP | Implemented | Usable from a development build when a migrated PostgreSQL instance and DSN are available |
 | DSH, Codex CLI and Claude Code connectors | Measured with pinned versions | See the connector matrix; unsupported host behavior is not implied |
-| Windows installer and recovery | Implemented in current source; clean-VM acceptance pending | Migration, HKCU logon recovery, launcher, shortcut and both uninstall choices exist |
+| Windows installer and recovery | Implemented; WF-011A/WF-011B are mandatory CI | The real installer, migration, knowledge loop, HKCU recovery and both uninstall choices are exercised on an ephemeral Windows runner |
 | Embedded Web toolbox | Implemented and automated-test covered | Search, detail/edit, statistics/audit and settings routes are wired through `ui --web` |
 | Release provenance | Implemented and tested | Missing/mismatched tags and dirty source are rejected; the accepted `v0.1.0` tag does not exist yet |
-| Release bundle | Not releasable | Existing `dist` files are rehearsal artifacts; one tagged build must pass the clean VM |
+| Release bundle | Not releasable | Existing `dist` files are rehearsal artifacts; one real tagged build must pass the Windows acceptance and provenance gates |
 
 ## Feature overview
 
@@ -142,7 +142,7 @@ Generic log and manual hosts use the template in [`connectors/templates/cli-log/
 
 5. **Record the fix** through the MCP server (`err_record_solution`) or a connector, then run the same command again; the wrapper prints the known fix, its source and its trust.
 
-The embedded toolbox is available from a current source build through `errkb ui --web`. It resolves installed credentials and migrations when it must recover a missing daemon. Until WF-011 and WF-012 pass, use it for development and acceptance only, not as a supported public installation.
+The embedded toolbox is available from a current source build through `errkb ui --web`. It resolves installed credentials and migrations when it must recover a missing daemon. Until WF-012 passes, use it for development and acceptance only, not as a supported public installation.
 
 The full loop, including the recorded output, is in [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md).
 
@@ -209,9 +209,9 @@ Defaults: Named Pipe on, HTTP off, capture on, notices on, search limit 3, captu
 
 ## Installing and uninstalling
 
-The installer source installs per user into `%LOCALAPPDATA%\errkb`, can create a dedicated PostgreSQL cluster on port 5433, applies migrations, registers per-user logon recovery, installs `start-errkb.cmd` and creates a Start-menu toolbox shortcut. Uninstalling can keep or delete the data. Existing `dist/` files are rehearsal artifacts, and the clean-VM run has not yet passed, so treat the installer as an acceptance candidate rather than a supported release.
+The installer source installs per user into `%LOCALAPPDATA%\errkb`, can create a dedicated PostgreSQL cluster on port 5433, applies migrations, registers per-user logon recovery, installs `start-errkb.cmd` and creates a Start-menu toolbox shortcut. Uninstalling can keep or delete the data. WF-011A/WF-011B exercise these paths in Windows CI. Existing `dist/` files are still rehearsal artifacts, so treat the installer as an acceptance candidate until WF-012 produces the real tagged release.
 
-Full steps, data locations and silent-install behavior are in [`docs/install.md`](docs/install.md). The clean-VM procedure and evidence requirements are in [`docs/acceptance-vm.md`](docs/acceptance-vm.md). The release is not code-signed; verify artifacts against `SHA256SUMS` in the release bundle.
+Full steps, data locations and silent-install behavior are in [`docs/install.md`](docs/install.md). Required Windows CI acceptance and optional clean-machine review are in [`docs/acceptance-vm.md`](docs/acceptance-vm.md). The release is not code-signed; verify artifacts against `SHA256SUMS` in the release bundle.
 
 ## Privacy
 
@@ -230,7 +230,8 @@ Everything stays on the machine. The core never calls a model and makes no outbo
 | [`docs/toolbox-ui.md`](docs/toolbox-ui.md) / [中文](docs/toolbox-ui.zh-CN.md) | Toolbox UI architecture, implementation status and remaining cards |
 | [`docs/privacy.md`](docs/privacy.md) / [中文](docs/privacy.zh-CN.md) | Data flow, redaction, retention, deletion |
 | [`docs/benchmarks.md`](docs/benchmarks.md) / [中文](docs/benchmarks.zh-CN.md) | Performance gate, dataset, plans, environment |
-| [`docs/acceptance-vm.md`](docs/acceptance-vm.md) / [中文](docs/acceptance-vm.zh-CN.md) | Clean-VM acceptance results and current blockers |
+| [`docs/test-record.md`](docs/test-record.md) / [中文](docs/test-record.zh-CN.md) | Durable full-suite and Windows acceptance runs |
+| [`docs/acceptance-vm.md`](docs/acceptance-vm.md) / [中文](docs/acceptance-vm.zh-CN.md) | Required Windows CI acceptance, evidence and optional manual review |
 | [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md) / [中文](docs/e2e-cli-loop.zh-CN.md) | The generic CLI loop, end to end, without a model |
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in each release |
 | [`packaging/windows/`](packaging/windows) | Build, release and installer scripts |
@@ -240,7 +241,7 @@ Everything stays on the machine. The core never calls a model and makes no outbo
 These are release blockers or deliberate boundaries, not hidden capabilities:
 
 - **There is no accepted one-click toolbox artifact yet.** Existing `dist` files are rehearsal outputs; the final bundle must be rebuilt once from the accepted tag.
-- **Clean-VM acceptance is pending.** Installation, toolbox launch, knowledge reuse, an actual reboot and both uninstall choices must pass as a standard user on the clean Windows VM.
+- **A physical reboot and interactive clean-machine review are not continuously automated.** WF-011B tests the equivalent daemon/PostgreSQL/logon recovery deterministically; a real reboot and visual wizard review remain optional manual evidence.
 - **The release is not code-signed.** SmartScreen may warn; verify `SHA256SUMS`.
 - **PostgreSQL is a prerequisite.** The core needs a local PostgreSQL 16 server; the installer creates one, but the database is not embedded in the application.
 - **The DSH plugin is pending store review.** Installing it by hand is the supported path for now.

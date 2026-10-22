@@ -4,7 +4,7 @@
 
 本文明确区分三类内容：**当前安装器源码**、**本地构建的验收候选**和**旧发布目录**。它们不能混用。
 
-> **状态说明（2026-10-22）。** EKB-056 已在当前源码中加入 `errkb db migrate`、安装阶段迁移和 HKCU 登录启动；这些能力在开发机上完成过演练，但干净 VM 仍未验收。`dist\release\errkb-0.1.0\` 中的文件早于 EKB-056，不能被当成当前安装器。项目目前没有受支持的公开版本。详情见 [`project-status.zh-CN.md`](project-status.zh-CN.md) 与 [`acceptance-vm.md`](acceptance-vm.md)。
+> **状态说明（2026-10-22）。** EKB-056 已在当前源码中加入 `errkb db migrate`、安装阶段迁移和 HKCU 登录启动；WF-011A/WF-011B 现已在 Windows CI 中验证该生命周期与确定性恢复。`dist\release\errkb-0.1.0\` 中的文件早于这些变更，不能被当成当前安装器。项目目前没有受支持的公开版本。详情见 [`project-status.zh-CN.md`](project-status.zh-CN.md) 与 [`acceptance-vm.zh-CN.md`](acceptance-vm.zh-CN.md)。
 
 ## 系统要求
 
@@ -17,10 +17,10 @@
 
 | 产物 | 来源 | 当前可用性 |
 | --- | --- | --- |
-| `dist\errkb.exe` | `packaging\windows\build.ps1` | 本地验收候选；不包含 Web 工具箱启动路由 |
-| `dist\errkb-<version>-setup.exe` | 当前安装器源码 | 本地验收候选；未通过干净 VM |
+| `dist\errkb.exe` | `packaging\windows\build.ps1` | 当前源码构建；包含 Web 工具箱启动路由 |
+| `dist\errkb-<version>-setup.exe` | 当前安装器源码 | 验收候选；WF-011A/WF-011B 在 CI 中重建并测试 |
 | `dist\release\errkb-0.1.0\` | 旧发布打包结果 | 已过期；其中 EXE 没有 `db` 命令 |
-| 未来的 `errkb-toolbox.zip` | EKB-060 | 尚未生成 |
+| `errkb-toolbox.zip` | `packaging\windows\release.ps1` | 已实现生成逻辑；等待 WF-012 的真实 tag 构建 |
 
 不要混用 `dist\` 与 `dist\release\errkb-0.1.0\` 中的文件。正式发布必须从同一个带 tag 的 Git 提交一次性重建，并让 EXE、安装器、manifest、校验和与安装后文件都指向同一修订。
 
@@ -36,7 +36,7 @@
 6. 通过 HKCU Run 注册当前用户登录启动，并启动 daemon。
 7. 安装卸载器；卸载时允许保留或删除数据。
 
-当前安装器**不会**创建工具箱启动器或开始菜单快捷方式。直接双击 `errkb.exe` 只会打印 CLI 用法并退出，不会打开工具箱。该缺口属于 EKB-060。
+当前安装器会部署 `start-errkb.cmd`，并创建隐藏终端启动 `errkb.exe ui --web` 的开始菜单快捷方式。直接双击 `errkb.exe` 仍只打印 CLI 用法；界面入口是快捷方式或明确的 `ui --web` 命令。
 
 ## 安装目录
 
@@ -50,7 +50,7 @@
 
 ## 开发环境首次运行
 
-在正式安装包通过验收前，使用当前源码构建和显式 DSN：
+在 WF-012 生成正式带 tag 安装包前，使用当前源码构建和显式 DSN：
 
 ```powershell
 go build -o errkb.exe ./cmd/errkb
@@ -69,7 +69,7 @@ go build -o errkb.exe ./cmd/errkb
 .\errkb.exe ui --web
 ```
 
-安装器会部署 `start-errkb.cmd`，并创建运行 `errkb.exe ui --web` 的开始菜单快捷方式；不会留下可见终端。pipe 不可达时，Web 壳会读取安装目录的凭据与 migrations 来恢复 daemon。搜索、详情/编辑、统计/审计和设置页均已接入。当前剩余边界是干净 VM 验收和最终带 tag 发布，而不是 UI 功能接线。
+安装器会部署 `start-errkb.cmd`，并创建运行 `errkb.exe ui --web` 的开始菜单快捷方式；不会留下可见终端。pipe 不可达时，Web 壳会读取安装目录的凭据与 migrations 来恢复 daemon。搜索、详情/编辑、统计/审计和设置页均已接入。当前剩余边界是 WF-012 的最终带 tag 发布，而不是 UI 功能接线。
 
 ## 复用已有 PostgreSQL
 
@@ -100,7 +100,7 @@ $pgDump = Join-Path ${env:ProgramFiles} "PostgreSQL\16\bin\pg_dump.exe"
 - **保留数据：** 删除应用文件和启动项，保留 `pg\` 数据以供重装复用。
 - **删除数据：** 停止 daemon 与集群，删除数据、凭据和安装目录。
 
-两条路径都必须在干净 VM 上重新验证；现阶段只有开发机演练记录。
+WF-011A 会在临时 Windows Runner 上验证两条路径：保留数据卸载后重装并核对原有知识，随后删除数据卸载并检查进程、端口、启动项和文件残留。
 
 ## 常见问题
 
@@ -110,14 +110,14 @@ $pgDump = Join-Path ${env:ProgramFiles} "PostgreSQL\16\bin\pg_dump.exe"
 | `database: connection refused` | PostgreSQL 未启动或 DSN 端口错误；检查实例并运行带显式 DSN 的 `doctor`。 |
 | 本地 API 不可达 | daemon 未运行或 pipe 名不一致。启动 daemon 并运行 `doctor`。 |
 | `flag provided but not defined: -web` | 当前 EXE 没有 Web 壳接线；现有发布二进制无法打开工具箱。 |
-| `ui --web` 等待后退出码为 4 | daemon 已停止且 UI 没有 DSN；安装凭据自动恢复尚未完成。 |
+| `ui --web` 等待后退出码为 4 | 无法根据安装凭据恢复 daemon；检查 `pg\credentials.json`、受管集群和 daemon 日志，开发环境可显式传入 DSN。 |
 | 5433 被占用 | 选择其他端口或停止占用该端口的实例。 |
 | 健康文件显示 ok，但 pipe/端口已关闭 | `health.json` 是过期快照；以实时端口、pipe 与 `doctor` 结果为准。 |
 
 ## 相关文档
 
 - [`project-status.zh-CN.md`](project-status.zh-CN.md)：当前源码与产物事实、发布阻塞项。
-- [`acceptance-vm.md`](acceptance-vm.md)：干净 VM 验收脚本与证据。
+- [`acceptance-vm.zh-CN.md`](acceptance-vm.zh-CN.md)：强制 Windows CI 验收、证据与可选人工检查。
 - [`toolbox-ui.zh-CN.md`](toolbox-ui.zh-CN.md)：UI 状态和 EKB-057～060 范围。
 - [`privacy.zh-CN.md`](privacy.zh-CN.md) / [English](privacy.md)：存储内容和隐私边界。
 

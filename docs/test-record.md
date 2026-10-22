@@ -1,5 +1,7 @@
 # Test record
 
+[简体中文](test-record.zh-CN.md)
+
 Durable record of full-suite verification runs, so a workflow item does not have
 to stay open only to remember that the gates passed. Per-item evidence stays in
 the implementation plan, the CHANGELOG and the acceptance documents; this file
@@ -23,7 +25,7 @@ pnpm.cmd format:check
 gofmt -l cmd internal tests
 go vet ./...
 cue vet ./spec/...
-$env:ERRKB_TEST_DATABASE_URL = "postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable"
+$env:ERRKB_TEST_DATABASE_URL = "<redacted test DSN>"
 go test ./... -count=1
 ```
 
@@ -47,6 +49,6 @@ Notes and limits:
   schemas left behind by interrupted runs.
 - Interrupted test runs can leave `errkb_*` schemas behind; drop them before a
   database-wide assertion (`drop schema if exists … cascade`).
-- This is a development-host run, not clean-VM acceptance. EKB-052 / WF-011
-  still owns the clean standard-user run with the installer, reboot and both
-  uninstall modes.
+- This is a development-host run, not Windows installer acceptance. Its former
+  EKB-052 / WF-011 conclusion is historical; WF-011A/WF-011B now own the
+  mandatory hosted-Windows lifecycle and deterministic recovery evidence.

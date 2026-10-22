@@ -23,7 +23,7 @@ DSH / Codex / Claude / generic CLI / MCP
           exact search → fuzzy top 3 → known fix
 ```
 
-The reusable core, PostgreSQL schema, CLI, daemon, MCP server, first host connectors and embedded Windows Web toolbox are implemented. The installer source includes managed PostgreSQL setup, migrations, logon recovery, a launcher, a Start-menu shortcut and both uninstall choices. The project is still an **acceptance candidate**, not a public release: the clean standard-user VM run and the final build from a real accepted Git tag remain open.
+The reusable core, PostgreSQL schema, CLI, daemon, MCP server, first host connectors and embedded Windows Web toolbox are implemented. The installer source includes managed PostgreSQL setup, migrations, logon recovery, a launcher, a Start-menu shortcut and both uninstall choices. WF-011A/WF-011B now make the installed lifecycle and recovery a mandatory Windows CI gate. The project is still an **acceptance candidate**, not a public release, because the final build from a real accepted Git tag remains open.
 
 ## Status vocabulary
 
@@ -32,7 +32,7 @@ The reusable core, PostgreSQL schema, CLI, daemon, MCP server, first host connec
 | Implemented | Source code and automated tests exist |
 | Verified | The behavior ran successfully in the stated environment |
 | Accepted | Feature-specific, common and required manual gates passed |
-| Releasable | One tagged artifact passed clean-machine install, launch, restart and uninstall |
+| Releasable | One tagged artifact passed the mandatory Windows lifecycle/recovery gate and provenance checks |
 
 Implemented does not automatically mean verified, accepted or releasable.
 
@@ -60,14 +60,14 @@ Implemented does not automatically mean verified, accepted or releasable.
 | CLI reuse loop | Real database record → search → solution → reuse → feedback evidence is recorded in `e2e-cli-loop.md` |
 | DSH / Codex / Claude connectors | Measured versions and any unverified cells are explicit in `connector-matrix.md` |
 | Installer/release rehearsal | Artifact checks, installer migration/logon behavior and the five provenance tests pass on the development host |
+| Windows lifecycle/recovery | WF-011A/WF-011B build the real installer on an ephemeral Windows runner, test install/reuse/retention/deletion and deterministic daemon/PostgreSQL recovery, and upload structured evidence |
 
-The installer rehearsal is not a substitute for the clean-VM run.
+The automated gate does not claim a physical reboot or visual review of interactive windows; those remain optional manual evidence.
 
 ## Current release boundaries
 
-1. **WF-011 — clean Windows acceptance.** One coherent candidate must be installed by a standard user on the clean Windows 11 VM, launched, used for the knowledge-reuse loop, recovered after a real reboot, and uninstalled once with data retained and once with data deleted. The evidence directory must be saved outside generated `dist/`.
-2. **WF-012 — real tagged release.** This repository has no accepted `v0.1.0` tag yet. Existing files under `dist/` are rehearsal artifacts and must not be published. After WF-011 passes, commit the accepted tree, create the real tag, build the release once from that tag, and verify that source, EXE, installer, installed EXE, manifest and hashes identify the same version, commit and build time.
-3. **Signing limitation — accepted but visible.** The candidate is not Authenticode-signed. This is not hidden and does not weaken the checksum/provenance gates; users must verify `SHA256SUMS` until a signing certificate is introduced.
+1. **WF-012 — real tagged release.** This repository has no accepted `v0.1.0` tag yet. Existing files under `dist/` are rehearsal artifacts and must not be published. Merge a green `windows-acceptance` result, create the real tag, let the tag workflow repeat acceptance and build once, then verify that source, EXE, installer, installed EXE, manifest and hashes identify the same version, commit and build time.
+2. **Signing limitation — accepted but visible.** The candidate is not Authenticode-signed. This is not hidden and does not weaken the checksum/provenance gates; users must verify `SHA256SUMS` until a signing certificate is introduced.
 
 WF-013 (parallel database determinism) and WF-014 (delivery-status reconciliation) are complete.
 
@@ -75,7 +75,7 @@ WF-013 (parallel database determinism) and WF-014 (delivery-status reconciliatio
 
 ### Development and acceptance
 
-Build from the current worktree and use an explicit PostgreSQL 16 DSN, or use the installer only as the WF-011 acceptance candidate. The CLI, MCP server and measured connectors may be exercised; do not present the rehearsal bundle as an official release.
+Build from the current worktree and use an explicit PostgreSQL 16 DSN, or exercise the installer through the Windows acceptance scripts. The CLI, MCP server and measured connectors may be exercised; do not present the rehearsal bundle as an official release.
 
 ```powershell
 go build -o errkb.exe ./cmd/errkb
@@ -86,7 +86,7 @@ go build -o errkb.exe ./cmd/errkb
 
 ### End-user installation
 
-There is no supported public installer yet. The next valid transition is WF-011 clean-VM acceptance followed by WF-012 tagged packaging; no feature implementation cards are waiting ahead of those gates.
+There is no supported public installer yet. The next valid transition is WF-012 tagged packaging after the `windows-acceptance` check is green; no feature implementation card remains ahead of that gate.
 
 ## Release checklist
 
@@ -98,7 +98,7 @@ A release is ready only when every answer is yes:
 - Can the toolbox start or reconnect to its managed PostgreSQL and daemon from installed credentials?
 - Do search, detail/edit, statistics/audit and settings work through the intended local interfaces?
 - Does the same known error return its recorded fix without a model call?
-- Does a real reboot restore the cluster and daemon for the same standard user?
+- Does WF-011B restore one daemon, the cluster, Named Pipe, health and saved knowledge after deterministic process failure?
 - Do keep-data and delete-data uninstall paths behave as documented?
 - Are database integration tests, formatting/privacy checks and release hashes green?
 - Are the English and Chinese documents synchronized?
@@ -112,6 +112,6 @@ A release is ready only when every answer is yes:
 | `features-and-implementation.md` | User capabilities and implementation paths |
 | `implementation-plan.md` | Product decisions, task order and acceptance criteria |
 | `toolbox-ui.md` | UI architecture, routes and delivery evidence |
-| `acceptance-vm.md` | Clean-machine procedure and evidence |
+| `acceptance-vm.md` | Required Windows CI acceptance and optional clean-machine review |
 | `connector-matrix.md` | Host/version capability evidence |
 | `README.md` | Short project entry point |

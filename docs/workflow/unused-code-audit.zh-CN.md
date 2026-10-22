@@ -6,7 +6,7 @@
 
 本文标注当前运行时不需要的内容，但不会把所有“暂时不可达”的源码粗暴称为垃圾。本文只提供标注和清理依据，本次审计没有删除项目文件。
 
-> **执行说明（2026-10-22）：** 审计完成后已请求执行清理，但当前代理执行策略拒绝文件系统删除命令，因此没有把任何目标虚假标记为“已删除”。`.gitignore` 已阻止 Claude 探针输出再次进入仓库；`packaging/windows/cleanup-local.ps1` 提供限定在本仓库内的预览/执行入口。
+> **执行说明（2026-10-22）：** 两个意外生成的 Claude 探针文件现已不存在。`coverage/` 与 `dist/` 仍是本地可再生产物，`packaging/windows/cleanup-local.ps1` 的预览模式仍会列出它们。目前没有生产源码被标为 `DELETE-SAFE`。
 
 ## 标记定义
 
@@ -54,7 +54,7 @@ DSH 包入口是 `src/index.ts`，Go 程序入口是 `cmd/errkb`。Go 函数仅�
 | --- | --- | --- | --- |
 | `dist/errkb.exe` 以及根安装器、校验和和资源文件 | `STALE-ARTIFACT` | 与 release 子目录处于不同实现时点，且二进制没有本地 Web 启动路由 | 从带 tag 提交重建前移除 |
 | `dist/release/errkb-0.1.0/` | `STALE-ARTIFACT` | 旧发布包；其 EXE 命令面与根 EXE、当前源码都不同 | 若需要历史证据则移到仓库外归档，否则本地删除 |
-| 整个 `dist/` | `REGENERATABLE` | 已被忽略的构建输出，约 53 MB，内部版本不一致 | EKB-060 前优先清空，再从同一个提交只构建一次 |
+| 整个 `dist/` | `REGENERATABLE` | 已被忽略的构建输出，约 53 MB，内部版本不一致 | WF-012 前清空，再从已验收 tag 只构建一次 |
 
 禁止从这些目录挑选部分二进制，再与新生成的安装器文件混用。下一份可验收发布必须让 EXE、安装器、manifest、SBOM 和校验和来自同一个带 tag 提交。
 
@@ -66,20 +66,18 @@ DSH 包入口是 `src/index.ts`，Go 程序入口是 `cmd/errkb`。Go 函数仅�
 | `lib/` | `ACTIVE` | 发布用 DSH bundle；`package.json.exports` 和 `files` 指向它 | 保留供包发布/商店审核；源码变化后用 `pnpm build` 重建 |
 | `lib/index.js.map` | `REGENERATABLE` | 已被 `.gitignore` 忽略的本地 sourcemap | 本地可选；不要因此删除 `lib/index.js` 或 `lib/index.d.ts` |
 
-## D. 未接入源码：当前不可达，但暂时不能删除
+## D. 原未接入代码——2026-10-22 已复核
 
-以下生产文件目前没有来自 `cmd/errkb` 的生产构造或调用，共约 **6,348 行**。测试只能证明行为存在，不代表用户现在能使用。
+初次审计中的大部分条目已经进入生产路径，不得删除：
 
-| 区域与路径 | 约行数 | 当前为什么不可达 | 删除前决定 |
-| --- | ---: | --- | --- |
-| 详情/设置/统计/通知 UI 模型：`internal/ui/detail.go`、`settings.go`、`stats.go`、`notify.go` | 1,523 | `errkb ui` 只调用托盘、状态和 omnibox；`ui --web` 只调用搜索 | 为 EKB-058/059 保留并接入 Web 路由；若取消对应产品功能才能整组删除 |
-| 详情与通知服务：`internal/service/edit_api.go`、`notifications.go` | 924 | 生产代码没有调用 `NewDetailService` 或 `NewNoticeService` | 为 EKB-058/059 保留；只有详情/编辑/通知退出产品范围才删除 |
-| 审计/统计视图后端：`internal/audit/log.go`、`stats.go` | 595 | 只有未接入统计模型和测试使用 | 为 EKB-059 保留，再通过 daemon/API/Web UI 暴露 |
-| 通用日志 Tailer：`internal/capture/tail.go` | 565 | 当前命令、daemon 启动路径和连接器均未调用 `NewTailer` | 接入配置化日志连接器，或者取消“通用日志采集”声明 |
-| 旧 Markdown 导入导出：`internal/database/markdown.go` | 1,190 | CLI/API 没有导入导出命令；当前只用于兼容和 seed 测试 | 标记为 `TEST-COMPAT`；承诺兼容 v0 Markdown 期间保留 |
-| PostgreSQL 管理器与备份库：`internal/service/pg_manage.go`、`internal/database/backup.go` | 1,551 | Go 命令没有构造 `PGManager`；安装器实际使用另一套 PowerShell 脚本 | EKB-060 决定由 Go 还是 PowerShell 管生命周期；干净 VM 测试覆盖胜出方案后再删另一套 |
+| 区域与路径 | 当前生产路径 | 标记 |
+| --- | --- | --- |
+| 详情/设置/统计模型与编辑服务 | `internal/webshell` → daemon API/backend → `NewDetailService`、统计、审计与设置 | `ACTIVE` |
+| 通用日志 Tailer | `errkb tail --file` → `cmd/errkb/tail.go` → `capture.NewTailer` | `ACTIVE` |
+| 旧 Markdown 交换 | `errkb markdown import|export` → `cmd/errkb/markdown.go` | `ACTIVE` + `TEST-COMPAT` |
+| PostgreSQL 管理器与备份/升级辅助 | `errkb pg` → `service.NewPGManager`；`postgres.ps1` 现在只负责转换安装器参数 | `ACTIVE` |
 
-这些文件是最大的源码瘦身机会，但现在删除会静默移除 EKB-058/059 计划能力、兼容承诺或升级回滚逻辑。应把它们视为“接入欠账”，而不是立刻清除的垃圾。
+目前真正未接入的只剩 `internal/ui/notify.go` 与 `internal/service/notifications.go`：两者有测试，但生产路径没有构造 `NewNoticeService` 或 `NewNotification`。在桌面通知被正式接入或明确移出范围前，将它们保留为 `DORMANT-CODE`。不得再把已接入的 UI、tail、Markdown 或 PostgreSQL 代码列为清理候选。
 
 ## E. 不能误删的历史和测试材料
 
@@ -88,11 +86,11 @@ DSH 包入口是 `src/index.ts`，Go 程序入口是 `cmd/errkb`。Go 函数仅�
 | `db/migrations/testdata/upgrade/` | `TEST-COMPAT` | 用于证明升级的真实旧 schema、配置、Markdown 和能力文件 |
 | `seeds/ERRORS.seed.md`、`seeds/ERRORS.seed.json` | `TEST-COMPAT` | TypeScript 与 Go 兼容测试使用的源 seed 与生成 seed |
 | `spec/corpus/` | `TEST-COMPAT` | 跨语言一致性和零错误合并语料 |
-| `.md workflow/` | `ACTIVE-WORK` | 只保留 4 份尚未完成或未完全验收的任务卡：EKB-052、EKB-055、EKB-056、EKB-060 |
+| `.md workflow/` | WF-011A/WF-011B 通过后为 `DELETE-SAFE` | 四张卡已被实施计划和工作流文档中的长期证据取代 |
 | `connectors/*/probe.md`、`capability.json` | `TEST-COMPAT` | 宿主支持声明的证据 |
 | `docs/*.md` 中英文组合 | `ACTIVE` | 用户要求的双语项目、状态和实现文档 |
 
-2026-10-22 已在确认长期证据写入 `implementation-plan.*` 后删除 56 份已完成 EKB 卡片。剩余 4 张卡片分别在通过自身验收条件后删除；最后一张关闭后再移除该目录。
+2026-10-22 已在确认长期证据写入 `implementation-plan.*` 后删除 56 份已完成 EKB 卡片。最后 4 张本地卡片可在 WF-011A/WF-011B 变绿后删除；WF-012 由 `current-workflow.*` 跟踪。
 
 ## F. 不应删除的活动代码
 
@@ -103,7 +101,7 @@ DSH 包入口是 `src/index.ts`，Go 程序入口是 `cmd/errkb`。Go 函数仅�
 - `internal/service/api.go`、`backend.go`、`client.go`、`daemon.go`、`doctor.go`、`pipe.go`、`queue.go`、`search_api.go`。
 - `internal/ui/status.go`、`tray.go`、`omnibox.go`、`omnibox_win.go`。
 - `internal/mcp/` 和 `internal/webshell/`。
-- `packaging/windows/`：仍负责生成和验收 Windows 产物，但 EKB-060 需要把它与当前 Web UI 对齐。
+- `packaging/windows/`：负责生成、安装和验收 Windows 产物；WF-011A/WF-011B 会验证其生命周期与恢复。
 
 ## 建议清理顺序
 
@@ -122,10 +120,9 @@ pwsh -File packaging/windows/cleanup-local.ps1 -Apply
 1. 删除两个意外生成的 Claude 探针文件。
 2. 清理 `coverage/` 和 A 节列出的四类 `dist` 临时/辅助内容。
 3. 把剩余 `dist/` 视为无效；只有恢复真实 Git 工作区并选定唯一提交后才重建。
-4. 完成 EKB-058 和 EKB-059，只删除最终 Web 实现确实替代掉的 UI/服务文件。
-5. 在 EKB-060 中只保留一套 PostgreSQL 生命周期实现。Go 和 PowerShell 两套并存但没有共享运行路径属于维护债务。
-6. 增加正式导入导出命令，或者明确废止 Markdown 互操作；决定前保留兼容实现和夹具。
-7. 增加真实日志连接器入口，或者从支持能力描述中移除通用日志采集。
+4. 保留已接入的 Web UI、tailer、Markdown 与 PostgreSQL 管理器代码；它们已有生产入口。
+5. 单独决定接入还是删除仍处于 dormant 状态的桌面通知模型/服务。
+6. WF-011A/WF-011B 变绿后删除四张已被取代的本地 EKB 卡；WF-012 继续保留在实时工作流文件中。
 
 ## 删除门槛
 

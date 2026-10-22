@@ -6,8 +6,8 @@ This page separates the **current installer source**, the **locally built accept
 candidate** and the **older release bundle**. They are not interchangeable.
 
 > **Status note (2026-10-22).** EKB-056 added `errkb db migrate`, the installer migration
-> step and HKCU logon startup to the current source. Those changes were rehearsed on the
-> development host, but the clean-VM run is still blocked. The existing files under
+> step and HKCU logon startup to the current source. WF-011A/WF-011B now exercise that
+> lifecycle and deterministic recovery in Windows CI. The existing files under
 > `dist\release\errkb-0.1.0\` predate EKB-056 and must not be presented as the current
 > installer. There is no supported public release yet. See
 > [`project-status.md`](project-status.md) and [`acceptance-vm.md`](acceptance-vm.md).
@@ -17,8 +17,8 @@ candidate** and the **older release bundle**. They are not interchangeable.
 - Windows 10 or 11, x64.
 - PostgreSQL 16 (EDB installer or an existing local instance). The installer can create a
   dedicated cluster; it never bundles a server.
-- A standard (non-administrator) user account. The installer elevates itself through UAC;
-  the application installs per user.
+- A standard (non-administrator) user account is supported. The application installs per
+  user and the installer does not require administrator elevation.
 - About 50 MB of disk for the application and binaries, plus the PostgreSQL data directory
   (the installer default is a dedicated cluster under `%LOCALAPPDATA%\errkb\pg\data`).
 
@@ -104,7 +104,7 @@ errkb daemon: schema migration check failed: applied version "", expected "0008"
 (run `errkb db migrate` first)
 ```
 
-Until one coherent tagged build passes clean-VM acceptance, the supported route is the
+Until WF-012 creates and verifies one coherent tagged build, the supported route is the
 development flow: build the current source, run `db migrate`, start the daemon with an
 explicit DSN, and run `doctor`.
 
@@ -190,13 +190,13 @@ path (a guard against deleting the wrong directory).
 | `the local API is not reachable` | The daemon is not running or the pipe name differs. Start `errkb daemon` and check `errkb doctor`. |
 | `database: connection refused` | PostgreSQL is not running, or the DSN points at the wrong port. Check `errkb doctor`. |
 | `flag provided but not defined: -web` | The EXE does not contain the local Web-shell integration. Existing release binaries cannot open it. |
-| `ui --web` waits and exits 4 | The daemon is down and the UI has no DSN. Credential-aware installed startup is unfinished; start the managed cluster/daemon or pass a DSN during development. |
+| `ui --web` waits and exits 4 | The daemon could not be recovered from installed credentials. Check `pg\credentials.json`, the managed cluster and the daemon log; pass a DSN during development. |
 | Port 5433 already in use | Another cluster is listening. Choose another port in the wizard or stop the other instance. |
 | Daemon log shows an access error under `%TEMP%` | Windows denies log writes in that directory for this process. Leave the default paths under `%LOCALAPPDATA%`. |
 
 ## Related
 
-- [`docs/acceptance-vm.md`](acceptance-vm.md) — clean-VM harness, rehearsal evidence, blockers.
+- [`docs/acceptance-vm.md`](acceptance-vm.md) — mandatory Windows CI acceptance, evidence and optional manual review.
 - [`docs/project-status.md`](project-status.md) — current source/artifact truth and release blockers.
 - [`docs/toolbox-ui.md`](toolbox-ui.md) — UI status and EKB-057–060 scope.
 - [`docs/privacy.md`](privacy.md) — what is stored and how it is protected.

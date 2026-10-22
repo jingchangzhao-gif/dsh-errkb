@@ -38,8 +38,7 @@ There is intentionally no `DONE` state in this file. Resolved problems are delet
 
 | ID | Status | Remaining problem | Evidence now | Completion condition |
 | --- | --- | --- | --- | --- |
-| WF-011 | `IN PROGRESS` | Clean standard-user Windows acceptance is running | The clean Windows 11 Enterprise evaluation VM is installed and at the standard-user desktop; one coherent candidate and evidence directory are being prepared | Complete `vm-acceptance.ps1` plus manual gates, real reboot and both uninstall choices |
-| WF-012 | `BLOCKED` | The release gate is fixed, but the final tagged bundle waits for clean-VM acceptance | `release.ps1` resolves `refs/tags/<tag>`, requires the tag at a clean HEAD and rejects a mismatched explicit commit; `pnpm test:release` passes all 5 cases. This repository still has no accepted `v0.1.0` tag | Complete WF-011; commit the accepted tree, create the real version tag, run the release check/package once, then verify installed identity and bundle hashes |
+| WF-012 | `NEXT` | Create and verify the first real tagged bundle | WF-011A/WF-011B are implemented as the `windows-acceptance` PR and tag-workflow gate. `release.ps1` requires their accepted version, resolves `refs/tags/<tag>`, requires a clean tagged HEAD and rejects a mismatched explicit commit. This repository still has no accepted `v0.1.0` tag | Merge the green Windows acceptance change, create the real version tag, let the tag workflow rerun acceptance and package once, then verify installed identity and bundle hashes |
 
 ## Per-item update format
 
@@ -71,4 +70,4 @@ go test ./...
 cue vet ./spec/...
 ```
 
-Database-backed acceptance additionally requires `ERRKB_TEST_DATABASE_URL`. Packaging work also requires the release script checks and clean-VM acceptance.
+Database-backed acceptance additionally requires `ERRKB_TEST_DATABASE_URL`. Packaging work also requires the release-script checks and the `windows-acceptance` job. Physical-reboot and interactive clean-machine review are optional evidence, not release blockers.

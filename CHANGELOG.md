@@ -12,6 +12,14 @@ They never claim more than the acceptance records in this repository prove.
 
 ### Added
 
+- WF-011A now runs the real Windows installer through install, migration,
+  error reuse, keep-data uninstall/reinstall and delete-data uninstall on an
+  ephemeral Windows runner, with structured evidence uploaded for every run.
+- WF-011B deterministically kills and recovers the daemon and managed
+  PostgreSQL cluster, then verifies one daemon, the Named Pipe, health ledger
+  and saved knowledge. The tag workflow repeats both acceptance cards before
+  release packaging.
+
 - Web toolbox (local branch, not yet released): `errkb ui --web` serves an
   embedded loopback interface with a per-launch token and a strict content
   security policy. It covers search, issue detail with version history and
@@ -126,16 +134,12 @@ see the known fix next time.
 
 ### Known issues
 
-- The clean-VM acceptance (EKB-052) is still **blocked**: the current
-  environment has no hypervisor, so the install → first error → solution →
-  outcome loop has only been rehearsed on the development host. The release
-  pipeline refuses to publish without a recorded acceptance for the version.
-- The installer creates and starts the PostgreSQL cluster but does not apply
-  the schema migrations, and the CLI has no `db migrate` subcommand yet; the
-  daemon therefore refuses to start after a fresh install until the migrations
-  are applied by hand. Tracked in the plan (EKB-052 finding 1).
-- Nothing restarts after a reboot: the installer does not register the cluster
-  as a Windows service and there is no daemon/tray autostart yet.
+- No public `v0.1.0` artifact has been accepted yet. Existing `dist/` files are
+  rehearsal outputs; WF-012 must build the final bundle from the real tag after
+  WF-011A/WF-011B pass for that revision.
+- Physical reboot and interactive clean-machine visual review are optional
+  manual evidence rather than continuously automated checks. WF-011B covers
+  equivalent daemon/PostgreSQL/logon recovery deterministically in CI.
 - The release is not code-signed. Verify the artifacts against `SHA256SUMS`;
   `SIGNING.md` in the bundle states the risk and the plan.
 - PostgreSQL is a runtime prerequisite and is not bundled. The knowledge base

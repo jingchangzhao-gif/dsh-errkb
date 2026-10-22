@@ -17,6 +17,8 @@ $ErrorActionPreference = 'Stop'
 $sourceScript = Join-Path $PSScriptRoot 'release.ps1'
 $installerScript = Join-Path $PSScriptRoot 'installer.iss'
 $vmAcceptanceScript = Join-Path $PSScriptRoot 'vm-acceptance.ps1'
+$ciAcceptanceScript = Join-Path $PSScriptRoot 'ci-acceptance.ps1'
+$recoveryAcceptanceScript = Join-Path $PSScriptRoot 'recovery-acceptance.ps1'
 $postgresScript = Join-Path $PSScriptRoot 'postgres.ps1'
 $shell = Get-Command pwsh -ErrorAction Stop
 $tempBase = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\') + '\'
@@ -42,7 +44,7 @@ function Write-TestFile([string]$RelativePath, [string]$Content) {
 
 function Assert-ReleaseCheck([string]$Name, [bool]$ShouldPass, [string]$ExpectedPattern) {
     $output = @(& $shell.Source -NoProfile -File (Join-Path $testRoot 'packaging\windows\release.ps1') `
-            -Mode check -Version $version -Tag $tag -VmAcceptanceVersion $version 2>&1)
+            -Mode check -Version $version -Tag $tag -WindowsAcceptanceVersion $version 2>&1)
     $exitCode = $LASTEXITCODE
     $text = $output -join "`n"
 
@@ -60,13 +62,24 @@ function Assert-ReleaseCheck([string]$Name, [bool]$ShouldPass, [string]$Expected
 
 function Assert-MismatchedBuildCommitRejected {
     $output = @(& $shell.Source -NoProfile -File (Join-Path $testRoot 'packaging\windows\release.ps1') `
-            -Mode package -Version $version -Tag $tag -Commit 'deadbeef' -VmAcceptanceVersion $version 2>&1)
+            -Mode package -Version $version -Tag $tag -Commit 'deadbeef' -WindowsAcceptanceVersion $version 2>&1)
     $exitCode = $LASTEXITCODE
     $text = $output -join "`n"
     if ($exitCode -eq 0 -or $text -notmatch "does not match Git tag") {
         throw "mismatched explicit build commit was not rejected correctly (exit $exitCode):`n$text"
     }
     Write-Output 'PASS mismatched explicit build commit rejected'
+}
+
+function Assert-MissingWindowsAcceptanceRejected {
+    $output = @(& $shell.Source -NoProfile -File (Join-Path $testRoot 'packaging\windows\release.ps1') `
+            -Mode check -Version $version -Tag $tag -WindowsAcceptanceVersion '' 2>&1)
+    $exitCode = $LASTEXITCODE
+    $text = $output -join "`n"
+    if ($exitCode -eq 0 -or $text -notmatch 'no Windows CI acceptance result') {
+        throw "missing Windows acceptance was not rejected correctly (exit $exitCode):`n$text"
+    }
+    Write-Output 'PASS missing Windows CI acceptance rejected'
 }
 
 function Assert-SilentInstallDoesNotLaunchConsole {
@@ -79,6 +92,33 @@ function Assert-SilentInstallDoesNotLaunchConsole {
     Write-Output 'PASS silent install skips the interactive version command'
 }
 
+function Assert-SilentInstallReusesRetainedCluster {
+    $installerSource = Get-Content -LiteralPath $installerScript -Raw
+    if ($installerSource -notmatch '\(not WizardSilent\(\)\) and\s*\(MsgBox\(' -or
+        $installerSource -notmatch 'ClusterDataPresent\(\)') {
+        throw 'silent reinstall must reuse retained cluster data without opening an unsuppressible script dialog'
+    }
+    Write-Output 'PASS silent reinstall reuses retained cluster data'
+}
+
+function Assert-SilentUninstallPersistsRetentionChoice {
+    $installerSource = Get-Content -LiteralPath $installerScript -Raw
+    $postgresSource = Get-Content -LiteralPath $postgresScript -Raw
+    foreach ($required in @('UninstallChoicePresent', '.errkb-delete-data', '.errkb-keep-data', 'UninstallSilent()')) {
+        if ($installerSource -notmatch [regex]::Escape($required)) {
+            throw "silent uninstall must persist its retention choice across the uninstaller clone (missing $required)"
+        }
+    }
+    if ($postgresSource -notmatch 'if \(Test-Path \$keepMarker\)' -or
+        $postgresSource -notmatch 'if \(Test-Path \$marker\)') {
+        throw 'postgres.ps1 must clear both transient choice markers before Inno final cleanup'
+    }
+    if ($installerSource -notmatch 'Type:[ ]*dirifempty;[ ]*Name:[ ]*"\{app\}"') {
+        throw 'the uninstaller must register a safe final cleanup for an empty application root'
+    }
+    Write-Output 'PASS silent uninstall persists its retention choice'
+}
+
 function Assert-AcceptanceWaitsForDirectProcessOnly {
     $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
     if ($acceptanceSource -match 'Start-Process\s+-FilePath\s+\$FilePath[^\r\n]*\s-Wait\b' -or
@@ -86,6 +126,15 @@ function Assert-AcceptanceWaitsForDirectProcessOnly {
         throw 'VM acceptance must wait for the installer process only; -Wait hangs on the persistent PostgreSQL descendant'
     }
     Write-Output 'PASS VM acceptance ignores persistent installer descendants'
+}
+
+function Assert-AcceptanceUsesAbsoluteEvidencePaths {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    if ($acceptanceSource -notmatch '\$EvidenceDir\s*=\s*\(Get-Item\s+-LiteralPath\s+\$EvidenceDir\)\.FullName' -or
+        $acceptanceSource -notmatch '\$Name\.command\.txt') {
+        throw 'VM acceptance must resolve evidence paths before passing /LOG to the cloned Inno uninstaller and retain the invoked command'
+    }
+    Write-Output 'PASS VM acceptance uses absolute evidence paths'
 }
 
 function Assert-AcceptanceUsesInstalledMigrations {
@@ -100,6 +149,38 @@ function Assert-AcceptanceUsesInstalledMigrations {
         throw 'VM acceptance must stop the installer-started daemon before binding its evidence-scoped pipe'
     }
     Write-Output 'PASS VM acceptance uses installed migrations'
+}
+
+function Assert-RetentionAcceptanceOwnsDaemon {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    $retention = [regex]::Match(
+        $acceptanceSource,
+        'function Step-Retention \{[\s\S]*?(?=# ---------------------------------------------------------------- reboot)'
+    ).Value
+    if ([string]::IsNullOrWhiteSpace($retention) -or
+        $retention -notmatch 'Start-ErkbDaemon' -or
+        $retention -notmatch 'finally\s*\{\s*Stop-ErkbDaemon') {
+        throw 'retained-data acceptance must own a healthy daemon for the complete search/reuse assertion'
+    }
+    Write-Output 'PASS retained-data acceptance owns its daemon lifecycle'
+}
+
+function Assert-DeleteUninstallWaitsForCloneCleanup {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    if ($acceptanceSource -notmatch 'function Wait-PathAbsent' -or
+        $acceptanceSource -notmatch '\$appDirectoryDeleted\s*=\s*Wait-PathAbsent\s+-Path\s+\$AppDir') {
+        throw 'delete-data acceptance must wait for Inno Setup clone cleanup before asserting that the application directory is absent'
+    }
+    Write-Output 'PASS delete-data acceptance waits for Inno clone cleanup'
+}
+
+function Assert-DeleteUninstallOwnsApplicationRootCleanup {
+    $installerSource = Get-Content -LiteralPath $installerScript -Raw
+    if ($installerSource -notmatch '\[UninstallDelete\][\s\S]*?Type:[ ]*dirifempty;[ ]*Name:[ ]*"\{app\}"' -or
+        $installerSource -match 'Type:[ ]*filesandordirs;[ ]*Name:[ ]*"\{app\}"') {
+        throw 'the uninstaller must remove only an empty application root so retained data is preserved safely'
+    }
+    Write-Output 'PASS uninstall safely removes an empty application root'
 }
 
 function Assert-AcceptanceAllowsFreshConnectorState {
@@ -161,12 +242,76 @@ function Assert-RetainedClusterCanBeReused {
     Write-Output 'PASS retained cluster can be reused'
 }
 
+function Assert-CiAcceptanceCoversLifecycle {
+    $source = Get-Content -LiteralPath $ciAcceptanceScript -Raw
+    $phaseSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    $orderedStages = @(
+        "Invoke-AcceptanceStage '03-install'",
+        "Invoke-AcceptanceStage '04-first-run'",
+        "Invoke-AcceptanceStage '05-error-reuse-loop'",
+        'Invoke-RecoveryStage',
+        "Invoke-AcceptanceStage '07-uninstall-keep'",
+        "Invoke-AcceptanceStage '08-reinstall-retained'",
+        "Invoke-AcceptanceStage '10-retained-data'",
+        "Invoke-AcceptanceStage '11-uninstall-delete'"
+    )
+    $offset = -1
+    foreach ($stage in $orderedStages) {
+        $next = $source.IndexOf($stage, $offset + 1, [System.StringComparison]::Ordinal)
+        if ($next -lt 0) {
+            throw "WF-011A orchestrator is missing stage $stage"
+        }
+        if ($next -le $offset) {
+            throw "WF-011A lifecycle stages are not in the required order"
+        }
+        $offset = $next
+    }
+    if ($source -notmatch "'-UninstallData', 'keep'" -or
+        $source -notmatch "'-UninstallData', 'delete'" -or
+        $source -notmatch "ExpectedConnectorState', 'existing'" -or
+        $source -notmatch "results\.json") {
+        throw 'WF-011A must cover both uninstall choices, retained-state validation and combined evidence'
+    }
+    if ($phaseSource -notmatch [regex]::Escape("if (`$keep) { '/KEEP_DATA=1' } else { '/DELETE_DATA=1' }")) {
+        throw 'WF-011A silent uninstall must answer both sides of the retention prompt explicitly'
+    }
+    Write-Output 'PASS WF-011A covers the unattended Windows lifecycle'
+}
+
+function Assert-RecoveryAcceptanceCoversFailures {
+    $source = Get-Content -LiteralPath $recoveryAcceptanceScript -Raw
+    foreach ($required in @(
+            'autostart configuration',
+            'single instance after replay',
+            'daemon failure isolated',
+            'full failure simulated',
+            'health after recovery',
+            'knowledge after recovery')) {
+        if ($source -notmatch [regex]::Escape($required)) {
+            throw "WF-011B recovery acceptance is missing '$required'"
+        }
+    }
+    if ($source -notmatch 'postgres\.ps1' -or $source -notmatch 'Named Pipe' -or
+        $source -notmatch 'Get-InstalledDaemonProcesses') {
+        throw 'WF-011B must exercise PostgreSQL, the Named Pipe and exact installed-process counting'
+    }
+    Write-Output 'PASS WF-011B covers deterministic startup recovery'
+}
+
 try {
     Assert-SilentInstallDoesNotLaunchConsole
+    Assert-SilentInstallReusesRetainedCluster
+    Assert-SilentUninstallPersistsRetentionChoice
     Assert-AcceptanceWaitsForDirectProcessOnly
+    Assert-AcceptanceUsesAbsoluteEvidencePaths
     Assert-AcceptanceUsesInstalledMigrations
+    Assert-RetentionAcceptanceOwnsDaemon
+    Assert-DeleteUninstallWaitsForCloneCleanup
+    Assert-DeleteUninstallOwnsApplicationRootCleanup
     Assert-AcceptanceAllowsFreshConnectorState
     Assert-RetainedClusterCanBeReused
+    Assert-CiAcceptanceCoversLifecycle
+    Assert-RecoveryAcceptanceCoversFailures
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'packaging\windows') -Force | Out-Null
     Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $testRoot 'packaging\windows\release.ps1')
     Write-TestFile 'CHANGELOG.md' "# Changelog`n`n## [$version] - 2099-01-01`n`n- Release gate fixture.`n"
@@ -196,8 +341,9 @@ try {
     Remove-Item -LiteralPath (Join-Path $testRoot 'untracked.txt') -Force
 
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
+    Assert-MissingWindowsAcceptanceRejected
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 10 passed, 0 failed'
+    Write-Output 'release gate tests: 19 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and
