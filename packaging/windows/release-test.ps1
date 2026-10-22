@@ -171,6 +171,16 @@ function Assert-DeleteUninstallWaitsForCloneCleanup {
     Write-Output 'PASS delete-data acceptance waits for Inno clone cleanup'
 }
 
+function Assert-DeleteUninstallOwnsApplicationRootCleanup {
+    $installerSource = Get-Content -LiteralPath $installerScript -Raw
+    if ($installerSource -notmatch '\[UninstallDelete\][\s\S]*?Type:\s*filesandordirs;\s*Name:\s*"\{app\}";\s*Check:\s*DeleteApplicationRoot' -or
+        $installerSource -notmatch 'function DeleteApplicationRoot\(\): Boolean;' -or
+        $installerSource -notmatch 'DeleteDataOnUninstall\s*:=\s*FileExists\(DeleteMarker\)') {
+        throw 'delete-data uninstall must remove the exact application root while keep-data uninstall preserves it'
+    }
+    Write-Output 'PASS delete-data uninstall owns application-root cleanup'
+}
+
 function Assert-AcceptanceAllowsFreshConnectorState {
     $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
     if ($acceptanceSource -notmatch "degraded with zero registered connectors" -or
@@ -295,6 +305,7 @@ try {
     Assert-AcceptanceUsesInstalledMigrations
     Assert-RetentionAcceptanceOwnsDaemon
     Assert-DeleteUninstallWaitsForCloneCleanup
+    Assert-DeleteUninstallOwnsApplicationRootCleanup
     Assert-AcceptanceAllowsFreshConnectorState
     Assert-RetainedClusterCanBeReused
     Assert-CiAcceptanceCoversLifecycle
@@ -330,7 +341,7 @@ try {
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MissingWindowsAcceptanceRejected
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 18 passed, 0 failed'
+    Write-Output 'release gate tests: 19 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and

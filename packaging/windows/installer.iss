@@ -87,11 +87,19 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 ; also works in the second phase that actually runs [UninstallRun].
 Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort} -Choice {param:DELETE_DATA|keep}"; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbPg"
 
+[UninstallDelete]
+; A retained-data reinstall starts with an application directory that already
+; exists, so Inno does not own every parent directory created during that run.
+; On the explicit delete-data path, remove the exact per-user application root
+; after [UninstallRun] has stopped PostgreSQL and deleted its data.
+Type: filesandordirs; Name: "{app}"; Check: DeleteApplicationRoot
+
 [Code]
 var
   ClusterPage: TInputOptionWizardPage;
   PortPage: TInputQueryWizardPage;
   PortChosen: Integer;
+  DeleteDataOnUninstall: Boolean;
 
 function PostgresBinPresent(): Boolean;
 var
@@ -238,7 +246,8 @@ var
 begin
   DeleteMarker := ExpandConstant('{app}\.errkb-delete-data');
   KeepMarker := ExpandConstant('{app}\.errkb-keep-data');
-  Result := FileExists(DeleteMarker) or FileExists(KeepMarker);
+  DeleteDataOnUninstall := FileExists(DeleteMarker);
+  Result := DeleteDataOnUninstall or FileExists(KeepMarker);
 end;
 
 procedure SetUninstallChoice(Remove: Boolean);
@@ -248,12 +257,18 @@ var
 begin
   DeleteMarker := ExpandConstant('{app}\.errkb-delete-data');
   KeepMarker := ExpandConstant('{app}\.errkb-keep-data');
+  DeleteDataOnUninstall := Remove;
   if FileExists(DeleteMarker) then DeleteFile(DeleteMarker);
   if FileExists(KeepMarker) then DeleteFile(KeepMarker);
   if Remove then
     SaveStringToFile(DeleteMarker, '1', False)
   else
     SaveStringToFile(KeepMarker, '1', False);
+end;
+
+function DeleteApplicationRoot(): Boolean;
+begin
+  Result := DeleteDataOnUninstall;
 end;
 
 function InitializeUninstall(): Boolean;
