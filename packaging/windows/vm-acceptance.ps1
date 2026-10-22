@@ -70,6 +70,7 @@ $RepoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $AppDir = Join-Path $env:LOCALAPPDATA 'errkb'
 $Exe = Join-Path $AppDir 'errkb.exe'
 $Credentials = Join-Path $AppDir 'pg\credentials.json'
+$Migrations = Join-Path $AppDir 'migrations'
 $PipeName = 'errkb'
 
 if ([string]::IsNullOrWhiteSpace($Installer)) {
@@ -236,7 +237,8 @@ function Start-ErkbDaemon {
     $dsn = Get-Dsn
     $health = Join-Path $EvidenceDir 'health.json'
     $log = Join-Path $EvidenceDir 'daemon.log'
-    $arguments = @('daemon', '--dsn', ('"' + $dsn + '"'), '--pipe', ('"\\.\pipe\' + $PipeName + '"'),
+    $arguments = @('daemon', '--dsn', ('"' + $dsn + '"'), '--migrations', ('"' + $Migrations + '"'),
+        '--pipe', ('"\\.\pipe\' + $PipeName + '"'),
         '--lock-name', 'Local\errkb-vm-acceptance', '--health-file', ('"' + $health + '"'), '--log-file', ('"' + $log + '"'))
     $process = Start-Process -FilePath $Exe -ArgumentList $arguments -PassThru -WindowStyle Hidden
     $deadline = (Get-Date).AddSeconds(45)
@@ -343,16 +345,22 @@ function Step-Install {
 function Step-FirstRun {
     Write-Host "`n== first run ==" -ForegroundColor Cyan
     try { $dsn = Get-Dsn } catch { Assert-Step 'credential file readable' 'read the DSN from credentials.json' $false $_.Exception.Message; return }
-    $doctor = Invoke-Logged 'doctor-first' { & $Exe doctor --dsn $dsn --json }
+    $doctor = Invoke-Logged 'doctor-first' { & $Exe doctor --dsn $dsn --migrations $Migrations --json }
     try { $report = $doctor.Output | ConvertFrom-Json } catch { $report = $null }
     if ($null -eq $report) { Assert-Step 'doctor output' 'valid JSON' $false 'doctor did not print JSON'; return }
     $byName = @{}
     foreach ($check in $report.checks) { $byName[$check.name] = $check }
-    foreach ($required in @('database', 'migrations', 'extension', 'connectors')) {
+    foreach ($required in @('database', 'migrations', 'extension')) {
         $check = $byName[$required]
         $ok = ($null -ne $check) -and ($check.status -eq 'ok')
         Assert-Step ("doctor " + $required) 'status ok' $ok ('status=' + $(if ($check) { $check.status } else { 'missing' }))
     }
+    $connectorCheck = $byName['connectors']
+    $freshConnectorState = ($null -ne $connectorCheck) -and
+        ($connectorCheck.status -eq 'degraded') -and
+        ([string]$connectorCheck.detail.count -eq '0')
+    Assert-Step 'doctor connectors' 'degraded with zero registered connectors on a fresh install' $freshConnectorState `
+        ('status={0}, count={1}' -f $(if ($connectorCheck) { $connectorCheck.status } else { 'missing' }), $(if ($connectorCheck) { $connectorCheck.detail.count } else { '?' }))
     $pipeCheck = $byName['pipe']
     Add-Result -Step 'doctor default: Named Pipe' -Expected 'pipe enabled by default' -Actual ('config: ' + $(if ($pipeCheck) { $pipeCheck.summary } else { 'unknown' })) -Pass $true -Status MANUAL
     $process = $null
@@ -367,9 +375,14 @@ function Step-FirstRun {
         Assert-Step 'pipe listening' ("\\.\pipe\{0} accepts a client" -f $PipeName) (Test-Pipe $PipeName) ('pipe reachable=' + (Test-Pipe $PipeName))
         $listeners = @(Get-NetTCPConnection -OwningProcess $process.Id -State Listen -ErrorAction SilentlyContinue)
         Assert-Step 'HTTP disabled' 'the daemon opens no TCP listener' ($listeners.Count -eq 0) ('{0} listener(s)' -f $listeners.Count)
-        $doctor2 = Invoke-Logged 'doctor-daemon' { & $Exe doctor --dsn (Get-Dsn) --json }
+        $doctor2 = Invoke-Logged 'doctor-daemon' { & $Exe doctor --dsn (Get-Dsn) --migrations $Migrations --json }
         try { $report2 = $doctor2.Output | ConvertFrom-Json } catch { $report2 = $null }
-        Assert-Step 'doctor all green' 'status ok with the daemon running' (($null -ne $report2) -and ($report2.status -eq 'ok')) ('status=' + $(if ($report2) { $report2.status } else { 'invalid json' }))
+        $nonOK = if ($report2) { @($report2.checks | Where-Object { $_.status -ne 'ok' }) } else { @() }
+        $expectedFreshState = ($null -ne $report2) -and ($report2.status -eq 'degraded') -and
+            ($nonOK.Count -eq 1) -and ($nonOK[0].name -eq 'connectors') -and
+            ($nonOK[0].status -eq 'degraded') -and ([string]$nonOK[0].detail.count -eq '0')
+        Assert-Step 'doctor operational' 'all runtime checks ok; only zero connectors is degraded' $expectedFreshState `
+            ('status={0}, non-ok={1}' -f $(if ($report2) { $report2.status } else { 'invalid json' }), $(if ($nonOK.Count) { ($nonOK.name -join ',') } else { 'none' }))
     } finally {
         Stop-ErkbDaemon -Process $process
     }

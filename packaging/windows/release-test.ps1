@@ -87,9 +87,30 @@ function Assert-AcceptanceWaitsForDirectProcessOnly {
     Write-Output 'PASS VM acceptance ignores persistent installer descendants'
 }
 
+function Assert-AcceptanceUsesInstalledMigrations {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    if ($acceptanceSource -notmatch '\$Migrations\s*=\s*Join-Path\s+\$AppDir\s+''migrations''' -or
+        $acceptanceSource -notmatch "@\('daemon',[\s\S]*?'--migrations'" -or
+        ([regex]::Matches($acceptanceSource, 'doctor[^\r\n]*--migrations\s+\$Migrations')).Count -lt 2) {
+        throw 'VM acceptance must point daemon and both doctor calls at the migrations installed next to errkb.exe'
+    }
+    Write-Output 'PASS VM acceptance uses installed migrations'
+}
+
+function Assert-AcceptanceAllowsFreshConnectorState {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    if ($acceptanceSource -notmatch "doctor connectors'[\s\S]*?degraded with zero registered connectors" -or
+        $acceptanceSource -match "foreach \(\$required in @\('database', 'migrations', 'extension', 'connectors'\)\)") {
+        throw 'VM acceptance must treat zero registered connectors as the expected degraded state on a fresh install'
+    }
+    Write-Output 'PASS VM acceptance allows the fresh connector state'
+}
+
 try {
     Assert-SilentInstallDoesNotLaunchConsole
     Assert-AcceptanceWaitsForDirectProcessOnly
+    Assert-AcceptanceUsesInstalledMigrations
+    Assert-AcceptanceAllowsFreshConnectorState
     New-Item -ItemType Directory -Path (Join-Path $testRoot 'packaging\windows') -Force | Out-Null
     Copy-Item -LiteralPath $sourceScript -Destination (Join-Path $testRoot 'packaging\windows\release.ps1')
     Write-TestFile 'CHANGELOG.md' "# Changelog`n`n## [$version] - 2099-01-01`n`n- Release gate fixture.`n"
@@ -120,7 +141,7 @@ try {
 
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 7 passed, 0 failed'
+    Write-Output 'release gate tests: 9 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and
