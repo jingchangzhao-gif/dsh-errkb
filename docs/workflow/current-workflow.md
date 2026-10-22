@@ -38,7 +38,7 @@ There is intentionally no `DONE` state in this file. Resolved problems are delet
 
 | ID | Status | Remaining problem | Evidence now | Completion condition |
 | --- | --- | --- | --- | --- |
-| WF-012 | `NEXT` | Create and verify the first real tagged bundle | WF-011A/WF-011B are implemented as the `windows-acceptance` PR and tag-workflow gate. `release.ps1` requires their accepted version, resolves `refs/tags/<tag>`, requires a clean tagged HEAD and rejects a mismatched explicit commit. This repository still has no accepted `v0.1.0` tag | Merge the green Windows acceptance change, create the real version tag, let the tag workflow rerun acceptance and package once, then verify installed identity and bundle hashes |
+| WF-012 | `IN PROGRESS` | Create and verify the first real tagged bundle | PR #91 is merged at `4334539`; WF-011A/WF-011B and every required check passed, and `windows-acceptance` is now a protected required check. Release notes are being finalized before tagging | Merge this release-metadata update, create `v0.1.0`, let the tag workflow rerun acceptance and package once, then verify installed identity and bundle hashes |
 
 ## Per-item update format
 
