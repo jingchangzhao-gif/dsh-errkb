@@ -162,6 +162,15 @@ function Assert-RetentionAcceptanceOwnsDaemon {
     Write-Output 'PASS retained-data acceptance owns its daemon lifecycle'
 }
 
+function Assert-DeleteUninstallWaitsForCloneCleanup {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    if ($acceptanceSource -notmatch 'function Wait-PathAbsent' -or
+        $acceptanceSource -notmatch '\$appDirectoryDeleted\s*=\s*Wait-PathAbsent\s+-Path\s+\$AppDir') {
+        throw 'delete-data acceptance must wait for Inno Setup clone cleanup before asserting that the application directory is absent'
+    }
+    Write-Output 'PASS delete-data acceptance waits for Inno clone cleanup'
+}
+
 function Assert-AcceptanceAllowsFreshConnectorState {
     $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
     if ($acceptanceSource -notmatch "degraded with zero registered connectors" -or
@@ -285,6 +294,7 @@ try {
     Assert-AcceptanceUsesAbsoluteEvidencePaths
     Assert-AcceptanceUsesInstalledMigrations
     Assert-RetentionAcceptanceOwnsDaemon
+    Assert-DeleteUninstallWaitsForCloneCleanup
     Assert-AcceptanceAllowsFreshConnectorState
     Assert-RetainedClusterCanBeReused
     Assert-CiAcceptanceCoversLifecycle
@@ -320,7 +330,7 @@ try {
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MissingWindowsAcceptanceRejected
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 17 passed, 0 failed'
+    Write-Output 'release gate tests: 18 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and

@@ -204,6 +204,16 @@ function Test-Pipe {
     }
 }
 
+function Wait-PathAbsent {
+    param([string]$Path, [int]$TimeoutSeconds = 15)
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    do {
+        if (-not (Test-Path -LiteralPath $Path)) { return $true }
+        Start-Sleep -Milliseconds 200
+    } while ((Get-Date) -lt $deadline)
+    return (-not (Test-Path -LiteralPath $Path))
+}
+
 function Get-ErkbCredentials {
     if (-not (Test-Path $Credentials)) { throw "credential file $Credentials does not exist" }
     return Get-Content $Credentials -Raw | ConvertFrom-Json
@@ -588,7 +598,11 @@ function Step-Uninstall {
         Add-Manual 'data kept migration' 'reinstall once and confirm the retained cluster is detected and reused (the wizard offers to reuse it)'
     } else {
         Assert-Step 'data deleted' 'the data directory is gone' (-not (Test-Path (Join-Path $AppDir 'pg\data'))) 'deleted'
-        Assert-Step 'application directory deleted' 'the complete per-user application directory is gone' (-not (Test-Path $AppDir)) `
+        # Inno returns the original uninstaller's exit code before its temporary
+        # clone removes unins000.exe and the now-empty application directory.
+        # Give that documented second-phase cleanup a short bounded grace period.
+        $appDirectoryDeleted = Wait-PathAbsent -Path $AppDir
+        Assert-Step 'application directory deleted' 'the complete per-user application directory is gone' $appDirectoryDeleted `
             ($(if (Test-Path $AppDir) { 'present' } else { 'deleted' }))
     }
 }
