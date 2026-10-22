@@ -511,18 +511,24 @@ function Step-Retention {
         Assert-Step 'retention application' 'errkb.exe is installed again' $false 'errkb.exe missing'
         return
     }
-    $search = Invoke-Logged 'retention-search' { & $Exe search 'command exited with status 9' --json }
-    try { $report = $search.Output | ConvertFrom-Json } catch { $report = $null }
-    $hasCandidate = ($search.ExitCode -eq 0) -and ($null -ne $report) -and ($report.candidates.Count -ge 1)
-    Assert-Step 'retained issue searchable' 'the pre-uninstall issue is still returned after reinstall' $hasCandidate `
-        ('candidates=' + $(if ($report) { $report.candidates.Count } else { 'invalid json' })) $search.Evidence
+    $process = $null
+    try { $process = Start-ErkbDaemon } catch { Assert-Step 'retention daemon' 'daemon healthy' $false $_.Exception.Message; return }
+    try {
+        $search = Invoke-Logged 'retention-search' { & $Exe search 'command exited with status 9' --json }
+        try { $report = $search.Output | ConvertFrom-Json } catch { $report = $null }
+        $hasCandidate = ($search.ExitCode -eq 0) -and ($null -ne $report) -and ($report.candidates.Count -ge 1)
+        Assert-Step 'retained issue searchable' 'the pre-uninstall issue is still returned after reinstall' $hasCandidate `
+            ('candidates=' + $(if ($report) { $report.candidates.Count } else { 'invalid json' })) $search.Evidence
 
-    $third = Invoke-Logged 'retention-run' {
-        & $Exe run --connector 'vm-acceptance' --session 'retained-data' --project 'vm-acceptance' --json -- cmd.exe /c 'exit 9'
+        $third = Invoke-Logged 'retention-run' {
+            & $Exe run --connector 'vm-acceptance' --session 'retained-data' --project 'vm-acceptance' --json -- cmd.exe /c 'exit 9'
+        }
+        $showsFix = $third.Output.Contains('Check the exit code and the command line before rerunning.')
+        Assert-Step 'retained solution reused' 'the known solution is returned after reinstall' $showsFix `
+            ('contains fix={0}' -f $showsFix) $third.Evidence
+    } finally {
+        Stop-ErkbDaemon -Process $process
     }
-    $showsFix = $third.Output.Contains('Check the exit code and the command line before rerunning.')
-    Assert-Step 'retained solution reused' 'the known solution is returned after reinstall' $showsFix `
-        ('contains fix={0}' -f $showsFix) $third.Evidence
 }
 
 # ---------------------------------------------------------------- reboot

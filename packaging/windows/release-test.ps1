@@ -148,6 +148,20 @@ function Assert-AcceptanceUsesInstalledMigrations {
     Write-Output 'PASS VM acceptance uses installed migrations'
 }
 
+function Assert-RetentionAcceptanceOwnsDaemon {
+    $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
+    $retention = [regex]::Match(
+        $acceptanceSource,
+        'function Step-Retention \{[\s\S]*?(?=# ---------------------------------------------------------------- reboot)'
+    ).Value
+    if ([string]::IsNullOrWhiteSpace($retention) -or
+        $retention -notmatch 'Start-ErkbDaemon' -or
+        $retention -notmatch 'finally\s*\{\s*Stop-ErkbDaemon') {
+        throw 'retained-data acceptance must own a healthy daemon for the complete search/reuse assertion'
+    }
+    Write-Output 'PASS retained-data acceptance owns its daemon lifecycle'
+}
+
 function Assert-AcceptanceAllowsFreshConnectorState {
     $acceptanceSource = Get-Content -LiteralPath $vmAcceptanceScript -Raw
     if ($acceptanceSource -notmatch "degraded with zero registered connectors" -or
@@ -270,6 +284,7 @@ try {
     Assert-AcceptanceWaitsForDirectProcessOnly
     Assert-AcceptanceUsesAbsoluteEvidencePaths
     Assert-AcceptanceUsesInstalledMigrations
+    Assert-RetentionAcceptanceOwnsDaemon
     Assert-AcceptanceAllowsFreshConnectorState
     Assert-RetainedClusterCanBeReused
     Assert-CiAcceptanceCoversLifecycle
@@ -305,7 +320,7 @@ try {
     Assert-ReleaseCheck 'clean tagged HEAD accepted' $true "release check: OK"
     Assert-MissingWindowsAcceptanceRejected
     Assert-MismatchedBuildCommitRejected
-    Write-Output 'release gate tests: 16 passed, 0 failed'
+    Write-Output 'release gate tests: 17 passed, 0 failed'
 } finally {
     $resolvedRoot = [System.IO.Path]::GetFullPath($testRoot)
     if ($resolvedRoot.StartsWith($tempBase, [System.StringComparison]::OrdinalIgnoreCase) -and
