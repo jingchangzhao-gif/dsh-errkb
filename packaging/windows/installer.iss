@@ -15,7 +15,12 @@
 ;   2. Reuse an existing PostgreSQL instance (no cluster is created).
 ;   3. Create a dedicated cluster on a different port.
 #define AppName "errkb"
-#define AppVersion "0.1.0"
+; The version comes from build-version.iss, which build.ps1 writes into dist
+; next to the binary it just stamped. That keeps the setup filename, [Setup]
+; metadata, and the binary's own version in one chain instead of a hand-edited
+; constant. build.ps1 runs before ISCC in every supported flow (local packaging
+; and CI).
+#include "..\..\dist\build-version.iss"
 #define AppPublisher "jingchangzhao-gif"
 #define AppURL "https://github.com/jingchangzhao-gif/error-knowledge-base"
 #define DefaultPgPort "5433"
