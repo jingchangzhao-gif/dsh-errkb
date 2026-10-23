@@ -197,9 +197,20 @@ function Assert-InstallerVersion([string]$ResolvedVersion) {
     if (-not (Test-Path $installerScript)) {
         Fail "packaging\windows\installer.iss is missing"
     }
+    $includesGeneratedVersion = Select-String -Path $installerScript -Pattern '^#include "\.\.\\\.\.\\dist\\build-version\.iss"$' -SimpleMatch:$false | Select-Object -First 1
+    if ($includesGeneratedVersion) {
+        # build.ps1 writes dist\build-version.iss from its own -Version, so the
+        # setup version cannot drift from the release being packaged. Verify the
+        # generator exists instead of a literal constant.
+        $match = Select-String -Path $buildScript -Pattern 'build-version\.iss' | Select-Object -First 1
+        if (-not $match) {
+            Fail "installer.iss includes dist\build-version.iss but build.ps1 does not write it"
+        }
+        return
+    }
     $match = Select-String -Path $installerScript -Pattern '^#define AppVersion "([^"]+)"$' | Select-Object -First 1
     if (-not $match) {
-        Fail "installer.iss has no '#define AppVersion "x.y.z"' line"
+        Fail "installer.iss has neither dist\build-version.iss nor '#define AppVersion "x.y.z"'"
     }
     $installerVersion = $match.Matches[0].Groups[1].Value
     if ($installerVersion -ne $ResolvedVersion) {
