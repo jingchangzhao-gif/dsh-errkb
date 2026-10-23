@@ -2,9 +2,9 @@
 
 [English](install.md)
 
-本文明确区分正式 v0.1.0 发布文件与可丢弃的本地构建输出。
+本文明确区分正式 v0.1.1 发布文件与可丢弃的本地构建输出。
 
-> **状态说明（2026-10-23）。** v0.1.0 是受支持的公开版本。请只从 [GitHub Release 页面](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0)下载，并使用随附的 `SHA256SUMS` 核对文件。WF-011A/WF-011B 已在 Windows CI 中验证其生命周期与确定性恢复。详情见 [`project-status.zh-CN.md`](project-status.zh-CN.md) 与 [`acceptance-vm.zh-CN.md`](acceptance-vm.zh-CN.md)。
+> **状态说明（2026-10-23）。** v0.1.1 是受支持的公开版本。请只从 [GitHub Release 页面](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1)下载，并使用随附的 `SHA256SUMS` 核对文件。WF-011A/WF-011B 已在 Windows CI 中验证其生命周期与确定性恢复。详情见 [`project-status.zh-CN.md`](project-status.zh-CN.md) 与 [`acceptance-vm.zh-CN.md`](acceptance-vm.zh-CN.md)。
 
 ## 系统要求
 
@@ -18,9 +18,9 @@
 | 产物 | 来源 | 当前可用性 |
 | --- | --- | --- |
 | `dist\errkb.exe` | `packaging\windows\build.ps1` | 当前源码构建；包含 Web 工具箱启动路由 |
-| `errkb-0.1.0-setup.exe` | v0.1.0 GitHub Release | 正式安装器；WF-011A/WF-011B 在 CI 中重建并测试 |
+| `errkb-0.1.0-setup.exe` | v0.1.1 GitHub Release | 正式安装器；WF-011A/WF-011B 在 CI 中重建并测试 |
 | `dist\release\errkb-0.1.0\` | 旧发布打包结果 | 已过期；其中 EXE 没有 `db` 命令 |
-| `errkb-toolbox.zip` | v0.1.0 GitHub Release | 已核对的便携工具箱 |
+| `errkb-toolbox.zip` | v0.1.1 GitHub Release | 已核对的便携工具箱 |
 
 不要混用 `dist\` 与 `dist\release\errkb-0.1.0\` 中的文件。正式发布必须从同一个带 tag 的 Git 提交一次性重建，并让 EXE、安装器、manifest、校验和与安装后文件都指向同一修订。
 
@@ -48,6 +48,18 @@
 | `%LOCALAPPDATA%\errkb\logs\` | PostgreSQL 与 daemon 日志 |
 | `%LOCALAPPDATA%\errkb\health.json` | daemon 最近一次写入的健康状态；进程停止后文件可能过期 |
 
+## 安装后首次运行
+
+安装目录会把 `pg\credentials.json` 与 `migrations\` 放在 `errkb.exe` 旁边，
+下列命令无需任何参数：
+
+```powershell
+errkb db status
+errkb doctor
+errkb daemon
+errkb ui --web
+```
+
 ## 开发环境首次运行
 
 源码开发或诊断仍可使用显式 DSN：
@@ -69,7 +81,7 @@ go build -o errkb.exe ./cmd/errkb
 .\errkb.exe ui --web
 ```
 
-安装器会部署 `start-errkb.cmd`，并创建运行 `errkb.exe ui --web` 的开始菜单快捷方式；不会留下可见终端。pipe 不可达时，Web 壳会读取安装目录的凭据与 migrations 来恢复 daemon。搜索、详情/编辑、统计/审计和设置页均已接入，并随 v0.1.0 正式发布。
+安装器会部署 `start-errkb.cmd`，并创建运行 `errkb.exe ui --web` 的开始菜单快捷方式；不会留下可见终端。pipe 不可达时，Web 壳会读取安装目录的凭据与 migrations 来恢复 daemon。搜索、详情/编辑、统计/审计和设置页均已接入，并随 v0.1.1 正式发布。
 
 ## 复用已有 PostgreSQL
 
@@ -100,16 +112,17 @@ $pgDump = Join-Path ${env:ProgramFiles} "PostgreSQL\16\bin\pg_dump.exe"
 - **保留数据：** 删除应用文件和启动项，保留 `pg\` 数据以供重装复用。
 - **删除数据：** 停止 daemon 与集群，删除数据、凭据和安装目录。
 
+静默卸载无法回答对话框：`unins000.exe /VERYSILENT` 保留数据，`unins000.exe /VERYSILENT /DELETE_DATA=1` 删除数据。第一阶段的卸载器把选择写成标记文件，第二阶段和 `postgres.ps1` 读取该标记，因此两个阶段不会给出相反的结果。
+
 WF-011A 会在临时 Windows Runner 上验证两条路径：保留数据卸载后重装并核对原有知识，随后删除数据卸载并检查进程、端口、启动项和文件残留。
 
 ## 常见问题
 
 | 现象 | 原因与处理 |
 | --- | --- |
-| `schema migration check failed` | schema 账本缺失或落后。使用当前源码构建运行 `errkb db migrate`；旧发布目录中的 EXE 没有 `db` 命令。 |
+| `schema migration check failed` | schema 账本缺失或落后。当前安装会从 `pg\credentials.json` 自动解析连接，运行 `errkb db status` 与 `errkb db migrate`；早期发布二进制没有 `db` 命令。 |
 | `database: connection refused` | PostgreSQL 未启动或 DSN 端口错误；检查实例并运行带显式 DSN 的 `doctor`。 |
 | 本地 API 不可达 | daemon 未运行或 pipe 名不一致。启动 daemon 并运行 `doctor`。 |
-| `flag provided but not defined: -web` | 当前 EXE 没有 Web 壳接线；现有发布二进制无法打开工具箱。 |
 | `ui --web` 等待后退出码为 4 | 无法根据安装凭据恢复 daemon；检查 `pg\credentials.json`、受管集群和 daemon 日志，开发环境可显式传入 DSN。 |
 | 5433 被占用 | 选择其他端口或停止占用该端口的实例。 |
 | 健康文件显示 ok，但 pipe/端口已关闭 | `health.json` 是过期快照；以实时端口、pipe 与 `doctor` 结果为准。 |

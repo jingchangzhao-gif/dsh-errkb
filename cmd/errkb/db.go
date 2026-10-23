@@ -67,8 +67,8 @@ func runDB(args []string, jsonMode bool, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("errkb db "+subcommand, flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	dsn := flags.String("dsn", os.Getenv("ERRKB_DSN"), "PostgreSQL connection string (default $ERRKB_DSN); never printed")
-	credentials := flags.String("credentials", "", `credentials file written by the installer (…\pg\credentials.json)`)
-	migrations := flags.String("migrations", "db/migrations", "directory that holds the db/migrations files")
+	credentials := flags.String("credentials", "", `credentials file written by the installer (default: pg\credentials.json next to errkb.exe)`)
+	migrations := flags.String("migrations", "", "directory that holds the db/migrations files (default: migrations next to errkb.exe, then db/migrations)")
 	timeout := flags.Duration("timeout", 2*time.Minute, "how long the database work may take")
 	if err := flags.Parse(rest); err != nil {
 		return exitUsage
@@ -78,12 +78,20 @@ func runDB(args []string, jsonMode bool, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	target, err := resolveDBTarget(*dsn, *credentials)
+	// Resolve the installer layout first: the installed EXE lives next to
+	// pg\credentials.json and migrations\, so a bare `errkb db status` must work
+	// from any working directory (the launcher does not set one).
+	resolvedDSN, resolvedMigrations, err := resolveDaemonPaths(*dsn, *credentials, *migrations)
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb db: %v\n", err)
 		return exitUsage
 	}
-	expected, err := database.LoadMigrations(*migrations)
+	if resolvedDSN == "" {
+		fmt.Fprintln(stderr, "errkb db: no database: pass --dsn or --credentials (the installer writes pg\\credentials.json next to errkb.exe)")
+		return exitUsage
+	}
+	target := dbTarget{dsn: resolvedDSN, label: redactDSN(resolvedDSN)}
+	expected, err := database.LoadMigrations(resolvedMigrations)
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb db: %v\n", err)
 		return exitInternal
@@ -92,7 +100,7 @@ func runDB(args []string, jsonMode bool, stdout, stderr io.Writer) int {
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
 	defer cancel()
 
-	report, err := runDBWork(ctx, subcommand, target.dsn, *migrations, expected)
+	report, err := runDBWork(ctx, subcommand, target.dsn, resolvedMigrations, expected)
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb db %s: %v\n", subcommand, err)
 		return exitInternal

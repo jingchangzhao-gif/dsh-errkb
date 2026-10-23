@@ -4,7 +4,7 @@
 
 > **回收报错：同一个失败只诊断一次，记录下来，下次出现时作为已知解法交回 —— 全程本地完成，不调用模型。**
 
-**项目状态（2026-10-23）：v0.1.0 已正式发布。** 可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、已实测的 DSH/Codex/Claude 连接器和内嵌 Windows Web 工具箱均已进入首个通过验证的 Windows 版本。WF-011A/WF-011B 会在 CI 中强制验证安装生命周期与确定性恢复。可从 [v0.1.0 发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.0)下载安装器或便携工具箱。
+**项目状态（2026-10-23）：v0.1.1 已正式发布。** 可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、已实测的 DSH/Codex/Claude 连接器和内嵌 Windows Web 工具箱均已进入首个通过验证的 Windows 版本。WF-011A/WF-011B 会在 CI 中强制验证安装生命周期与确定性恢复。可从 [v0.1.1 发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1)下载安装器或便携工具箱。
 
 **错误知识库**（`error-knowledge-base`）是一个本地平台，有多种使用入口：命令行客户端、后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件、宿主连接器与内嵌 Windows Web 工具箱。所有入口共用同一套核心与知识库；分类、脱敏、规范化、指纹、存储、检索和解法可信度不会在每个宿主里重复实现。命令仍是 `errkb`，DSH 适配器包继续使用 `dsh-errkb`。
 
@@ -56,8 +56,8 @@
 | DSH、Codex CLI、Claude Code 连接器 | 已按固定版本实测 | 只承诺连接器矩阵中已经验证的能力 |
 | Windows 安装器与恢复 | 已实现；WF-011A/WF-011B 为强制 CI | 临时 Windows Runner 会运行真实安装包、迁移、知识闭环、HKCU 恢复和两种卸载选择 |
 | 内嵌 Web 工具箱 | 已实现并有自动化测试覆盖 | 搜索、详情/编辑、统计/审计和设置路由均已接入 `ui --web` |
-| 发布来源门禁 | 已实现并通过发布验证 | 会拒绝缺失/不匹配 tag 与脏源码；已验收 tag `v0.1.0` 指向提交 `1438473` |
-| 发布包 | 已发布为 v0.1.0 | GitHub Release 包含已核对的安装器、便携工具箱、独立 EXE、manifest、SBOM 与校验和 |
+| 发布来源门禁 | 已实现并通过发布验证 | 会拒绝缺失/不匹配 tag 与脏源码；已验收 tag `v0.1.1` 指向提交 `1438473` |
+| 发布包 | 已发布为 v0.1.1 | GitHub Release 包含已核对的安装器、便携工具箱、独立 EXE、manifest、SBOM 与校验和 |
 
 ## 功能总览
 
@@ -142,7 +142,7 @@
 
 5. **记录解法** —— 通过 MCP 服务（`err_record_solution`）或连接器 —— 再跑同一条命令，包装器就会打印已知解法及其来源与可信度。
 
-v0.1.0 安装器和便携工具箱都可以通过 `errkb ui --web` 打开内嵌工具箱；daemon 缺失时，它会解析安装凭据与 migrations 进行恢复。
+v0.1.1 安装器和便携工具箱都可以通过 `errkb ui --web` 打开内嵌工具箱；daemon 缺失时，它会解析安装凭据与 migrations 进行恢复。
 
 含真实输出的完整闭环见 [`docs/e2e-cli-loop.zh-CN.md`](docs/e2e-cli-loop.zh-CN.md)。
 
@@ -164,7 +164,7 @@ v0.1.0 安装器和便携工具箱都可以通过 `errkb ui --web` 打开内嵌�
 | `errkb markdown import\|export` | 导入或导出旧版 `ERRORS.md` 格式 |
 | `errkb daemon` | 本地后台服务：Named Pipe API、健康文档、脱敏日志 |
 | `errkb ui` | 源码树中的原生托盘/搜索宿主；不是已发布的 Web 工具箱 |
-| `errkb ui --web` | 本地开发中的 Web 搜索壳；当前发布物不包含 |
+| `errkb ui --web` | 本地 Web 工具箱（搜索、详情/编辑、统计、设置）；v0.1.1 安装器与工具箱 ZIP 已包含 |
 | `errkb doctor` | 八项只读环境与连接器检查，每条发现附修复建议 |
 | `errkb mcp` | 带八个工具的 MCP stdio 服务 |
 | `errkb version` | 版本、提交、构建时间与 Go 工具链 |
@@ -209,7 +209,7 @@ retention:
 
 ## 安装与卸载
 
-正式安装器按用户安装到 `%LOCALAPPDATA%\errkb`，可在 5433 端口创建专用 PostgreSQL 实例、应用迁移、登记当前用户登录恢复、安装 `start-errkb.cmd` 并创建开始菜单工具箱快捷方式；卸载时可以保留或删除数据。WF-011A/WF-011B 会在 Windows CI 中验证这些路径。请只使用 v0.1.0 GitHub Release 附带的文件；本地忽略的 `dist/` 仍是可丢弃的构建输出。
+正式安装器按用户安装到 `%LOCALAPPDATA%\errkb`，可在 5433 端口创建专用 PostgreSQL 实例、应用迁移、登记当前用户登录恢复、安装 `start-errkb.cmd` 并创建开始菜单工具箱快捷方式；卸载时可以保留或删除数据。WF-011A/WF-011B 会在 Windows CI 中验证这些路径。请只使用 v0.1.1 GitHub Release 附带的文件；本地忽略的 `dist/` 仍是可丢弃的构建输出。
 
 完整步骤、数据位置与静默安装行为见 [`docs/install.md`](docs/install.md)。强制 Windows CI 验收与可选干净机检查见 [`docs/acceptance-vm.zh-CN.md`](docs/acceptance-vm.zh-CN.md)。发布物未做代码签名；请用发布包里的 `SHA256SUMS` 校验。
 
@@ -271,3 +271,4 @@ cue vet ./spec/...
 ## 许可证
 
 [MIT](LICENSE) © jingchangzhao-gif
+

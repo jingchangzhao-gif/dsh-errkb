@@ -20,7 +20,7 @@ func runDoctor(args []string, jsonMode bool, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("errkb doctor", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	dsn := flags.String("dsn", os.Getenv("ERRKB_DSN"), "PostgreSQL connection string (default $ERRKB_DSN); never printed")
-	migrations := flags.String("migrations", "db/migrations", "directory that holds the db/migrations files")
+	migrations := flags.String("migrations", "", "directory that holds the db/migrations files (default: migrations next to errkb.exe, then db/migrations)")
 	configPath := flags.String("config", daemonDataPath("config.yml"), "optional configuration file (defaults apply when absent)")
 	queueDir := flags.String("queue-dir", daemonDataPath("queue"), "offline spool directory")
 	pipeName := flags.String("pipe", service.DefaultPipeName, "local API pipe path")
@@ -29,10 +29,16 @@ func runDoctor(args []string, jsonMode bool, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
+	resolvedDSN, resolvedMigrations, err := resolveDaemonPaths(*dsn, "", *migrations)
+	if err != nil {
+		fmt.Fprintf(stderr, "errkb doctor: %v\n", err)
+		return exitUsage
+	}
+
 	report := service.RunDoctor(context.Background(), service.DoctorOptions{
 		Version:       version,
-		DSN:           *dsn,
-		MigrationsDir: *migrations,
+		DSN:           resolvedDSN,
+		MigrationsDir: resolvedMigrations,
 		ConfigPath:    *configPath,
 		QueueDir:      *queueDir,
 		PipeName:      *pipeName,

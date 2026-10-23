@@ -2,7 +2,7 @@
 
 [简体中文](toolbox-ui.zh-CN.md)
 
-Status: **implemented, automated-test covered and released in v0.1.0**. The
+Status: **implemented, automated-test covered and released in v0.1.1**. The
 current source carries the EKB-057 search shell, the EKB-058 detail and editing screens, and
 the EKB-059 statistics, audit and settings screens, all served by `errkb.exe ui --web`;
 `packaging/windows/release.ps1` writes `errkb-toolbox.zip` and the installer ships the
@@ -92,7 +92,7 @@ The EKB-060 packaging implementation now does the following:
   `errkb.exe ui --web`; the UI itself is not opened automatically at logon.
 - The ZIP, installer and installed EXE identify one tag/commit and share release hashes.
 
-EKB-060 and WF-012 are complete. The v0.1.0 tagged release contains the coherent
+EKB-060 and WF-012 are complete. The v0.1.1 tagged release contains the coherent
 installer, toolbox ZIP and standalone EXE; its identity and hashes were verified after
 download. Local ignored `dist/` files are not release authority.
 
@@ -123,7 +123,7 @@ download. Local ignored `dist/` files are not release authority.
    statistics, filtered audit page, and the settings page with a deletion preview and
    cancel; the e2e test checks the preview leaves the rows untouched.
 4. `EKB-060` installer/Start-menu integration: **released** — launcher, shortcut and
-   toolbox ZIP ship in v0.1.0; WF-011A/WF-011B cover lifecycle/recovery and WF-012
+   toolbox ZIP ship in v0.1.1; WF-011A/WF-011B cover lifecycle/recovery and WF-012
    verified the tagged release.
 
 All land in the existing release pipeline; no new runtime is introduced.

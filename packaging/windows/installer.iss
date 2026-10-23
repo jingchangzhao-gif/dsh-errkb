@@ -1,4 +1,4 @@
-﻿; Inno Setup definition for errkb (EKB-051).
+; Inno Setup definition for errkb (EKB-051).
 ;
 ; The installer manages a PostgreSQL cluster for the installed product.
 ; PostgreSQL stays an explicit dependency (plan §2) and the installer refuses to
@@ -83,9 +83,10 @@ Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -Fil
 ; cannot answer a dialog, so the choice is a command-line switch:
 ;   unins000.exe /VERYSILENT /DELETE_DATA=1   -> remove the cluster data
 ;   unins000.exe /VERYSILENT                  -> keep the data
-; The switch is expanded by the uninstaller's own command line, which means it
-; also works in the second phase that actually runs [UninstallRun].
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort} -Choice {param:DELETE_DATA|keep}"; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbPg"
+; The first uninstaller phase records the answer as a marker file; the cloned
+; second phase reads neither its own command line nor Pascal globals, so
+; postgres.ps1 consults that marker itself and removes both markers after use.
+Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\postgres.ps1"" uninstall -DataDir ""{app}\pg\data"" -Port {code:GetPgPort}"; Flags: runhidden waituntilterminated; RunOnceId: "ErrkbPg"
 
 [UninstallDelete]
 ; A retained-data reinstall starts with an application directory that already
@@ -271,22 +272,34 @@ end;
 function InitializeUninstall(): Boolean;
 var
   Choice: Integer;
+  I: Integer;
 begin
   Result := True;
+  Log('errkb uninstall: app=' + ExpandConstant('{app}'));
+  Log('errkb uninstall: cluster data present=' + IntToStr(Ord(ClusterDataPresent())));
+  Log('errkb uninstall: silent=' + IntToStr(Ord(UninstallSilent())) + ' params=' + IntToStr(ParamCount));
+  for I := 1 to ParamCount do
+    Log('errkb uninstall: param ' + IntToStr(I) + '=' + ParamStr(I));
+  Log('errkb uninstall: choice marker present=' + IntToStr(Ord(UninstallChoicePresent())));
   if ClusterDataPresent() then
   begin
     { A dialog answer cannot travel to the second uninstaller phase that runs
       the uninstall commands, so either choice is written as a marker file.
       The cloned phase sees the marker and does not ask a second time. }
     if UninstallChoicePresent() then
+    begin
+      Log('errkb uninstall: reusing the existing marker');
       Exit;
+    end;
     if UninstallParam('/delete_data') or UninstallParam('/delete_data=1') then
     begin
+      Log('errkb uninstall: deleting the cluster data');
       SetUninstallChoice(True);
       Exit;
     end;
     if UninstallParam('/keep_data') or UninstallParam('/keep_data=1') then
     begin
+      Log('errkb uninstall: keeping the cluster data');
       SetUninstallChoice(False);
       Exit;
     end;
@@ -294,6 +307,7 @@ begin
       uninstall therefore needs a deterministic default before reaching it. }
     if UninstallSilent() then
     begin
+      Log('errkb uninstall: silent without a switch, keeping the cluster data');
       SetUninstallChoice(False);
       Exit;
     end;
@@ -316,5 +330,21 @@ begin
       'errkb needs PostgreSQL 16 (an explicit dependency of the release). Install it first, ' +
       'or set ERRKB_PG_BIN to its bin directory, then run this installer again.', mbCriticalError, MB_OK);
     Result := False;
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  DeleteMarker: String;
+  KeepMarker: String;
+begin
+  { Stale choice markers from an interrupted uninstall would make the next
+    uninstall repeat a decision nobody made. A successful install starts clean. }
+  if CurStep = ssPostInstall then
+  begin
+    DeleteMarker := ExpandConstant('{app}\.errkb-delete-data');
+    KeepMarker := ExpandConstant('{app}\.errkb-keep-data');
+    if FileExists(DeleteMarker) then DeleteFile(DeleteMarker);
+    if FileExists(KeepMarker) then DeleteFile(KeepMarker);
   end;
 end;

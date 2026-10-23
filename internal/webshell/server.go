@@ -133,7 +133,11 @@ func (s *Server) serveSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&body); err != nil || strings.TrimSpace(body.Query) == "" {
+	if err := decoder.Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request", "the search body is not a valid request: "+err.Error())
+		return
+	}
+	if strings.TrimSpace(body.Query) == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request", "a non-empty query is required")
 		return
 	}

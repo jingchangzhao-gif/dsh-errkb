@@ -10,6 +10,29 @@ They never claim more than the acceptance records in this repository prove.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-23
+
+Patch release for the installed product: the released builds now work without
+explicit connection flags, and the uninstaller honours the silent delete-data
+request.
+
+### Fixed
+
+- `errkb db status`, `db migrate`, `doctor`, `ui --web` and the daemon resolve
+  `pg\credentials.json` and the bundled `migrations` directory next to the
+  installed `errkb.exe`, so a fresh install needs no `--dsn` or `--credentials`
+  flags on the first run.
+- Silent uninstall: `unins000.exe /VERYSILENT /DELETE_DATA=1` now removes the
+  cluster and application data. The previous build expanded
+  `{param:DELETE_DATA|keep}` in the installer's second phase, where the value is
+  unavailable, so the data was always kept. The choice is now recorded as a
+  marker file and read by `postgres.ps1`; a successful install clears stale
+  markers.
+- The search API reports why a request body was rejected instead of always
+  saying the query was empty.
+- `docs/install.md` documents the silent uninstall switches and the zero-config
+  first-run behaviour; stale "no Web shell" troubleshooting rows were removed.
+
 ## [0.1.0] - 2026-10-23
 
 The first release. It is a local error knowledge base: capture the failure once,

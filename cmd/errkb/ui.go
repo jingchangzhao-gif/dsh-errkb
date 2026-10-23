@@ -31,7 +31,7 @@ func runUI(args []string) int {
 	flags := flag.NewFlagSet("errkb ui", flag.ContinueOnError)
 	flags.SetOutput(os.Stderr)
 	dsn := flags.String("dsn", os.Getenv("ERRKB_DSN"), "PostgreSQL connection string (default $ERRKB_DSN)")
-	migrations := flags.String("migrations", "db/migrations", "directory that holds the db/migrations files")
+	migrations := flags.String("migrations", "", "directory that holds the db/migrations files (default: migrations next to errkb.exe, then db/migrations)")
 	lockName := flags.String("lock-name", service.DefaultLockName, "Windows named mutex that enforces a single instance")
 	pipeName := flags.String("pipe", service.DefaultPipeName, "local Named Pipe the API listens on")
 	healthPath := flags.String("health-file", daemonDataPath("health.json"), "machine-readable health document")
@@ -42,9 +42,19 @@ func runUI(args []string) int {
 		return exitUsage
 	}
 
+	resolvedDSN, resolvedMigrations, err := resolveDaemonPaths(*dsn, "", *migrations)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "errkb ui: %v\n", err)
+		return exitUsage
+	}
+	if resolvedDSN == "" {
+		fmt.Fprintln(os.Stderr, "errkb ui: no database: pass --dsn or install the product (pg\\credentials.json next to errkb.exe)")
+		return exitUsage
+	}
+
 	config := service.DaemonConfig{
-		DSN:           *dsn,
-		MigrationsDir: *migrations,
+		DSN:           resolvedDSN,
+		MigrationsDir: resolvedMigrations,
 		LockName:      *lockName,
 		PipeName:      *pipeName,
 		HealthPath:    *healthPath,
