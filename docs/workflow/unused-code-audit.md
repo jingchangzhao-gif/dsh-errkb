@@ -54,7 +54,7 @@ The two root probe files are the strongest “completely useless” files in the
 | --- | --- | --- | --- |
 | `dist/errkb.exe` and root installer/checksum/resource files | `STALE-ARTIFACT` | Built at a different implementation point from the release subdirectory; the binary does not expose the local Web route | Remove before rebuilding from a tagged commit |
 | `dist/release/errkb-0.1.0/` | `STALE-ARTIFACT` | Old release bundle; its EXE has a different command surface from the root EXE and current source | Archive externally only if historical evidence is needed; otherwise delete locally |
-| Whole `dist/` directory | `REGENERATABLE` | Ignored local build output; it is not release authority | Regenerate when needed; use the v0.1.0 GitHub Release for distribution |
+| Whole `dist/` directory | `REGENERATABLE` | Ignored local build output; it is not release authority | Regenerate when needed; use the v0.1.1 GitHub Release for distribution |
 
 Do not preserve selected binaries from these directories and combine them with newly generated installer files. The next accepted release must generate EXE, installer, manifest, SBOM and checksums from the same tagged commit.
 
@@ -122,7 +122,7 @@ pwsh -File packaging/windows/cleanup-local.ps1 -Apply
 3. Treat the rest of `dist/` as invalid and rebuild it only after a real Git worktree and one target commit exist.
 4. Keep the wired Web UI, tailer, Markdown and PostgreSQL manager code; their production entry points now exist.
 5. Decide separately whether to connect or remove the still-dormant desktop notification model/service.
-6. Completed: the four superseded local EKB cards were removed and WF-012 was closed after the verified v0.1.0 release.
+6. Completed: the four superseded local EKB cards were removed and WF-012 was closed after the verified v0.1.1 release.
 
 ## Deletion gate
 

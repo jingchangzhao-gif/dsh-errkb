@@ -2,7 +2,7 @@
 
 [简体中文](acceptance-report-2026-10-22.zh-CN.md)
 
-Status: **FAILED — release blocked**
+Status: **historical — superseded by the mandatory windows-acceptance CI and the v0.1.1 release**
 
 > Historical record: this was the first acceptance pass at commit `2571903`. Its WF-011 clean-VM conclusion has been superseded by WF-011A/WF-011B in the mandatory `windows-acceptance` CI job. The report remains unchanged as evidence of that earlier run; use [`../project-status.md`](../project-status.md) and [`current-workflow.md`](current-workflow.md) for current status.
 

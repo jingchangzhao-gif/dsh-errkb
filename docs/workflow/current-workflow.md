@@ -36,7 +36,7 @@ There is intentionally no `DONE` state in this file. Resolved problems are delet
 
 ## Active issues, in execution order
 
-No active WF items. WF-012 completed with the public v0.1.0 release from commit `1438473`; the tag workflow, bundle checksums, manifest identity, standalone binary and toolbox binary were verified.
+No active WF items. WF-012 completed with the public v0.1.1 release from commit `a60a32f`; the tag workflow, bundle checksums, manifest identity, standalone binary and toolbox binary were verified.
 
 ## Per-item update format
 
