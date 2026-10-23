@@ -32,7 +32,7 @@ The release is not code-signed. Verify `errkb.exe` and the setup executable agai
 `SHA256SUMS` before installing, and expect a SmartScreen warning for an unsigned
 installer.
 
-Do not combine files from `dist\` and `dist\release\errkb-0.1.0\`. In the audited local
+Do not combine files from `dist\` and `dist\release\errkb-0.1.1\`. In the audited local
 copy, those directories contain different EXE revisions and command sets. A release must
 be rebuilt once from one tagged Git commit.
 
@@ -93,7 +93,7 @@ The installer source runs `errkb db migrate` with those explicit paths before
 registering HKCU startup. A missing or failed migration stops the install instead
 of leaving a nominally successful but unusable daemon.
 
-The older EXE in `dist\release\errkb-0.1.0\` does not contain the `db` command. If that
+The older EXE in `dist\release\errkb-0.1.1\` does not contain the `db` command. If that
 binary is paired with a new installer definition, first run fails because the schema
 cannot be created. This is why existing artifacts are acceptance evidence only.
 

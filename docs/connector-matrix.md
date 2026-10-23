@@ -45,7 +45,7 @@ Template categories (EKB-042) are not hosts: `connectors/templates/cli-log`
 documents level B (copy of the generic CLI row), level C (`errkb tail --file`
 follows a log file and records through the daemon) and level E (a human-selected
 message). C is covered by `tests/e2e/tail_capture_test.go` on the development
-host (clean-VM run pending); E is **not measured live** — see the gaps below.
+host (clean-machine run optional per the EKB-052 decision); E is **not measured live** — see the gaps below.
 
 ## Field coverage per host
 
@@ -122,7 +122,7 @@ failure is repeated:
 | `tool_name` not a host tool name | CLI, Codex | Tool-scoped rerank (`tool_name` weight 0.05) contributes less on these hosts. |
 | DSH `tools/result` path not exercised live | DSH | The capture path is unit-tested, but the live acceptance used `agent/request-error`; a real tool failure in a DSH session is **unverified**. |
 | Codex `PostToolUse` not measured | Codex | Hidden tool failures inside Codex are invisible to the wrapper; the Stop-transcript fallback is documented, not built (**unverified**). |
-| Template C measured on the development host only | Template hosts | `errkb tail --file` follows a log file and records classified failures through the daemon (`tests/e2e/tail_capture_test.go`); no clean-VM run yet (**unverified on a clean machine**). |
+| Template C measured on the development host only | Template hosts | `errkb tail --file` follows a log file and records classified failures through the daemon (`tests/e2e/tail_capture_test.go`); the clean-machine run is optional evidence per the EKB-052 decision (**windows-acceptance CI covers the installed lifecycle**). |
 | Template E not measured | Manual hosts | Manual entry is the wrapper path with a human-chosen line; no separate acceptance run exists (**unverified**). |
 | Text-derived headlines in B/C | CLI, Codex, Claude wrapper | Same failure with different timestamps, pids or temp paths may not merge; the normalizer removes known noise but long-tail variance remains. This is the documented cost of channels B and C. |
 
@@ -142,7 +142,7 @@ failure is repeated:
 - Codex `PostToolUse` hook payload and tool-level capture (local OSS model has no
   tool calling; hosted-model quota was exhausted during the probe).
 - DSH `tools/result` capture in a real session (unit tests only).
-- Template C on a clean machine (the development-host e2e test exists; clean-VM run pending).
+- Template C on a clean machine is optional evidence (EKB-052 decision; the development-host e2e covers the behaviour).
 - Template E manual channel as its own acceptance run.
 - Any host version other than the pinned ones in the header.
 

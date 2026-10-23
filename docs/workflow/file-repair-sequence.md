@@ -4,7 +4,7 @@
 
 This file translates every active `WF-nnn` issue into a concrete edit order. Follow the phases sequentially. Do not edit a later phase merely because its files are easy to reach; the earlier phases establish the contracts and runtime paths that later UI and packaging work depend on.
 
-> **Current checkpoint (2026-10-23):** the phases below are retained as historical repair instructions. WF-011A/WF-011B run in Windows CI, and WF-012 published and verified v0.1.0. Completed rows have been removed from `current-workflow.md`; no WF item remains active.
+> **Current checkpoint (2026-10-23):** the phases below are retained as historical repair instructions. WF-011A/WF-011B run in Windows CI, and WF-012 published and verified v0.1.1. Completed rows have been removed from `current-workflow.md`; no WF item remains active.
 
 ## Global change protocol
 

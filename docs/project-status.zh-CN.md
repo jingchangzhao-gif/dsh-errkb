@@ -66,7 +66,7 @@ DSH / Codex / Claude / 通用 CLI / MCP
 
 ## 当前发布边界
 
-1. **v0.1.1——已发布并核对。** `v0.1.1` tag 指向提交 `1438473`；标签工作流重跑 WF-011A/WF-011B，并发布安装器、工具箱 ZIP、独立 EXE、manifest、SBOM 与哈希。下载后的发布包身份与全部 `SHA256SUMS` 条目均已核对。
+1. **v0.1.1——已发布并核对。** `v0.1.1` tag 指向提交 `a60a32f`；标签工作流重跑 WF-011A/WF-011B，并发布安装器、工具箱 ZIP、独立 EXE、manifest、SBOM 与哈希。下载后的发布包身份与全部 `SHA256SUMS` 条目均已核对。
 2. **签名限制——已接受但必须显式展示。** 正式版本尚未做 Authenticode 签名。这不会绕过校验和与来源门禁；引入签名证书前，用户必须核对 `SHA256SUMS`。
 
 WF-013（并行数据库确定性）与 WF-014（交付状态同步）均已完成。
@@ -86,7 +86,7 @@ go build -o errkb.exe ./cmd/errkb
 
 ### 最终用户安装
 
-从 [v0.1.1 发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1) 下载 `errkb-0.1.0-setup.exe`，先安装 PostgreSQL 16，使用 `SHA256SUMS` 核对安装器，然后以标准用户运行。`errkb-toolbox.zip` 是便携替代方案。
+从 [v0.1.1 发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1) 下载 `errkb-0.1.1-setup.exe`，使用 `SHA256SUMS` 核对安装器，然后以标准用户运行。`errkb-toolbox.zip` 是便携替代方案。
 
 ## 发布检查表
 

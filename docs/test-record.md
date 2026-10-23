@@ -52,3 +52,11 @@ Notes and limits:
 - This is a development-host run, not Windows installer acceptance. Its former
   EKB-052 / WF-011 conclusion is historical; WF-011A/WF-011B now own the
   mandatory hosted-Windows lifecycle and deterministic recovery evidence.
+
+## 2026-10-23 — release-audit verification (v0.1.1 published)
+
+- `v0.1.1` points at `a60a32fc511fbf1e9f1732d3d1fb3c602f23edba`; the tag workflow reran WF-011A/WF-011B and published the release assets, and `v0.1.0` remains at `1438473e60c7f3a77ecdaaacc1054a400428c919`.
+- Locally downloaded every `v0.1.1` release asset and checked `SHA256SUMS`: the installer matched (`9cffa7e24417bc4af580992049b303174c904e1ca9afc4a0149e00c0852aaecf`, 5,424,094 bytes).
+- The development-host acceptance run used the `v0.1.0` release installer (`errkb-0.1.0-setup.exe`, product version `0.1.0`, commit `1438473`), because it was the published artifact at the start of the audit; on it the silent install exits 0, health is `ok` with migrations `0008/0008`, the HKCU Run autostart value and the Start-menu shortcuts exist, and the Named Pipe answers.
+- Zero-config start paths verified on that install: `errkb db status`, `errkb doctor`, `errkb markdown export` and `errkb run -- cmd /c "exit 9"` work without arguments (the installed `pg\credentials.json` and migrations are resolved from the application directory); the `/DELETE_DATA=1` uninstall path was exercised as well. Those fixes ship in `v0.1.1`.
+- This remains a development-host run. The mandatory installer lifecycle evidence is the hosted `windows-acceptance` CI job (WF-011A/WF-011B); a clean Windows machine is optional evidence per the EKB-052 owner decision.

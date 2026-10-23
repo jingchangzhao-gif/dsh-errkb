@@ -63,7 +63,7 @@ CUE defines shapes and constraints; it is not the runtime database. PL/pgSQL kee
 | Let an LLM actively query the KB | `errkb mcp`, eight tools | `internal/mcp/` | Implemented; MCP is not passive capture |
 | Diagnose installation/connectors | `errkb doctor` | `cmd/errkb/doctor.go`, `internal/service/doctor.go` | Implemented |
 | Apply and inspect migrations | `errkb db migrate`, `errkb db status` | `cmd/errkb/db.go`, `internal/database/migrate.go` | Implemented in current source |
-| Run a local toolbox window | `errkb ui`, `errkb ui --web` | `internal/ui/`, `internal/webshell/`, `cmd/errkb/web.go` | Embedded Web shell implemented; accepted tagged artifact pending |
+| Run a local toolbox window | `errkb ui`, `errkb ui --web` | `internal/ui/`, `internal/webshell/`, `cmd/errkb/web.go` | Embedded Web shell shipped in v0.1.1 (`errkb ui --web`; the release includes it) |
 | Manage local PostgreSQL | Windows installer and PostgreSQL manager | `internal/service/pg_manage.go`, `packaging/windows/` | Implemented; WF-011A/WF-011B exercise lifecycle and recovery in Windows CI |
 | Retain/delete data safely | Retention/deletion functions and settings models | `0006_retention.sql`, `internal/ui/settings.go` | Implemented, including Web preview/confirm; automatic scheduling remains outside v1 |
 

@@ -18,7 +18,7 @@
 | 产物 | 来源 | 当前可用性 |
 | --- | --- | --- |
 | `dist\errkb.exe` | `packaging\windows\build.ps1` | 当前源码构建；包含 Web 工具箱启动路由 |
-| `errkb-0.1.0-setup.exe` | v0.1.1 GitHub Release | 正式安装器；WF-011A/WF-011B 在 CI 中重建并测试 |
+| `errkb-0.1.1-setup.exe` | v0.1.1 GitHub Release | 正式安装器；WF-011A/WF-011B 在 CI 中重建并测试 |
 | `dist\release\errkb-0.1.0\` | 旧发布打包结果 | 已过期；其中 EXE 没有 `db` 命令 |
 | `errkb-toolbox.zip` | v0.1.1 GitHub Release | 已核对的便携工具箱 |
 
