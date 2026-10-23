@@ -193,6 +193,10 @@ try {
     # 5. Checksum and the version document that matches the binary.
     $hash = (Get-FileHash -Algorithm SHA256 -Path $binary).Hash.ToLowerInvariant()
     Set-Content -Path $checksumPath -Value ("$hash  errkb.exe") -NoNewline -Encoding ascii
+    # installer.iss includes this so the setup name and [Setup] metadata follow
+    # the binary instead of a hand-edited constant (WF-011 release lesson).
+    $versionIncludePath = Join-Path $Output "build-version.iss"
+    [System.IO.File]::WriteAllText($versionIncludePath, "#define AppVersion `"$Version`"`n", $utf8NoBom)
     $document = [ordered]@{
         product     = $strings.ProductName
         company     = $strings.CompanyName
