@@ -29,8 +29,13 @@ func runDaemon(args []string) int {
 	logPath := flags.String("log-file", daemonDataPath("logs", "daemon.log"), "redacted, size-capped log file (never stdout)")
 	logMax := flags.Int64("log-max-bytes", service.DefaultLogMaxBytes, "rotate the log after this many bytes")
 	healthInterval := flags.Duration("health-interval", service.DefaultHealthInterval, "how often the health document is refreshed")
+	configPath := flags.String("config", "", "settings file (default: config.yaml next to errkb.exe)")
+	queueDir := flags.String("queue-dir", daemonDataPath("queue"), "offline spool for already-redacted events; empty disables it")
 	if err := flags.Parse(args); err != nil {
 		return 2
+	}
+	if *configPath == "" {
+		*configPath = defaultSettingsPath()
 	}
 
 	resolvedDSN, resolvedMigrations, err := resolveDaemonPaths(*dsn, "", *migrations)
@@ -52,6 +57,8 @@ func runDaemon(args []string) int {
 		LogPath:        *logPath,
 		LogMaxBytes:    *logMax,
 		HealthInterval: *healthInterval,
+		ConfigPath:     *configPath,
+		QueueDir:       *queueDir,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -82,4 +89,19 @@ func daemonDataPath(parts ...string) string {
 		base = "."
 	}
 	return filepath.Join(append([]string{base, "errkb"}, parts...)...)
+}
+
+// defaultSettingsPath returns the config.yaml next to errkb.exe when the
+// installed product has one; an empty result means "use the defaults", so a
+// source-tree daemon keeps running without a settings file.
+func defaultSettingsPath() string {
+	executable, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	candidate := filepath.Join(filepath.Dir(executable), "config.yaml")
+	if _, statErr := os.Stat(candidate); statErr != nil {
+		return ""
+	}
+	return candidate
 }

@@ -235,7 +235,10 @@ func (r RecordRequest) Validate() error {
 	return nil
 }
 
-// RecordResponse reports what the write created or reused.
+// RecordResponse reports what the write created or reused. Queued is set when
+// the database was unreachable and the already-redacted event went to the
+// offline queue instead (EKB-033); the occurrence and issue ids are unknown
+// until the replay runs.
 type RecordResponse struct {
 	SchemaVersion string `json:"schema_version"`
 	EventID       string `json:"event_id"`
@@ -243,6 +246,7 @@ type RecordResponse struct {
 	IssueID       string `json:"issue_id"`
 	Fingerprint   string `json:"fingerprint"`
 	Created       bool   `json:"created"`
+	Queued        bool   `json:"queued,omitempty"`
 }
 
 // Validate checks the identifiers and the fingerprint shape.
@@ -250,16 +254,23 @@ func (r RecordResponse) Validate() error {
 	if err := requireVersion(OperationRecord, r.SchemaVersion); err != nil {
 		return err
 	}
-	for _, field := range []struct {
-		name  string
-		value string
-	}{{"event_id", r.EventID}, {"occurrence_id", r.OccurrenceID}, {"issue_id", r.IssueID}} {
-		if field.value == "" {
-			return fmt.Errorf("record.%s: required", field.name)
-		}
+	if r.EventID == "" {
+		return errors.New("record.event_id: required")
 	}
 	if !fingerprintPattern.MatchString(r.Fingerprint) {
 		return fmt.Errorf("record.fingerprint: want %d lowercase hex characters, got %q", FingerprintLength, r.Fingerprint)
+	}
+	if r.Queued {
+		// A queued write has no occurrence or issue yet; the replay decides.
+		return nil
+	}
+	for _, field := range []struct {
+		name  string
+		value string
+	}{{"occurrence_id", r.OccurrenceID}, {"issue_id", r.IssueID}} {
+		if field.value == "" {
+			return fmt.Errorf("record.%s: required", field.name)
+		}
 	}
 	return nil
 }
@@ -574,26 +585,32 @@ type CaptureResponse struct {
 	IssueID       string `json:"issue_id"`
 	Fingerprint   string `json:"fingerprint"`
 	Created       bool   `json:"created"`
+	Queued        bool   `json:"queued,omitempty"`
 }
 
-// Validate rejects an empty identity and a malformed fingerprint.
+// Validate rejects an empty identity and a malformed fingerprint. A queued
+// observation only knows its event and fingerprint; the replay assigns the
+// occurrence and issue identities.
 func (r CaptureResponse) Validate() error {
 	if r.SchemaVersion != ConnectorSDKVersion {
 		return fmt.Errorf("capture.schema_version: want %q, got %q", ConnectorSDKVersion, r.SchemaVersion)
 	}
-	identities := []struct {
-		name  string
-		value string
-	}{
-		{"event_id", r.EventID}, {"occurrence_id", r.OccurrenceID}, {"issue_id", r.IssueID},
-	}
-	for _, identity := range identities {
-		if identity.value == "" {
-			return fmt.Errorf("capture.%s: required", identity.name)
-		}
+	if r.EventID == "" {
+		return errors.New("capture.event_id: required")
 	}
 	if !fingerprintPattern.MatchString(r.Fingerprint) {
 		return fmt.Errorf("capture.fingerprint: want 12 lowercase hex characters, got %q", r.Fingerprint)
+	}
+	if r.Queued {
+		return nil
+	}
+	for _, identity := range []struct {
+		name  string
+		value string
+	}{{"occurrence_id", r.OccurrenceID}, {"issue_id", r.IssueID}} {
+		if identity.value == "" {
+			return fmt.Errorf("capture.%s: required", identity.name)
+		}
 	}
 	return nil
 }

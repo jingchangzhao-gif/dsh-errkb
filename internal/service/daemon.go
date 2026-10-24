@@ -27,6 +27,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/redact"
 )
@@ -75,8 +76,13 @@ type DaemonConfig struct {
 	// PipeName is the local Named Pipe the API listens on. Empty means
 	// DefaultPipeName.
 	PipeName string
-	// QueueBacklog reports the offline spool backlog; nil reports zero until
-	// EKB-033 wires the real queue.
+	// ConfigPath is an optional YAML settings file. When it exists the daemon
+	// enforces its capture gate (global pause, paused connectors/projects).
+	ConfigPath string
+	// QueueDir is the offline spool directory. Empty disables queueing.
+	QueueDir string
+	// QueueBacklog reports the offline spool backlog; nil falls back to the
+	// internal queue opened from QueueDir.
 	QueueBacklog func() (int, error)
 }
 
@@ -164,6 +170,8 @@ type Daemon struct {
 	lock     *instanceLock
 	log      *daemonLog
 	pipe     *PipeServer
+	queue    *Queue
+	cancelQ  context.CancelFunc
 
 	healthMu sync.Mutex
 
@@ -226,6 +234,54 @@ func StartDaemon(ctx context.Context, cfg DaemonConfig) (*Daemon, error) {
 		return nil, fmt.Errorf("errkb daemon: schema migration check failed: applied version %q, expected %q (run `errkb db migrate` first)", current, expected)
 	}
 
+	// Capture settings and the offline queue live with the single writer
+	// (EKB-033 + EKB-047): the gate refuses paused writes before they reach the
+	// database, and unreachable writes spool their already-redacted events.
+	backend := NewSQLBackend(pool)
+	if cfg.ConfigPath != "" {
+		settings, readErr := os.ReadFile(cfg.ConfigPath)
+		switch {
+		case readErr == nil:
+			config, loadErr := contract.LoadConfig(settings)
+			if loadErr != nil {
+				daemon.releaseResources()
+				return nil, fmt.Errorf("errkb daemon: load settings %q: %w", cfg.ConfigPath, loadErr)
+			}
+			backend.WithCaptureGate(CaptureGate(config))
+		case !errors.Is(readErr, os.ErrNotExist):
+			daemon.releaseResources()
+			return nil, fmt.Errorf("errkb daemon: read settings %q: %w", cfg.ConfigPath, readErr)
+		}
+	}
+	if cfg.QueueDir != "" {
+		queue, queueErr := OpenQueue(QueueOptions{Dir: cfg.QueueDir})
+		if queueErr != nil {
+			daemon.releaseResources()
+			return nil, fmt.Errorf("errkb daemon: open the offline queue: %w", queueErr)
+		}
+		queueCtx, cancelQueue := context.WithCancel(context.Background())
+		daemon.queue = queue
+		daemon.cancelQ = cancelQueue
+		backend.WithQueue(queue)
+		daemon.cfg.QueueBacklog = func() (int, error) { return int(queue.Stats().Pending), nil }
+		go func() {
+			runErr := queue.Run(queueCtx, QueueRunOptions{
+				Recorder: func(ctx context.Context, event contract.ErrorEvent) (database.RecordResult, error) {
+					conn, acquireErr := pool.Acquire(ctx)
+					if acquireErr != nil {
+						return database.RecordResult{}, acquireErr
+					}
+					defer conn.Release()
+					return database.RecordEvent(ctx, conn.Conn(), event)
+				},
+				Available: func(ctx context.Context) error { return pool.Ping(ctx) },
+			})
+			if runErr != nil && !errors.Is(runErr, context.Canceled) {
+				daemon.Log("warn", fmt.Sprintf("offline queue replay stopped: %v", runErr))
+			}
+		}()
+	}
+
 	if _, err := daemon.RefreshHealth(ctx); err != nil {
 		daemon.Log("warn", fmt.Sprintf("write the initial health document: %v", err))
 	}
@@ -235,7 +291,7 @@ func StartDaemon(ctx context.Context, cfg DaemonConfig) (*Daemon, error) {
 	// CLI could never reach the database.
 	pipe, err := ListenPipe(PipeOptions{
 		Name:         cfg.PipeName,
-		API:          NewAPI(NewSQLBackend(pool)),
+		API:          NewAPI(backend),
 		BeginRequest: daemon.BeginRequest,
 	})
 	if err != nil {
@@ -255,6 +311,9 @@ func StartDaemon(ctx context.Context, cfg DaemonConfig) (*Daemon, error) {
 
 // releaseResources unwinds a failed start.
 func (d *Daemon) releaseResources() {
+	if d.cancelQ != nil {
+		d.cancelQ()
+	}
 	if d.pipe != nil {
 		_ = d.pipe.Close()
 	}
@@ -426,9 +485,12 @@ func (d *Daemon) Shutdown(ctx context.Context) error {
 		}
 
 		d.Log("info", fmt.Sprintf("daemon stopping (%d in flight)", d.InFlight()))
-		// Stop serving first: no new connection may slide in between the drain
-		// and the pool close. In-flight requests are already counted by
-		// BeginRequest and finish on the open connections.
+		// Stop the replay before the pool closes; no new connection may slide in
+		// between the drain and the pool close. In-flight requests are already
+		// counted by BeginRequest and finish on the open connections.
+		if d.cancelQ != nil {
+			d.cancelQ()
+		}
 		if d.pipe != nil {
 			_ = d.pipe.Close()
 		}

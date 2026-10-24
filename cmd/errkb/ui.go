@@ -59,6 +59,8 @@ func runUI(args []string) int {
 		PipeName:      *pipeName,
 		HealthPath:    *healthPath,
 		LogPath:       *logPath,
+		ConfigPath:    defaultSettingsPath(),
+		QueueDir:      *queueDir,
 		QueueBacklog: func() (int, error) {
 			return spoolBacklog(*queueDir)
 		},

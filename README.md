@@ -204,7 +204,7 @@ retention:
   audit_days: 365
 ```
 
-Defaults: Named Pipe on, HTTP off, capture on, notices on, search limit 3, capture/search/MCP timeouts 2000/1500/5000 ms. The daemon also takes explicit flags (`--dsn`, `--pipe`, `--health-file`, `--log-file`, …); the settings page model edits the same file without introducing a second configuration model. A full example ships in [`connectors/templates/cli-log/config.yaml`](connectors/templates/cli-log/config.yaml).
+Defaults: Named Pipe on, HTTP off, capture on, notices on, search limit 3, capture/search/MCP timeouts 2000/1500/5000 ms. The daemon enforces them: while `capture.enabled` is false, or a connector or project is paused, `record` and `capture` calls fail with `conflict` instead of writing, and events that arrive while the database is unreachable are queued (already redacted) and replayed on recovery. The daemon also takes explicit flags (`--dsn`, `--config`, `--queue-dir`, `--pipe`, `--health-file`, `--log-file`, …); the settings page model edits the same file without introducing a second configuration model. A full example ships in [`connectors/templates/cli-log/config.yaml`](connectors/templates/cli-log/config.yaml).
 
 ## Requirements
 

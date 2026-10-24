@@ -520,6 +520,48 @@ func TestRecordReadsTheEventFromStdin(t *testing.T) {
 	}
 }
 
+func TestRecordShowsQueuedEvents(t *testing.T) {
+	queued := &contract.RecordResponse{
+		SchemaVersion: contract.ToolSchemaVersion,
+		EventID:       "11111111-1111-4111-8111-111111111111",
+		Fingerprint:   "0123456789ab",
+		Queued:        true,
+	}
+	fake := &fakeClient{record: queued}
+	env, stdout, stderr := testEnv(fake)
+	env.stdin = bytes.NewReader(eventFixture(t))
+	if code := runCommand("record", nil, env); code != exitOK {
+		t.Fatalf("record exit code = %d, stderr = %q", code, stderr.String())
+	}
+	output := stdout.String()
+	if !strings.Contains(output, "queued for replay (fingerprint 0123456789ab)") {
+		t.Fatalf("stdout = %q, want the queued note", output)
+	}
+	if !strings.Contains(output, "the database is unreachable") {
+		t.Fatalf("stdout = %q, want the replay explanation", output)
+	}
+	if strings.Contains(output, "occurrence") {
+		t.Fatalf("stdout = %q, a queued event has no occurrence yet", output)
+	}
+
+	jsonEnv, jsonOut, jsonErr := testEnv(fake)
+	jsonEnv.json = true
+	jsonEnv.stdin = bytes.NewReader(eventFixture(t))
+	if code := runCommand("record", nil, jsonEnv); code != exitOK {
+		t.Fatalf("record --json exit code = %d, stderr = %q", code, jsonErr.String())
+	}
+	var response contract.RecordResponse
+	if err := json.Unmarshal(jsonOut.Bytes(), &response); err != nil {
+		t.Fatalf("record --json output: %v (%q)", err, jsonOut.String())
+	}
+	if !response.Queued || response.OccurrenceID != "" {
+		t.Fatalf("record --json response = %+v, want queued with no occurrence", response)
+	}
+	if err := response.Validate(); err != nil {
+		t.Fatalf("record --json response does not satisfy the contract: %v", err)
+	}
+}
+
 func TestConcurrentCommandsDoNotInterfere(t *testing.T) {
 	fake := &fakeClient{stats: &contract.StatsResponse{SchemaVersion: contract.ToolSchemaVersion}}
 	var wait sync.WaitGroup

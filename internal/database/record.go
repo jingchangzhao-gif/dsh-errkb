@@ -25,6 +25,9 @@ type RecordResult struct {
 	IssueID      string
 	Fingerprint  string
 	Created      bool
+	// Queued reports that the event went to the offline spool because the
+	// database was unreachable (EKB-033); the ids are empty until the replay.
+	Queued bool
 }
 
 const recordEventSQL = `

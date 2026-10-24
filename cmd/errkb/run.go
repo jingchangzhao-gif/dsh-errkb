@@ -118,6 +118,7 @@ func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Rea
 			IssueID:      response.IssueID,
 			Fingerprint:  response.Fingerprint,
 			Created:      response.Created,
+			Queued:       response.Queued,
 		}, nil
 	}
 
@@ -149,10 +150,11 @@ func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Rea
 			IssueID:       result.Recorded.IssueID,
 			Fingerprint:   result.Recorded.Fingerprint,
 			Created:       result.Recorded.Created,
+			Queued:        result.Recorded.Queued,
 		}
 	}
 
-	if result.Recorded != nil {
+	if result.Recorded != nil && !result.Recorded.Queued {
 		ctx, cancelLookup := context.WithTimeout(context.Background(), cliTimeout)
 		lookup, lookupErr := client.Lookup(ctx, contract.LookupRequest{
 			SchemaVersion: contract.ToolSchemaVersion,
@@ -177,13 +179,15 @@ func runRun(args []string, jsonMode bool, stdout, stderr io.Writer, stdin io.Rea
 	switch {
 	case result.Transient:
 		fmt.Fprintf(stdout, "errkb: failure looks transient (%s); not recorded, rerun when the service recovers\n", result.Classification.Category)
+	case result.Recorded != nil && result.Recorded.Queued:
+		fmt.Fprintf(stdout, "errkb: the database is unreachable; the failure was queued for replay (%s)\n", result.Recorded.Fingerprint)
 	case result.Recorded == nil && result.RecordError != "":
 		fmt.Fprintf(stderr, "errkb: the command failed but the event was not recorded: %s\n", result.RecordError)
 	case result.Recorded == nil && result.ExitCode != 0:
 		fmt.Fprintln(stdout, "errkb: the command failed but no event was produced")
 	}
 
-	if result.Recorded != nil {
+	if result.Recorded != nil && !result.Recorded.Queued {
 		fmt.Fprintf(stdout, "\nerrkb: failure recorded as issue %s (%s)\n", result.Recorded.IssueID, result.Recorded.Fingerprint)
 		if output.Lookup != nil {
 			if len(output.Lookup.Candidates) == 0 {

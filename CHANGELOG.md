@@ -23,6 +23,15 @@ They never claim more than the acceptance records in this repository prove.
   itself and starts the daemon when the pipe is unreachable, so a host only
   needs `errkb.exe mcp` as its MCP command; `--no-daemon` keeps the old
   unavailable-error behaviour.
+- The daemon enforces the capture gate: when `capture.enabled` is false, or the
+  connector or project is paused in `config.yaml`, `record` and `capture` calls
+  fail with a `conflict` error instead of writing. Before this change the
+  setting only disabled the DSH adapter, so other hosts could still write.
+- An event that arrives while the database is unreachable is spooled to the
+  daemon's offline queue (already redacted) and answered with `queued: true`
+  carrying the event id and fingerprint; the queue replays those events when
+  the database recovers. `errkb run` and `errkb record` now say the event was
+  queued instead of naming an issue that does not exist yet.
 
 ## [0.1.1] - 2026-10-23
 

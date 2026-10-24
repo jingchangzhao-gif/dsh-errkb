@@ -126,10 +126,17 @@ import "list"
 #RecordResponse: {
 	schema_version: "v1"
 	event_id:       string & !=""
-	occurrence_id:  string & !=""
-	issue_id:       string & !=""
+	occurrence_id:  string
+	issue_id:       string
 	fingerprint:    #Fingerprint
 	created:        bool
+	queued?:        bool
+	// A queued write (database unreachable) leaves the occurrence and issue
+	// empty until the replay runs; every other response must carry them.
+	if !queued {
+		occurrence_id: string & !=""
+		issue_id:      string & !=""
+	}
 }
 
 #RecordTool: #Tool & {

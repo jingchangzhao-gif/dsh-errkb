@@ -301,6 +301,7 @@ compat: {
 				"Observation.shell",
 				"Observation.source",
 				"Observation.tool_name",
+				"ConnectorCaptureResponse.queued",
 			]
 			required: [
 				"ConnectorCaptureRequest.connector_id",
@@ -502,6 +503,7 @@ compat: {
 				"SolutionEnvironment.runtime_versions",
 				"SolutionEnvironment.shell",
 				"Tool.output",
+				"RecordResponse.queued",
 			]
 			required: [
 				"LookupRequest.schema_version",

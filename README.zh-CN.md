@@ -204,7 +204,7 @@ retention:
   audit_days: 365
 ```
 
-默认值：Named Pipe 开、HTTP 关、采集开、通知开、检索上限 3、采集/检索/MCP 超时 2000/1500/5000 ms。后台服务也接受显式参数（`--dsn`、`--pipe`、`--health-file`、`--log-file` 等）；设置界面模型编辑的是同一份文件，不引入第二套配置模型。完整示例见 [`connectors/templates/cli-log/config.yaml`](connectors/templates/cli-log/config.yaml)。
+默认值：Named Pipe 开、HTTP 关、采集开、通知开、检索上限 3、采集/检索/MCP 超时 2000/1500/5000 ms。后台服务会执行这些设置：`capture.enabled` 关闭、或某个连接器/项目被暂停时，`record` 与 `capture` 调用返回 `conflict` 而不是写入；数据库不可达时到达的事件会先进入离线队列（已脱敏），恢复后重放。后台服务也接受显式参数（`--dsn`、`--config`、`--queue-dir`、`--pipe`、`--health-file`、`--log-file` 等）；设置界面模型编辑的是同一份文件，不引入第二套配置模型。完整示例见 [`connectors/templates/cli-log/config.yaml`](connectors/templates/cli-log/config.yaml)。
 
 ## 系统要求
 

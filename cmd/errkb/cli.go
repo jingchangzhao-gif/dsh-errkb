@@ -335,6 +335,11 @@ func runRecord(args []string, env *cliEnv) int {
 		created = "yes"
 	}
 	fmt.Fprintf(env.stdout, "recorded event %s\n", response.EventID)
+	if response.Queued {
+		fmt.Fprintf(env.stdout, "   queued for replay (fingerprint %s)\n", response.Fingerprint)
+		fmt.Fprintln(env.stdout, "   the database is unreachable; the daemon replays the redacted event when it recovers")
+		return exitOK
+	}
 	fmt.Fprintf(env.stdout, "   occurrence %s\n", response.OccurrenceID)
 	fmt.Fprintf(env.stdout, "   issue %s\n", response.IssueID)
 	fmt.Fprintf(env.stdout, "   fingerprint %s\n", response.Fingerprint)

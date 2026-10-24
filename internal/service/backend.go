@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sort"
 	"strings"
 	"time"
@@ -29,10 +30,16 @@ import (
 // limit. The contract still caps it at 100.
 const DefaultListLimit = 20
 
-// SQLBackend answers the six local API operations from PostgreSQL. A nil or
-// closed pool fails every call with CodeUnavailable instead of panicking.
+// SQLBackend answers the local API operations from PostgreSQL. A nil or closed
+// pool fails every call with CodeUnavailable instead of panicking.
+//
+// gate (optional) enforces the capture settings before anything is written, and
+// queue (optional) buffers already-redacted events while the database is
+// unreachable. Both are wired by the daemon from its configuration.
 type SQLBackend struct {
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
+	gate  func(ctx context.Context, connectorID, projectKey string) error
+	queue *Queue
 }
 
 // NewSQLBackend wires a pool. The pool is not owned: the daemon closes it.
@@ -40,13 +47,47 @@ func NewSQLBackend(pool *pgxpool.Pool) *SQLBackend {
 	return &SQLBackend{pool: pool}
 }
 
+// WithCaptureGate rejects writes the configuration paused, before the database
+// call. It returns the backend so the daemon can chain the wiring.
+func (b *SQLBackend) WithCaptureGate(gate func(ctx context.Context, connectorID, projectKey string) error) *SQLBackend {
+	b.gate = gate
+	return b
+}
+
+// WithQueue buffers redacted events when the database is unreachable.
+func (b *SQLBackend) WithQueue(queue *Queue) *SQLBackend {
+	b.queue = queue
+	return b
+}
+
+// checkCapture returns a conflict error when the settings paused this capture.
+func (b *SQLBackend) checkCapture(ctx context.Context, connectorID, projectKey string) error {
+	if b == nil || b.gate == nil {
+		return nil
+	}
+	if err := b.gate(ctx, connectorID, projectKey); err != nil {
+		return APIErrorf(CodeConflict, "%v", err)
+	}
+	return nil
+}
+
+// databaseUnavailableError keeps the underlying connection error reachable so
+// the offline path can tell an outage from a data problem after translation.
+type databaseUnavailableError struct{ err error }
+
+func (e *databaseUnavailableError) Error() string {
+	return "the database is not available: " + e.err.Error()
+}
+
+func (e *databaseUnavailableError) Unwrap() error { return e.err }
+
 func (b *SQLBackend) withConn(ctx context.Context, call func(context.Context, *pgx.Conn) error) error {
 	if b == nil || b.pool == nil {
 		return APIErrorf(CodeUnavailable, "the database is not available")
 	}
 	conn, err := b.pool.Acquire(ctx)
 	if err != nil {
-		return APIErrorf(CodeUnavailable, "acquire a database connection: %v", err)
+		return &databaseUnavailableError{err: err}
 	}
 	defer conn.Release()
 	return call(ctx, conn.Conn())
@@ -106,9 +147,15 @@ func (b *SQLBackend) Search(ctx context.Context, request contract.SearchRequest)
 }
 
 // Record stores one already redacted failure and answers the issue identity.
+// When the capture settings paused this connector or project the write is
+// refused; when the database is unreachable the event goes to the offline
+// queue and the response says so (queued) instead of pretending it landed.
 func (b *SQLBackend) Record(ctx context.Context, request contract.RecordRequest) (contract.RecordResponse, error) {
 	if err := request.Validate(); err != nil {
 		return contract.RecordResponse{}, APIErrorf(CodeInvalidRequest, "%v", err)
+	}
+	if err := b.checkCapture(ctx, request.Event.ConnectorID, request.Event.ProjectKey); err != nil {
+		return contract.RecordResponse{}, err
 	}
 	var stored database.RecordResult
 	err := b.withConn(ctx, func(ctx context.Context, conn *pgx.Conn) error {
@@ -120,6 +167,18 @@ func (b *SQLBackend) Record(ctx context.Context, request contract.RecordRequest)
 		return nil
 	})
 	if err != nil {
+		if b.queue != nil && isDatabaseUnreachable(err) {
+			if queued, queueErr := b.queue.Enqueue(request.Event); queueErr != nil || !queued {
+				return contract.RecordResponse{}, translateBackendError("record", err)
+			}
+			return contract.RecordResponse{
+				SchemaVersion: contract.ToolSchemaVersion,
+				EventID:       request.Event.EventID,
+				Fingerprint:   request.Event.Fingerprint,
+				Created:       false,
+				Queued:        true,
+			}, nil
+		}
 		return contract.RecordResponse{}, translateBackendError("record", err)
 	}
 	return contract.RecordResponse{
@@ -264,6 +323,9 @@ func (b *SQLBackend) Capture(ctx context.Context, request contract.CaptureReques
 	if err := request.Validate(); err != nil {
 		return contract.CaptureResponse{}, APIErrorf(CodeInvalidRequest, "%v", err)
 	}
+	if err := b.checkCapture(ctx, request.ConnectorID, request.Observation.ProjectKey); err != nil {
+		return contract.CaptureResponse{}, err
+	}
 	var response contract.CaptureResponse
 	err := b.withConn(ctx, func(ctx context.Context, conn *pgx.Conn) error {
 		stored, err := capture.CaptureObservation(ctx, conn, request)
@@ -274,6 +336,9 @@ func (b *SQLBackend) Capture(ctx context.Context, request contract.CaptureReques
 		return nil
 	})
 	if err != nil {
+		// A raw observation cannot be queued: the event needs the connector and
+		// session row ids that only the database can mint, so the caller sees
+		// unavailable instead of a queued success it cannot replay.
 		return contract.CaptureResponse{}, translateBackendError("capture", err)
 	}
 	return response, nil
@@ -383,6 +448,10 @@ func matchDetail(candidate database.RetrievalCandidate) string {
 // translateBackendError maps storage failures onto the closed wire codes. A
 // backend that returns anything else becomes CodeInternal in encodeResult.
 func translateBackendError(operation string, err error) error {
+	var unavailable *databaseUnavailableError
+	if errors.As(err, &unavailable) {
+		return APIErrorf(CodeUnavailable, "%s: %v", operation, unavailable.err)
+	}
 	var apiError *APIError
 	if errors.As(err, &apiError) {
 		return err
@@ -400,6 +469,33 @@ func translateBackendError(operation string, err error) error {
 		}
 	}
 	return APIErrorf(CodeInternal, "%s: %v", operation, err)
+}
+
+// isDatabaseUnreachable reports whether the write failed because the database
+// could not be reached, as opposed to a data or constraint problem. Only this
+// class may go to the offline queue: a queued event replays later and must not
+// hide a validation error behind an outage message.
+func isDatabaseUnreachable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var connectError *pgconn.ConnectError
+	if errors.As(err, &connectError) {
+		return true
+	}
+	var pgError *pgconn.PgError
+	if errors.As(err, &pgError) {
+		switch pgError.Code {
+		case "08000", "08001", "08003", "08006", "08007", "08008",
+			"57P01", "57P02", "57P03":
+			return true
+		}
+	}
+	var netError net.Error
+	return errors.As(err, &netError)
 }
 
 // normalizeQuery turns raw host text into the matching form. Queries are not

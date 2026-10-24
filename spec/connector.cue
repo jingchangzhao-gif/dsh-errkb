@@ -63,6 +63,13 @@ import "list"
 	issue_id:       string
 	fingerprint:    #Fingerprint
 	created:        bool
+	queued?:        bool
+	// A queued observation only knows its event and fingerprint; the replay
+	// assigns the occurrence and issue identities.
+	if !queued {
+		occurrence_id: string & !=""
+		issue_id:      string & !=""
+	}
 }
 
 // #ConnectorLookupRequest asks the core for known fixes. At least one selector

@@ -316,6 +316,8 @@ export interface Core {
     issue_id: string;
     fingerprint: string;
     created: boolean;
+    /** Set when the core spooled the event because its database was down. */
+    queued?: boolean;
   }>;
   lookup(
     payload: Record<string, unknown>,
