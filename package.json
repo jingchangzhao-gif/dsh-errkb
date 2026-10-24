@@ -1,6 +1,6 @@
 {
   "name": "dsh-errkb",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "DSH connector for the Error Knowledge Base: recycle errors - diagnose once, inject the known fix next time.",
   "license": "MIT",
   "repository": {

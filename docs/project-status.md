@@ -1,10 +1,10 @@
 # Project status
 
-Last reviewed: 2026-10-25 against tag `v0.1.2`.
+Last reviewed: 2026-10-25 against tag `v0.1.3`.
 
 ## Current release
 
-`v0.1.2` is the supported public release. The distribution is the portable toolbox:
+`v0.1.3` is the supported public release. The distribution is the portable toolbox:
 `errkb-toolbox.zip` (plus a standalone `errkb.exe` in the same release). There is no
 installer and no Start-menu entry; unpack the ZIP into a directory you own and run
 `errkb.exe pg install` once.
@@ -27,7 +27,7 @@ installer and no Start-menu entry; unpack the ZIP into a directory you own and r
 
 - `go test ./...` with a real PostgreSQL, the CUE contracts and the compatibility
   checker (19 rules) run in CI; the Windows smoke job runs the same executable.
-- Releases: tag `v0.1.2`, changelog section, binary version/commit/build time, per-file
+- Releases: tag `v0.1.3`, changelog section, binary version/commit/build time, per-file
   `SHA256SUMS`, and the npm tarball are checked by `packaging/windows/release.ps1`.
 - Connector behaviour is recorded with versions and dates in
   [`connector-matrix.md`](connector-matrix.md); unmeasured cells are marked.

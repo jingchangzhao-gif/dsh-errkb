@@ -4,7 +4,7 @@
 
 > **Recycles errors: the same failure is diagnosed once, recorded, and handed back as a known fix the next time it appears — locally, without calling a model.**
 
-**Project status (2026-10-25): v0.1.2 released.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Web toolbox ship as a **portable toolbox ZIP** (plus a standalone EXE); the installer path was removed. Download `errkb-toolbox.zip` from the [latest release](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/latest).
+**Project status (2026-10-25): v0.1.3 released.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Web toolbox ship as a **portable toolbox ZIP** (plus a standalone EXE); the installer path was removed. Download `errkb-toolbox.zip` from the [latest release](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/latest).
 
 The **Error Knowledge Base** (`error-knowledge-base`) is a local platform with several interfaces: a command-line client, a background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, host connectors and an embedded Windows Web toolbox. Every interface uses the same core and the same knowledge base; classification, redaction, normalisation, fingerprinting, storage, retrieval and fix trust are not reimplemented per host. The command remains `errkb`, and the DSH adapter package retains the name `dsh-errkb`.
 
@@ -57,7 +57,7 @@ The project uses three different words deliberately:
 | Portable release and Windows recovery | Implemented; the Windows smoke job runs the same executable | The Windows CI job builds the binary, runs every Go test against a real PostgreSQL and answers the MCP self-test; `errkb pg install` plus `autostart.ps1` cover first run and logon recovery |
 | Embedded Web toolbox | Implemented and automated-test covered | Search, detail/edit, statistics/audit and settings routes are wired through `ui --web` |
 | Release provenance | Implemented and release-verified | Missing/mismatched tags and dirty source are rejected; accepted tag `v0.1.1` points to commit `1438473` |
-| Release bundle | Released as v0.1.2 | The GitHub Release contains the toolbox ZIP, the standalone EXE, manifest, SBOM and checksums; the npm package is published from the same tag when the repository has an `NPM_TOKEN` secret |
+| Release bundle | Released as v0.1.3 | The GitHub Release contains the toolbox ZIP, the standalone EXE, manifest, SBOM and checksums; the npm package is published from the same tag when the repository has an `NPM_TOKEN` secret |
 
 ## Feature overview
 

@@ -124,7 +124,7 @@ download. Local ignored `dist/` files are not release authority.
    statistics, filtered audit page, and the settings page with a deletion preview and
    cancel; the e2e test checks the preview leaves the rows untouched.
 4. `EKB-060` packaging integration: **superseded** by the portable distribution — launcher and
-   toolbox ZIP ship in v0.1.2; the Windows smoke job and the release checks
+   toolbox ZIP ship in v0.1.3; the Windows smoke job and the release checks
    verify the tagged release.
 
 All land in the existing release pipeline; no new runtime is introduced.

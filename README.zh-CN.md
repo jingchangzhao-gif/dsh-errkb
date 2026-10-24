@@ -4,7 +4,7 @@
 
 > **回收报错：同一个失败只诊断一次，记录下来，下次出现时作为已知解法交回 —— 全程本地完成，不调用模型。**
 
-**项目状态（2026-10-25）：v0.1.2 已正式发布。** 可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、已实测的 DSH/Codex/Claude 连接器和内嵌 Web 工具箱以**便携工具箱 ZIP**（外加独立 EXE）形式发布；安装器路线已移除。从[最新发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/latest)下载 `errkb-toolbox.zip`。
+**项目状态（2026-10-25）：v0.1.3 已正式发布。** 可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、已实测的 DSH/Codex/Claude 连接器和内嵌 Web 工具箱以**便携工具箱 ZIP**（外加独立 EXE）形式发布；安装器路线已移除。从[最新发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/latest)下载 `errkb-toolbox.zip`。
 
 **错误知识库**（`error-knowledge-base`）是一个本地平台，有多种使用入口：命令行客户端、后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件、宿主连接器与内嵌 Windows Web 工具箱。所有入口共用同一套核心与知识库；分类、脱敏、规范化、指纹、存储、检索和解法可信度不会在每个宿主里重复实现。命令仍是 `errkb`，DSH 适配器包继续使用 `dsh-errkb`。
 
@@ -57,7 +57,7 @@
 | 便携发布与 Windows 恢复 | 已实现；Windows 冒烟任务运行同一个可执行文件 | Windows CI 任务构建二进制、用真实 PostgreSQL 跑全部 Go 测试并回答 MCP 自检；`errkb pg install` 与 `autostart.ps1` 覆盖首次运行和登录恢复 |
 | 内嵌 Web 工具箱 | 已实现并有自动化测试覆盖 | 搜索、详情/编辑、统计/审计和设置路由均已接入 `ui --web` |
 | 发布来源门禁 | 已实现并通过发布验证 | 会拒绝缺失/不匹配 tag 与脏源码；已验收 tag `v0.1.2` 指向提交 `1438473` 之后的修复线 |
-| 发布包 | 已发布为 v0.1.2 | GitHub Release 包含工具箱 ZIP、独立 EXE、manifest、SBOM 与校验和；仓库配置 `NPM_TOKEN` 时同一 tag 还会发布 npm 包 |
+| 发布包 | 已发布为 v0.1.3 | GitHub Release 包含工具箱 ZIP、独立 EXE、manifest、SBOM 与校验和；仓库配置 `NPM_TOKEN` 时同一 tag 还会发布 npm 包 |
 
 ## 功能总览
 

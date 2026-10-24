@@ -10,6 +10,16 @@ They never claim more than the acceptance records in this repository prove.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-25
+
+### Fixed
+
+- **First double-click starts the toolbox.** `start-errkb.cmd` now offers to create the local
+  PostgreSQL cluster on the first run and only starts the existing one afterwards.
+- **The Windows smoke job installs `go-winres`** before building the portable executable.
+- **The npm publish step is gated through the job environment**, so a missing token is a
+  readable skip instead of a workflow that cannot start.
+
 ## [0.1.2] - 2026-10-25
 
 ### Added

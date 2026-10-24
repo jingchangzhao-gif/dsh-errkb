@@ -1,10 +1,10 @@
 # 项目状态
 
-最后核对：2026-10-25，对应 tag `v0.1.2`。
+最后核对：2026-10-25，对应 tag `v0.1.3`。
 
 ## 当前发布
 
-`v0.1.2` 是受支持的公开版本。发布形态是便携工具箱：`errkb-toolbox.zip`（同一发布页另附独立 `errkb.exe`）。没有安装器，也没有开始菜单入口；把 ZIP 解压到你有写权限的目录，运行一次 `errkb.exe pg install` 即可。
+`v0.1.3` 是受支持的公开版本。发布形态是便携工具箱：`errkb-toolbox.zip`（同一发布页另附独立 `errkb.exe`）。没有安装器，也没有开始菜单入口；把 ZIP 解压到你有写权限的目录，运行一次 `errkb.exe pg install` 即可。
 
 ## 已发布内容
 
@@ -23,7 +23,7 @@
 ## 已验证
 
 - `go test ./...`（真实 PostgreSQL）、CUE 契约与兼容检查器（19 条规则）在 CI 中运行；Windows 冒烟任务运行同一个可执行文件。
-- 发布：tag `v0.1.2`、变更日志小节、二进制 version/commit/build time、逐文件 `SHA256SUMS` 与 npm tarball 均由 `packaging/windows/release.ps1` 检查。
+- 发布：tag `v0.1.3`、变更日志小节、二进制 version/commit/build time、逐文件 `SHA256SUMS` 与 npm tarball 均由 `packaging/windows/release.ps1` 检查。
 - 连接器行为带版本与日期记录在 [`connector-matrix.zh-CN.md`](connector-matrix.zh-CN.md)；未实测格子会明确标注。
 
 ## 已知缺口

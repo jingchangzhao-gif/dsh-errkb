@@ -82,8 +82,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action unin
 ## 从源码构建
 
 ```powershell
-./packaging/windows/build.ps1 -Version 0.1.2
-./packaging/windows/release.ps1 -Mode package -Version 0.1.2 -Tag v0.1.2
+./packaging/windows/build.ps1 -Version 0.1.3
+./packaging/windows/release.ps1 -Mode package -Version 0.1.3 -Tag v0.1.3
 ```
 
 `build.ps1` 生成带版本信息的二进制；`release.ps1` 生成便携 ZIP、manifest、SBOM、第三方声明、签名策略与 `SHA256SUMS`。发布检查会核对 tag、变更日志小节与二进制版本；CI 的 Windows 冒烟任务用真实 PostgreSQL 运行同一个可执行文件。

@@ -102,8 +102,8 @@ is registered outside the folder and `HKCU\Software\Microsoft\Windows\CurrentVer
 ## Build from source
 
 ```powershell
-./packaging/windows/build.ps1 -Version 0.1.2
-./packaging/windows/release.ps1 -Mode package -Version 0.1.2 -Tag v0.1.2
+./packaging/windows/build.ps1 -Version 0.1.3
+./packaging/windows/release.ps1 -Mode package -Version 0.1.3 -Tag v0.1.3
 ```
 
 `build.ps1` writes the version-stamped binary; `release.ps1` writes the portable ZIP,

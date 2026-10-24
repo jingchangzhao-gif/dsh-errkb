@@ -206,7 +206,7 @@ The local `errkb ui --web` embeds static assets, binds only to `127.0.0.1`, gene
 - Retention has separate sample, normalized-event and audit periods. Scoped deletion supports preview, confirmation and audit (`0006_retention.sql`).
 - Crash tests kill real writer and migration processes and verify committed-data integrity.
 
-The Windows smoke job builds the release binary and runs the full suite with a real PostgreSQL. `release.ps1` produced and verified the portable `v0.1.2` bundle on 2026-10-25; the installer path was removed.
+The Windows smoke job builds the release binary and runs the full suite with a real PostgreSQL. `release.ps1` produced and verified the portable `v0.1.3` bundle on 2026-10-25; the installer path was removed.
 
 ## 11. Explicit non-features
 
