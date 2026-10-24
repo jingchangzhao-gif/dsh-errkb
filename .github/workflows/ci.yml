@@ -232,14 +232,14 @@ jobs:
           $code = $LASTEXITCODE
           Get-Content $log
           if ($code -ne 0) {
-            $failed = Select-String -Path $log -Pattern '^FAIL\s' -Quiet
+            $failed = Select-String -Path $log -Pattern '^FAIL\s|^--- FAIL' -Quiet
             $unlink = Select-String -Path $log -Pattern 'unlinkat .*Access is denied' -Quiet
             if (-not $failed -and $unlink) {
               # Windows occasionally keeps the test binary locked after every
-              # package reported ok (Defender or a helper that just exited).
-              # Retry once; a real test failure still fails the job.
-              Write-Output 'test cleanup quirk: every package passed but the test binary stayed locked; retrying once'
-              go test ./... -count=1
+              # package reported ok (Defender or a just-exited helper). The go
+              # tool's exit code is then only the cleanup failure; a real test
+              # failure still fails the job because it prints a FAIL line.
+              Write-Output 'test cleanup quirk: every package passed but the test binary stayed locked'
             } else {
               exit $code
             }
