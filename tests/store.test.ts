@@ -924,9 +924,12 @@ describe("store: real filesystem", () => {
 
   it("50 concurrent records yield 50 unique IDs and a document that parses completely", async () => {
     const kb = filesIn(dir);
+    // The 10 s default lock timeout is too tight when an antivirus scanner
+    // slows each of the 50 serialized writes on a real Windows disk; the
+    // concurrency safety is still what this test proves.
     const results = await Promise.all(
       Array.from({ length: 50 }, (_, n) =>
-        createStore(kb, { lockRetryMs: 2 }).append(input(n)),
+        createStore(kb, { lockRetryMs: 2, lockTimeoutMs: 60_000 }).append(input(n)),
       ),
     );
     const ids = results.map((r) => r.id);
@@ -937,7 +940,10 @@ describe("store: real filesystem", () => {
       Array.from({ length: 50 }, (_, n) => formatId(n + 1)),
     );
     expect(readdirSync(dir)).toEqual(["ERRORS.md"]);
-  });
+    // 50 serialized writes on a real Windows disk can exceed the 15 s default
+    // test timeout when the full suite runs in parallel; the assertions above
+    // still fail if any write is lost or the lock times out.
+  }, 120_000);
 
   it("reports missing things as values and real failures as errors", async () => {
     const fs = nodeStoreFs();

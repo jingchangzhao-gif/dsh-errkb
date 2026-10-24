@@ -542,7 +542,7 @@ func doctorMCPCheck(ctx context.Context, options DoctorOptions) DoctorCheck {
 	check.Status = DoctorOK
 	check.Summary = strings.TrimSpace(output)
 	check.Detail["selftest"] = "initialize and tools/list answered over stdio"
-	check.Detail["tools"] = "8"
+	check.Detail["tools"] = "9"
 	return check
 }
 

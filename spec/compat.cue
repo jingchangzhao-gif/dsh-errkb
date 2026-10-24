@@ -438,6 +438,7 @@ compat: {
 				"ListRequest.project_key",
 				"ListRequest.limit",
 				"ListRequest.cursor",
+				"ListRequest.environment",
 				"ListResponse.schema_version",
 				"ListResponse.items",
 				"ListResponse.next_cursor",

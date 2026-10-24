@@ -11,13 +11,13 @@ import (
 )
 
 // TestMCPSelftestAnswers runs the same initialize + tools/list exchange a host
-// performs, in memory, and checks the eight-tool summary.
+// performs, in memory, and checks the nine-tool summary.
 func TestMCPSelftestAnswers(t *testing.T) {
 	var stderr bytes.Buffer
 	if code := runMCP([]string{"selftest"}, strings.NewReader(""), io.Discard, &stderr); code != exitOK {
 		t.Fatalf("selftest exited %d: %s", code, stderr.String())
 	}
-	if !strings.Contains(stderr.String(), "8 tools available") {
+	if !strings.Contains(stderr.String(), "9 tools available") {
 		t.Fatalf("selftest summary does not report the tool count: %q", stderr.String())
 	}
 }

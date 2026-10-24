@@ -327,6 +327,9 @@ type ListRequest struct {
 	ProjectKey    string `json:"project_key,omitempty"`
 	Limit         *int   `json:"limit,omitempty"`
 	Cursor        string `json:"cursor,omitempty"`
+	// Environment narrows the page to issues (or solutions) that appeared in
+	// an occurrence with these values; the core compares only the fields set.
+	Environment *SolutionEnvironment `json:"environment,omitempty"`
 }
 
 // Validate locks the kind enum and a page size of 1..100.
@@ -339,6 +342,11 @@ func (r ListRequest) Validate() error {
 	}
 	if r.Limit != nil && (*r.Limit < 1 || *r.Limit > 100) {
 		return fmt.Errorf("list.limit: want 1..100, got %d", *r.Limit)
+	}
+	if r.Environment != nil {
+		if err := r.Environment.Validate(); err != nil {
+			return fmt.Errorf("list.environment: %w", err)
+		}
 	}
 	return nil
 }

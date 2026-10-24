@@ -100,7 +100,7 @@ Measured on 2026-10-20; versions are pinned on purpose. Each row maps to a real 
 | --- | --- | --- | --- | --- |
 | Generic CLI (`errkb run --`) | errkb from this tree | **B** wrapper | No — after the failure | [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md) |
 | DSH (plugin adapter) | DSH 0.2.0-rc.2 | **A** plugin hooks | Yes — standing hint and post-execute notices | EKB-039, PR #66 |
-| Codex CLI | 0.156.1 | **B** wrapper; **MCP** eight tools | No — MCP tools are available, but no pre-failure hook | [`connectors/codex/probe.md`](connectors/codex/probe.md) |
+| Codex CLI | 0.156.1 | **B** wrapper; **MCP** nine tools | No — MCP tools are available, but no pre-failure hook | [`connectors/codex/probe.md`](connectors/codex/probe.md) |
 | Claude Code | 2.1.282 | **A** `PostToolUseFailure` hook; **B** wrapper; **MCP** | Yes — `SessionStart` hint and MCP tools | [`connectors/claude/probe.md`](connectors/claude/probe.md) |
 
 Generic log and manual hosts use the template in [`connectors/templates/cli-log/`](connectors/templates/cli-log/README.md); their log channel and manual channel are not yet measured live. A window title is not an interface contract, so no support claim here rests on one.
@@ -166,7 +166,7 @@ One binary, several subcommands:
 | `errkb ui` | Native tray/search host from the source tree; not the released Web toolbox |
 | `errkb ui --web` | Local Web toolbox (search, detail/edit, statistics, settings); shipped in the v0.1.1 installer and toolbox ZIP |
 | `errkb doctor` | Nine read-only environment, connector and MCP checks, with a fix per finding |
-| `errkb mcp` | MCP stdio server with eight tools; resolves the installed credentials and starts the daemon when it is not running |
+| `errkb mcp` | MCP stdio server with nine tools; resolves the installed credentials and starts the daemon when it is not running |
 | `errkb mcp install --host codex\|claude\|dsh` | Register the MCP server with a local LLM host; DSH prints its plugin path instead |
 | `errkb mcp selftest` | Answer one initialize and tools/list in memory, then exit; `doctor` runs it |
 | `errkb version` | Version, commit, build time and Go toolchain |

@@ -181,6 +181,7 @@ import "list"
 	project_key?:   string & !=""
 	limit?:         int & >=1 & <=100
 	cursor?:        string & !=""
+	environment?:   #SolutionEnvironment
 }
 
 #ListItem: {

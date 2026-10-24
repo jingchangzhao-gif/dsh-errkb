@@ -60,7 +60,7 @@ CUE defines shapes and constraints; it is not the runtime database. PL/pgSQL kee
 | Learn whether a fix worked | `errkb feedback`, MCP `err_feedback` | `internal/database/solution.go`, `errkb_trust()` | Implemented |
 | Inspect issues and statistics | CLI `show`, `list`, `stats`; Web detail/stats/audit pages | `cmd/errkb/cli.go`, `internal/service/edit_api.go`, `internal/audit/`, `internal/ui/`, `internal/webshell/` | Implemented and automated-test covered |
 | Serve local clients | `errkb daemon` over Named Pipe | `internal/service/daemon.go`, `pipe.go`, `api.go` | Implemented |
-| Let an LLM actively query the KB | `errkb mcp`, eight tools | `internal/mcp/` | Implemented; MCP is not passive capture |
+| Let an LLM actively query the KB | `errkb mcp`, nine tools | `internal/mcp/` | Implemented; MCP is not passive capture |
 | Diagnose installation/connectors | `errkb doctor` | `cmd/errkb/doctor.go`, `internal/service/doctor.go` | Implemented |
 | Apply and inspect migrations | `errkb db migrate`, `errkb db status` | `cmd/errkb/db.go`, `internal/database/migrate.go` | Implemented in current source |
 | Run a local toolbox window | `errkb ui`, `errkb ui --web` | `internal/ui/`, `internal/webshell/`, `cmd/errkb/web.go` | Embedded Web shell shipped in v0.1.1 (`errkb ui --web`; the release includes it) |

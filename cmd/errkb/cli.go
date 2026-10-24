@@ -45,6 +45,7 @@ type apiClient interface {
 	Stats(context.Context, contract.StatsRequest) (contract.StatsResponse, error)
 	RecordSolution(context.Context, contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error)
 	SetStatus(context.Context, contract.SetStatusRequest) (contract.SetStatusResponse, error)
+	GetIssue(context.Context, contract.GetIssueRequest) (contract.GetIssueResponse, error)
 	Close() error
 }
 

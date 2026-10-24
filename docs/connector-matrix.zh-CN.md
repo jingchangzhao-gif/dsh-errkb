@@ -35,8 +35,8 @@
 | --- | --- | --- | --- | --- | --- |
 | 通用 CLI（`errkb run --`） | 本树构建的 errkb，见证运行 `errkb dev`（2026-10-19） | **B** 包装器 | 否——失败后才打印已知解法 | 1) 包装下一条命令；2) 从宿主日志取一行交给包装器（C 意图，日志尾随尚无 CLI 入口）；3) 手工管道（E） | `docs/e2e-cli-loop.md`；EKB-042 实测 `generic-cli` issue `f1b0ec03…` |
 | DSH（插件适配器） | DSH 0.2.0-rc.2 + `dsh-errkb` 0.0.0（本树） | **A** 插件钩子 | 是——常驻 system-prompt 提示 + post-execute 提示；已在 headless 会话日志中验证 | 用 `errkb run --` 包装 agent 命令（丢失宿主会话与工具事件），或手工 E | EKB-039 计划行、PR #66 |
-| Codex CLI | 0.156.1 | **B** 包装器采集；**MCP** 八个工具负责查询/记录 | 否——`capability.json` 记录 `notice_before_diagnosis: false` | 解析 `Stop` 钩子的会话记录取失败工具项（已记录、未实现）；过渡：把一行日志交给包装器 | `connectors/codex/probe.md`（探针 2026-10-20T14:15:07Z）、PR #67 |
-| Claude Code | 2.1.282 | **A** `PostToolUseFailure` 钩子；**B** 包装器兜模型 API 失败；**MCP** 八个工具 | 是——`SessionStart` 提示脚本 + MCP 工具在诊断前即可用 | 用 `errkb run --` 包装 `claude -p`（丢失 `tool_name`，仍有命令/退出码/文本） | `connectors/claude/probe.md`（探针 2026-10-20T15:55:00Z）、PR #68 |
+| Codex CLI | 0.156.1 | **B** 包装器采集；**MCP** 九个工具负责查询/记录 | 否——`capability.json` 记录 `notice_before_diagnosis: false` | 解析 `Stop` 钩子的会话记录取失败工具项（已记录、未实现）；过渡：把一行日志交给包装器 | `connectors/codex/probe.md`（探针 2026-10-20T14:15:07Z）、PR #67 |
+| Claude Code | 2.1.282 | **A** `PostToolUseFailure` 钩子；**B** 包装器兜模型 API 失败；**MCP** 九个工具 | 是——`SessionStart` 提示脚本 + MCP 工具在诊断前即可用 | 用 `errkb run --` 包装 `claude -p`（丢失 `tool_name`，仍有命令/退出码/文本） | `connectors/claude/probe.md`（探针 2026-10-20T15:55:00Z）、PR #68 |
 
 模板类别（EKB-042）不是宿主：`connectors/templates/cli-log` 描述等级 B（等同
 通用 CLI 行）、等级 C（仅日志意图，尾随尚无 CLI 入口）与等级 E（人选的错误文本）。

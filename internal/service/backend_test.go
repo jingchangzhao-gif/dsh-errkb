@@ -157,3 +157,49 @@ func asAPIError(err error, target **APIError) bool {
 	}
 	return false
 }
+
+// TestListFiltersByEnvironment covers the err_list environment filter: only the
+// keys set take part, and an issue is visible when one of its occurrences
+// matches.
+func TestListFiltersByEnvironment(t *testing.T) {
+	pool, setup, cleanup := searchTestPool(t)
+	defer cleanup()
+	connectorID, sessionID := insertSearchConnector(t, setup)
+	recordSearchEvent(t, setup, connectorID, sessionID, "pnpm install eperm", "EPERM", "pnpm install")
+	linuxEvent := recordSearchEvent(t, setup, connectorID, sessionID, "build failed on the linux box", "EBUILD", "make")
+	if _, err := setup.Exec(context.Background(),
+		`update occurrences set environment = '{"os":"linux","shell":"bash","runtime_versions":{"node":"20.11.0"}}'::jsonb where event_id = $1`,
+		linuxEvent.EventID); err != nil {
+		t.Fatalf("set the linux environment: %v", err)
+	}
+
+	backend := NewSQLBackend(pool)
+	list := func(environment *contract.SolutionEnvironment) []contract.ListItem {
+		t.Helper()
+		response, err := backend.List(context.Background(), contract.ListRequest{
+			SchemaVersion: contract.ToolSchemaVersion,
+			Kind:          "issue",
+			Environment:   environment,
+		})
+		if err != nil {
+			t.Fatalf("list issues: %v", err)
+		}
+		return response.Items
+	}
+
+	if items := list(nil); len(items) != 2 {
+		t.Fatalf("an unfiltered list returned %d issue(s), want 2", len(items))
+	}
+	if items := list(&contract.SolutionEnvironment{OS: "linux"}); len(items) != 1 || items[0].Title != "build failed on the linux box" {
+		t.Fatalf("linux filter returned %+v", items)
+	}
+	if items := list(&contract.SolutionEnvironment{OS: "linux", RuntimeVersions: map[string]string{"node": "20.11.0"}}); len(items) != 1 {
+		t.Fatalf("linux+node20 filter returned %d issue(s), want 1", len(items))
+	}
+	if items := list(&contract.SolutionEnvironment{RuntimeVersions: map[string]string{"node": "18.0.0"}}); len(items) != 0 {
+		t.Fatalf("a mismatched runtime version matched %d issue(s)", len(items))
+	}
+	if items := list(&contract.SolutionEnvironment{OS: "macos"}); len(items) != 0 {
+		t.Fatalf("an unmatched os matched %d issue(s)", len(items))
+	}
+}

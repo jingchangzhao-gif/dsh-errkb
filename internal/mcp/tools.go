@@ -20,7 +20,7 @@ import (
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/contract"
 )
 
-// The eight tool names are fixed by spec/mcp-tools.cue.
+// The nine tool names are fixed by spec/mcp-tools.cue.
 const (
 	ToolLookup         = "err_lookup"
 	ToolSearch         = "err_search"
@@ -30,6 +30,7 @@ const (
 	ToolStats          = "err_stats"
 	ToolRecordSolution = "err_record_solution"
 	ToolSetStatus      = "err_set_status"
+	ToolGetIssue       = "err_get_issue"
 )
 
 // CorrectionNotice is published in initialize.instructions and appended to
@@ -46,7 +47,7 @@ const CorrectionNotice = "MCP provides active lookup, search, record, feedback, 
 // "the daemon is down".
 var ErrInvalidArguments = errors.New("invalid tool arguments")
 
-// Backend is the nine-operation surface tools reuse. The daemon's SQL backend
+// Backend is the ten-operation surface tools reuse. The daemon's SQL backend
 // and the CLI's pipe client both speak it; a tool never talks to PostgreSQL.
 type Backend interface {
 	Lookup(context.Context, contract.LookupRequest) (contract.LookupResponse, error)
@@ -57,6 +58,7 @@ type Backend interface {
 	Stats(context.Context, contract.StatsRequest) (contract.StatsResponse, error)
 	RecordSolution(context.Context, contract.RecordSolutionRequest) (contract.RecordSolutionResponse, error)
 	SetStatus(context.Context, contract.SetStatusRequest) (contract.SetStatusResponse, error)
+	GetIssue(context.Context, contract.GetIssueRequest) (contract.GetIssueResponse, error)
 }
 
 // Tool is one published descriptor plus its typed call.
@@ -77,9 +79,10 @@ func (t Tool) Call(ctx context.Context, arguments json.RawMessage) (any, error) 
 	return t.call(ctx, arguments)
 }
 
-// NewTools builds the eight tools over one backend. The write-back pair
-// (record solution / set status) lets a host close the loop by itself; there is
-// still no capture tool to accidentally advertise.
+// NewTools builds the ten tools over one backend. The write-back pair
+// (record solution / set status) lets a host close the loop by itself, and the
+// detail read lets it inspect an issue before writing; there is still no
+// capture tool to accidentally advertise.
 func NewTools(backend Backend) []Tool {
 	return []Tool{
 		lookupTool(backend),
@@ -90,6 +93,7 @@ func NewTools(backend Backend) []Tool {
 		statsTool(backend),
 		recordSolutionTool(backend),
 		setStatusTool(backend),
+		getIssueTool(backend),
 	}
 }
 
@@ -264,6 +268,15 @@ func listTool(backend Backend) Tool {
 			"project_key":    map[string]any{"type": "string"},
 			"limit":          map[string]any{"type": "integer", "minimum": 1, "maximum": 100},
 			"cursor":         map[string]any{"type": "string"},
+			"environment": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"os":               map[string]any{"type": "string"},
+					"shell":            map[string]any{"type": "string"},
+					"connector":        map[string]any{"type": "string"},
+					"runtime_versions": map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}},
+				},
+			},
 		}, []string{"kind"}),
 		call: func(ctx context.Context, arguments json.RawMessage) (any, error) {
 			var request contract.ListRequest
@@ -385,6 +398,37 @@ func setStatusTool(backend Backend) Tool {
 			}
 			if err := response.Validate(); err != nil {
 				return nil, responseDrift("set_status", err)
+			}
+			return response, nil
+		},
+	}
+}
+
+func getIssueTool(backend Backend) Tool {
+	return Tool{
+		Name: ToolGetIssue,
+		Description: "Read one issue with its occurrences, solution versions and outcome history, " +
+			"including the recorded fix text and the current trust score. " + CorrectionNotice,
+		ReadOnly: true,
+		InputSchema: objectSchema(map[string]any{
+			"schema_version": schemaVersion(),
+			"issue_id":       map[string]any{"type": "string", "description": "Issue id (UUID)."},
+		}, []string{"issue_id"}),
+		call: func(ctx context.Context, arguments json.RawMessage) (any, error) {
+			var request contract.GetIssueRequest
+			if err := decodeArguments(arguments, &request); err != nil {
+				return nil, err
+			}
+			fillVersion(&request.SchemaVersion)
+			if err := request.Validate(); err != nil {
+				return nil, invalidArguments("get_issue", err)
+			}
+			response, err := backend.GetIssue(ctx, request)
+			if err != nil {
+				return nil, err
+			}
+			if err := response.Validate(); err != nil {
+				return nil, responseDrift("get_issue", err)
 			}
 			return response, nil
 		},

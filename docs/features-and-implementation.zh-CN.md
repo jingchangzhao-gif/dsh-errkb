@@ -60,7 +60,7 @@ CUE 定义数据形状和约束，不是运行时数据库；PL/pgSQL 保证数�
 | 记录解法是否有效 | `errkb feedback`、MCP `err_feedback` | `internal/database/solution.go`、`errkb_trust()` | 已实现 |
 | 查看问题与统计 | CLI `show`、`list`、`stats`；Web 详情/统计/审计页 | `cmd/errkb/cli.go`、`internal/service/edit_api.go`、`internal/audit/`、`internal/ui/`、`internal/webshell/` | 已实现并有自动化测试覆盖 |
 | 为本地客户端提供服务 | `errkb daemon` + Named Pipe | `internal/service/daemon.go`、`pipe.go`、`api.go` | 已实现 |
-| 让 LLM 主动查询知识库 | `errkb mcp` 的 8 个工具 | `internal/mcp/` | 已实现；MCP 不是被动采集器 |
+| 让 LLM 主动查询知识库 | `errkb mcp` 的 9 个工具 | `internal/mcp/` | 已实现；MCP 不是被动采集器 |
 | 诊断安装和连接器 | `errkb doctor` | `cmd/errkb/doctor.go`、`internal/service/doctor.go` | 已实现 |
 | 应用并检查数据库迁移 | `errkb db migrate`、`errkb db status` | `cmd/errkb/db.go`、`internal/database/migrate.go` | 当前源码已实现 |
 | 打开本地工具箱窗口 | `errkb ui`、`errkb ui --web` | `internal/ui/`、`internal/webshell/`、`cmd/errkb/web.go` | 内嵌 Web 壳已随 v0.1.1 发布（`errkb ui --web`） |
@@ -177,7 +177,7 @@ CLI 是同一套契约上的薄客户端，包括 `search`、`show`、`record`�
 
 ### 9.3 MCP
 
-`errkb mcp` 通过 stdio 提供 8 个工具：
+`errkb mcp` 通过 stdio 提供 9 个工具：
 
 | 工具 | 作用 |
 | --- | --- |

@@ -100,7 +100,7 @@
 | --- | --- | --- | --- | --- |
 | 通用 CLI（`errkb run --`） | 本仓库构建的 errkb | **B** 包装器 | 否 —— 失败之后 | [`docs/e2e-cli-loop.zh-CN.md`](docs/e2e-cli-loop.zh-CN.md) |
 | DSH（插件适配器） | DSH 0.2.0-rc.2 | **A** 插件 Hook | 是 —— 常驻提示与执行后通知 | EKB-039，PR #66 |
-| Codex CLI | 0.156.1 | **B** 包装器；**MCP** 八个工具 | 否 —— MCP 工具可主动查询，但没有失败前 Hook | [`connectors/codex/probe.md`](connectors/codex/probe.md) |
+| Codex CLI | 0.156.1 | **B** 包装器；**MCP** 九个工具 | 否 —— MCP 工具可主动查询，但没有失败前 Hook | [`connectors/codex/probe.md`](connectors/codex/probe.md) |
 | Claude Code | 2.1.282 | **A** `PostToolUseFailure` Hook；**B** 包装器；**MCP** | 是 —— `SessionStart` 提示与 MCP 工具 | [`connectors/claude/probe.md`](connectors/claude/probe.md) |
 
 通用日志与手工宿主使用 [`connectors/templates/cli-log/`](connectors/templates/cli-log/README.md) 的模板；它们的日志通道与手工通道尚未实测。窗口标题不是接口契约，这里的支持声明没有一条建立在窗口标题上。
@@ -166,7 +166,7 @@ v0.1.1 安装器和便携工具箱都可以通过 `errkb ui --web` 打开内嵌�
 | `errkb ui` | 源码树中的原生托盘/搜索宿主；不是已发布的 Web 工具箱 |
 | `errkb ui --web` | 本地 Web 工具箱（搜索、详情/编辑、统计、设置）；v0.1.1 安装器与工具箱 ZIP 已包含 |
 | `errkb doctor` | 九项只读检查：环境、连接器与 MCP，每条发现附修复建议 |
-| `errkb mcp` | 带八个工具的 MCP stdio 服务；自动解析已安装凭据，daemon 未运行时自动拉起 |
+| `errkb mcp` | 带九个工具的 MCP stdio 服务；自动解析已安装凭据，daemon 未运行时自动拉起 |
 | `errkb mcp install --host codex\|claude\|dsh` | 把 MCP 服务注册到本机 LLM 宿主；DSH 打印插件路径 |
 | `errkb mcp selftest` | 在内存里完成一次 initialize 与 tools/list 后退出；`doctor` 会调用它 |
 | `errkb version` | 版本、提交、构建时间与 Go 工具链 |

@@ -221,14 +221,18 @@ func (b *SQLBackend) List(ctx context.Context, request contract.ListRequest) (co
 	if request.Limit != nil {
 		limit = *request.Limit
 	}
+	environment := database.Environment{}
+	if request.Environment != nil {
+		environment = environmentFromContract(request.Environment)
+	}
 	var items []database.ListSummary
 	var next string
 	err := b.withConn(ctx, func(ctx context.Context, conn *pgx.Conn) error {
 		var err error
 		if request.Kind == "solution" {
-			items, next, err = database.ListSolutions(ctx, conn, request.ProjectKey, request.Cursor, limit)
+			items, next, err = database.ListSolutions(ctx, conn, request.ProjectKey, request.Cursor, limit, environment)
 		} else {
-			items, next, err = database.ListIssues(ctx, conn, request.ProjectKey, request.Cursor, limit)
+			items, next, err = database.ListIssues(ctx, conn, request.ProjectKey, request.Cursor, limit, environment)
 		}
 		return err
 	})

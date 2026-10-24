@@ -32,6 +32,13 @@ They never claim more than the acceptance records in this repository prove.
   carrying the event id and fingerprint; the queue replays those events when
   the database recovers. `errkb run` and `errkb record` now say the event was
   queued instead of naming an issue that does not exist yet.
+- `err_get_issue` is the ninth MCP tool: the host can read one issue with its
+  occurrences, solution versions, outcome history and current trust before
+  writing, instead of stitching a lookup and several guesses together.
+- `err_list` accepts an `environment` filter (`os`, `shell`, `connector`,
+  `runtime_versions`); only the keys set take part in the comparison, so
+  "issues seen on Linux with Node 20" is one call rather than client-side
+  filtering.
 
 ## [0.1.1] - 2026-10-23
 
