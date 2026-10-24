@@ -212,7 +212,8 @@ interface Core {
     occurrence_id: string;
     issue_id: string;
     fingerprint: string;
-    created: boolean;
+    created: boolean; /** Set when the core spooled the event because its database was down. */
+    queued?: boolean;
   }>;
   lookup(payload: Record<string, unknown>): Promise<{
     candidates?: CoreCandidate[];
