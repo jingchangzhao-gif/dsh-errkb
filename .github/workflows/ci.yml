@@ -243,6 +243,7 @@ jobs:
               # ten PostgreSQL clusters, and parallel packages exhausted the
               # runner once and stalled a migration query.
               Write-Output 'test cleanup quirk: every package passed but the test binary stayed locked'
+              exit 0
             } else {
               exit $code
             }
