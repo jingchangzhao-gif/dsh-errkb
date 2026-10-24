@@ -165,11 +165,24 @@ v0.1.1 安装器和便携工具箱都可以通过 `errkb ui --web` 打开内嵌�
 | `errkb daemon` | 本地后台服务：Named Pipe API、健康文档、脱敏日志 |
 | `errkb ui` | 源码树中的原生托盘/搜索宿主；不是已发布的 Web 工具箱 |
 | `errkb ui --web` | 本地 Web 工具箱（搜索、详情/编辑、统计、设置）；v0.1.1 安装器与工具箱 ZIP 已包含 |
-| `errkb doctor` | 八项只读环境与连接器检查，每条发现附修复建议 |
-| `errkb mcp` | 带八个工具的 MCP stdio 服务 |
+| `errkb doctor` | 九项只读检查：环境、连接器与 MCP，每条发现附修复建议 |
+| `errkb mcp` | 带八个工具的 MCP stdio 服务；自动解析已安装凭据，daemon 未运行时自动拉起 |
+| `errkb mcp install --host codex\|claude\|dsh` | 把 MCP 服务注册到本机 LLM 宿主；DSH 打印插件路径 |
+| `errkb mcp selftest` | 在内存里完成一次 initialize 与 tools/list 后退出；`doctor` 会调用它 |
 | `errkb version` | 版本、提交、构建时间与 Go 工具链 |
 
 退出码：`0` 找到/成功，`1` 内部错误，`2` 参数错误，`3` 未找到，`4` 后台服务不可用。`--json` 输出的是校验过的契约载荷，不是二次渲染的近似物。
+
+MCP 服务对每个宿主只需一条注册命令；服务会自动用已安装凭据拉起 daemon，不需要手工维护管道：
+
+```powershell
+errkb mcp install --host codex     # Codex：写入 MCP 条目
+errkb mcp install --host claude    # Claude Code：写入用户级条目
+errkb mcp install --host dsh       # DSH 走插件集成，只打印路径
+errkb mcp selftest                 # 内存内完成 initialize + tools/list，打印工具数
+```
+
+`--print` 只显示命令、不执行。`errkb doctor` 内含 MCP 检查，工具表坏了不用等宿主才发现。
 
 ## 配置
 

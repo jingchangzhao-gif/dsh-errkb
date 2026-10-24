@@ -52,7 +52,7 @@ func runWeb(args []string, stdout, stderr io.Writer) int {
 			*configPath = filepath.Join(filepath.Dir(executable), "config.yaml")
 		}
 	}
-	client, err := ensureDaemon(ctx, resolvedDSN, resolvedMigrations, stderr)
+	client, err := ensureDaemon(ctx, resolvedDSN, resolvedMigrations, "", stderr, "errkb ui")
 	if err != nil {
 		fmt.Fprintf(stderr, "errkb ui: %v\n", err)
 		return exitUnavailable
@@ -186,14 +186,18 @@ func resolveDaemonPaths(dsnFlag, credentialsFlag, migrationsFlag string) (string
 }
 
 // ensureDaemon reuses a running daemon or starts one detached, then waits for
-// the pipe. The daemon outlives the window, so closing the toolbox keeps capture.
-func ensureDaemon(ctx context.Context, dsn, migrations string, stderr io.Writer) (*service.Client, error) {
+// the pipe. The daemon outlives the caller, so closing a window keeps capture.
+func ensureDaemon(ctx context.Context, dsn, migrations, pipeName string, stderr io.Writer, caller string) (*service.Client, error) {
 	client, err := service.Dial(ctx)
 	if err == nil {
 		return client, nil
 	}
-	fmt.Fprintf(stderr, "errkb ui: the daemon is not running; starting it\n")
-	command := exec.Command(os.Args[0], "daemon", "--dsn", dsn, "--migrations", migrations)
+	fmt.Fprintf(stderr, "%s: the daemon is not running; starting it\n", caller)
+	daemonArgs := []string{"daemon", "--dsn", dsn, "--migrations", migrations}
+	if pipeName != "" {
+		daemonArgs = append(daemonArgs, "--pipe", pipeName)
+	}
+	command := exec.Command(os.Args[0], daemonArgs...)
 	command.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP}
 	if startErr := command.Start(); startErr != nil {
 		return nil, fmt.Errorf("start the daemon: %w", startErr)

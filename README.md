@@ -165,11 +165,24 @@ One binary, several subcommands:
 | `errkb daemon` | Local background service: Named Pipe API, health document, redacted log |
 | `errkb ui` | Native tray/search host from the source tree; not the released Web toolbox |
 | `errkb ui --web` | Local Web toolbox (search, detail/edit, statistics, settings); shipped in the v0.1.1 installer and toolbox ZIP |
-| `errkb doctor` | Eight read-only environment and connector checks, with a fix per finding |
-| `errkb mcp` | MCP stdio server with eight tools |
+| `errkb doctor` | Nine read-only environment, connector and MCP checks, with a fix per finding |
+| `errkb mcp` | MCP stdio server with eight tools; resolves the installed credentials and starts the daemon when it is not running |
+| `errkb mcp install --host codex\|claude\|dsh` | Register the MCP server with a local LLM host; DSH prints its plugin path instead |
+| `errkb mcp selftest` | Answer one initialize and tools/list in memory, then exit; `doctor` runs it |
 | `errkb version` | Version, commit, build time and Go toolchain |
 
 Exit codes: `0` found/success, `1` internal error, `2` bad arguments, `3` not found, `4` daemon unavailable. `--json` output is the validated contract payload, not a re-rendered approximation.
+
+Registering the MCP server is one command per host; in every case the server starts the daemon from the installed credentials and never needs a manually managed pipe:
+
+```powershell
+errkb mcp install --host codex     # Codex: writes the MCP entry
+errkb mcp install --host claude    # Claude Code: writes the user-scope entry
+errkb mcp install --host dsh       # DSH integrates through the plugin; prints that path
+errkb mcp selftest                 # initialize + tools/list in memory, prints the tool count
+```
+
+`--print` shows the commands without running them. `errkb doctor` includes the MCP check, so a broken tool table shows up before a host does.
 
 ## Configuration
 

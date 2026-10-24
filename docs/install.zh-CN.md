@@ -83,6 +83,18 @@ go build -o errkb.exe ./cmd/errkb
 
 安装器会部署 `start-errkb.cmd`，并创建运行 `errkb.exe ui --web` 的开始菜单快捷方式；不会留下可见终端。pipe 不可达时，Web 壳会读取安装目录的凭据与 migrations 来恢复 daemon。搜索、详情/编辑、统计/审计和设置页均已接入，并随 v0.1.1 正式发布。
 
+## 注册到 LLM 宿主
+
+`errkb mcp` 走 stdio 的 MCP 协议，会自己解析安装目录的 `pg\credentials.json` 与 `migrations\`，宿主只需启动这个二进制：
+
+```powershell
+errkb mcp install --host codex     # codex mcp add errkb -- <路径>\errkb.exe mcp
+errkb mcp install --host claude    # claude mcp add --scope user ... errkb -- <路径>\errkb.exe mcp
+errkb mcp install --host dsh       # 打印 dsh-errkb 插件路径（不需要 MCP 条目）
+```
+
+任意宿主加 `--print` 只显示命令、不执行。注册后重启宿主；`errkb mcp selftest` 在内存里验证 `initialize` 与 `tools/list`，`errkb doctor` 运行同一项检查。
+
 ## 复用已有 PostgreSQL
 
 把配置中的 `database.dsn` 或 daemon 的 `--dsn` 指向已有实例，创建目标数据库，运行 `errkb db migrate`，再运行 `errkb doctor`。安装器的专用实例选项只负责受管路径。

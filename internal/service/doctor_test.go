@@ -18,6 +18,17 @@ import (
 	"github.com/jingchangzhao-gif/error-knowledge-base/internal/database"
 )
 
+// stubDoctorMCP keeps the doctor tests independent of the test executable: the
+// real check spawns the binary and runs its MCP selftest.
+func stubDoctorMCP(t *testing.T) {
+	t.Helper()
+	previous := doctorMCPRun
+	t.Cleanup(func() { doctorMCPRun = previous })
+	doctorMCPRun = func(context.Context, string) (string, error) {
+		return "mcp selftest: 8 tools available\n", nil
+	}
+}
+
 // doctorTestConfiguration writes a minimal valid configuration file: the DSN
 // plus the contract defaults applied by LoadConfig.
 func doctorTestConfiguration(t *testing.T, dsn string) string {
@@ -139,9 +150,10 @@ func TestDoctorReportsEveryCategory(t *testing.T) {
 	_, pipeName := startTestPipe(t, PipeOptions{API: NewAPI(&fakeBackend{})})
 	options.PipeName = pipeName
 
+	stubDoctorMCP(t)
 	report := RunDoctor(context.Background(), options)
 
-	want := []string{"version", "database", "migrations", "extension", "pipe", "connectors", "queue", "privacy"}
+	want := []string{"version", "database", "migrations", "extension", "pipe", "mcp", "connectors", "queue", "privacy"}
 	if len(report.Checks) != len(want) {
 		encoded, _ := json.Marshal(report)
 		t.Fatalf("the report has %d checks, want %d: %s", len(report.Checks), len(want), encoded)
@@ -178,10 +190,11 @@ func TestDoctorKeepsGoingWhenTheDatabaseIsDown(t *testing.T) {
 	options := doctorTestOptions(t, "postgres://postgres:postgres@127.0.0.1:1/errkb?sslmode=disable&connect_timeout=1")
 	options.PipeName = newTestPipeName()
 
+	stubDoctorMCP(t)
 	report := RunDoctor(context.Background(), options)
 
-	if len(report.Checks) != 8 {
-		t.Fatalf("the report has %d checks, want 8 even with the database down", len(report.Checks))
+	if len(report.Checks) != 9 {
+		t.Fatalf("the report has %d checks, want 9 even with the database down", len(report.Checks))
 	}
 	if report.Status != DoctorFailing {
 		t.Fatalf("the report status is %q, want failing", report.Status)
@@ -192,6 +205,7 @@ func TestDoctorKeepsGoingWhenTheDatabaseIsDown(t *testing.T) {
 		"migrations": DoctorFailing,
 		"extension":  DoctorFailing,
 		"pipe":       DoctorDegraded,
+		"mcp":        DoctorOK,
 		"connectors": DoctorFailing,
 		"queue":      DoctorOK,
 		"privacy":    DoctorOK,
@@ -220,6 +234,7 @@ func TestDoctorCallsAMissingTrigramDegraded(t *testing.T) {
 	doctorTrigramAvailable = func(context.Context, *pgx.Conn) (bool, error) { return false, nil }
 	defer func() { doctorTrigramAvailable = original }()
 
+	stubDoctorMCP(t)
 	report := RunDoctor(context.Background(), options)
 
 	extension := doctorCheckByName(t, report, "extension")
@@ -239,6 +254,7 @@ func TestDoctorNeverPrintsThePassword(t *testing.T) {
 	options := doctorTestOptions(t, "postgres://postgres:"+password+"@127.0.0.1:1/errkb?sslmode=disable&connect_timeout=1")
 	options.PipeName = newTestPipeName()
 
+	stubDoctorMCP(t)
 	report := RunDoctor(context.Background(), options)
 
 	encoded, err := json.Marshal(report)
@@ -261,6 +277,7 @@ func TestDoctorIsReadOnly(t *testing.T) {
 	options.PipeName = pipeName
 
 	before := doctorSnapshot(t, conn)
+	stubDoctorMCP(t)
 	report := RunDoctor(context.Background(), options)
 	if report.Status != DoctorOK {
 		encoded, _ := json.Marshal(report)
@@ -296,6 +313,7 @@ func TestDoctorReportsAQueueOverTheCap(t *testing.T) {
 		}
 	}
 
+	stubDoctorMCP(t)
 	report := RunDoctor(context.Background(), options)
 
 	queue := doctorCheckByName(t, report, "queue")

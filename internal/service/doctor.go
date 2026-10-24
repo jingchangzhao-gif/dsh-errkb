@@ -5,7 +5,9 @@ package service
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -145,6 +147,8 @@ func RunDoctor(ctx context.Context, options DoctorOptions) DoctorReport {
 
 	report.Checks = append(report.Checks, doctorExtensionCheck(ctx, conn, options))
 	report.Checks = append(report.Checks, doctorPipeCheck(ctx, options, config))
+
+	report.Checks = append(report.Checks, doctorMCPCheck(ctx, options))
 
 	report.Checks = append(report.Checks, doctorConnectorsCheck(ctx, conn, options))
 
@@ -495,6 +499,50 @@ func doctorPipeCheck(ctx context.Context, options DoctorOptions, config *contrac
 		check.Status = DoctorOK
 		check.Summary = "listening on " + options.PipeName + " with an owner-only ACL"
 	}
+	return check
+}
+
+// doctorMCPRun invokes the binary's own selftest. Tests replace it because the
+// test executable is not errkb.exe.
+var doctorMCPRun = func(ctx context.Context, executable string) (string, error) {
+	command := exec.CommandContext(ctx, executable, "mcp", "selftest")
+	var output strings.Builder
+	command.Stdin = nil
+	command.Stdout = io.Discard
+	command.Stderr = &output
+	err := command.Run()
+	return output.String(), err
+}
+
+// doctorMCPCheck verifies the MCP surface with the binary's own selftest: one
+// initialize and one tools/list through the real server, no host or daemon
+// involved. A missing or renamed tool therefore shows up in the diagnosis.
+func doctorMCPCheck(ctx context.Context, options DoctorOptions) DoctorCheck {
+	check := DoctorCheck{Name: "mcp", Detail: make(map[string]string)}
+	executable, err := os.Executable()
+	if err != nil {
+		check.Status = DoctorFailing
+		check.Summary = "the errkb executable could not be located: " + doctorText(options, err.Error())
+		check.Fix = "run `errkb mcp selftest` from the installed binary"
+		return check
+	}
+	timeout := options.Timeout
+	if timeout <= 0 || timeout > 20*time.Second {
+		timeout = 20 * time.Second
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	output, runErr := doctorMCPRun(runCtx, executable)
+	if runErr != nil {
+		check.Status = DoctorFailing
+		check.Summary = "the MCP selftest failed: " + doctorText(options, strings.TrimSpace(output))
+		check.Fix = "run `errkb mcp selftest` to see the tool list; rebuild the binary if tools are missing"
+		return check
+	}
+	check.Status = DoctorOK
+	check.Summary = strings.TrimSpace(output)
+	check.Detail["selftest"] = "initialize and tools/list answered over stdio"
+	check.Detail["tools"] = "8"
 	return check
 }
 

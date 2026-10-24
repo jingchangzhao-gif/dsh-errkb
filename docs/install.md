@@ -133,9 +133,24 @@ Check the installation with:
 errkb doctor
 ```
 
-The doctor reports eight checks — version and database connectivity, migration ledger,
-optional `pg_trgm`, Named Pipe, connectors, offline queue, privacy patterns, data
-directory writability — each with a readable fix when a check fails.
+The doctor reports nine read-only checks — version and database connectivity, migration
+ledger, optional `pg_trgm`, Named Pipe, MCP selftest, connectors, offline queue, privacy
+patterns, data directory writability — each with a readable fix when a check fails.
+
+## Register with an LLM host
+
+`errkb mcp` speaks MCP over stdio. It resolves the installed `pg\credentials.json` and
+`migrations\` itself, so the host only has to launch the binary:
+
+```powershell
+errkb mcp install --host codex     # codex mcp add errkb -- <path>\errkb.exe mcp
+errkb mcp install --host claude    # claude mcp add --scope user ... errkb -- <path>\errkb.exe mcp
+errkb mcp install --host dsh       # prints the dsh-errkb plugin path (no MCP entry needed)
+```
+
+Add `--print` to see the command for any host without running it. Restart the host after
+registration; `errkb mcp selftest` proves the server answers `initialize` and `tools/list`,
+and `errkb doctor` runs the same check.
 
 ## Reusing an existing PostgreSQL
 

@@ -37,8 +37,8 @@ func TestDoctorJSONMatchesTheReportContract(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &report); err != nil {
 		t.Fatalf("decode the JSON report: %v (%s)", err, stdout.String())
 	}
-	if len(report.Checks) != 8 {
-		t.Fatalf("the JSON report has %d checks, want 8", len(report.Checks))
+	if len(report.Checks) != 9 {
+		t.Fatalf("the JSON report has %d checks, want 9", len(report.Checks))
 	}
 	if report.Status != service.DoctorFailing {
 		t.Fatalf("the JSON status is %q, want failing", report.Status)

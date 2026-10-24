@@ -10,6 +10,20 @@ They never claim more than the acceptance records in this repository prove.
 
 ## [Unreleased]
 
+### Added
+
+- `errkb mcp install --host codex|claude|dsh` registers the MCP server with a
+  local host: the measured `codex mcp add` and `claude mcp add --scope user`
+  commands are run for you, DSH prints its plugin path. `--print` shows the
+  command, `--json` reports one row per host.
+- `errkb mcp selftest` answers one `initialize` and one `tools/list` in memory
+  and exits non-zero when a tool is missing; `errkb doctor` now runs the same
+  check as its ninth read-only finding.
+- `errkb mcp` resolves the installed `pg\credentials.json` and `migrations\`
+  itself and starts the daemon when the pipe is unreachable, so a host only
+  needs `errkb.exe mcp` as its MCP command; `--no-daemon` keeps the old
+  unavailable-error behaviour.
+
 ## [0.1.1] - 2026-10-23
 
 Patch release for the installed product: the released builds now work without

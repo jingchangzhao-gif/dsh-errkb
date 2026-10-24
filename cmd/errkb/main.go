@@ -49,6 +49,8 @@ Commands:
   pg install|start|stop|uninstall|status|discover
                          manage the local PostgreSQL cluster
   mcp                    serve MCP over stdio for LLM hosts
+  mcp install            register the MCP server with a local host (codex|claude|dsh)
+  mcp selftest           answer one initialize and tools/list, then exit
   daemon                 run the local daemon
   doctor                 diagnose the runtime and connector state
   ui                     show the tray icon and capture state
