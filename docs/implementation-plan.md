@@ -4,7 +4,7 @@
 
 This document is the sole execution baseline for upgrading the existing DSH plugin into a multi-host technical-error reuse toolbox. Start at `EKB-001` and proceed in numeric order. A card is complete only after both its automated checks and its manual acceptance pass.
 
-> **Execution checkpoint (2026-10-23).** Cards EKB-002–060 record the historical implementation sequence; their dated status text is not the live queue. The Web toolbox, launcher, installer integration and provenance gate are implemented. WF-011A/WF-011B are mandatory Windows CI, and WF-012 published the verified v0.1.1 bundle. Physical reboot and interactive visual review remain optional evidence. Use [`project-status.md`](project-status.md) for current delivery truth; there is no active WF card.
+> **Execution checkpoint (2026-10-25).** Cards EKB-002–060 record the historical implementation sequence; their dated status text is not the live queue. The installer path was removed (see §16): the supported distribution is the portable `errkb-toolbox.zip`, the Web toolbox and launcher remain, and the Windows smoke job runs the full suite with a real PostgreSQL. Use [`project-status.md`](project-status.md) for current delivery truth; there is no active WF card.
 
 For a capability-oriented view of the current source and the implementation path behind each user feature, read [`features-and-implementation.md`](features-and-implementation.md). For the live unresolved queue and per-file repair order, start at [`workflow/README.md`](workflow/README.md). This plan remains the product-decision and historical task authority.
 
@@ -41,7 +41,7 @@ Version one explicitly excludes automatic detection of requirement misunderstand
 
 ## 2 Final delivery form
 
-The user-facing v1 product is a Windows installer and one primary program, `errkb.exe`. One binary exposes service, CLI, MCP and diagnostic modes:
+The user-facing v1 product is the portable toolbox and one primary program, `errkb.exe`. One binary exposes service, CLI, MCP and diagnostic modes:
 
 ```text
 errkb.exe                    tray and search UI
@@ -409,7 +409,7 @@ P4 is the first usable MVP gate and has no model dependency.
 | ☑ | EKB-059 | Statistics, audit and settings | 047, 049, 057-058 | ☑ Done (2026-10-22): `/stats` and `/settings` consume `/api/stats` (real database aggregation: false merges, latency percentiles, measured/estimated savings split with the assumption text), `/api/audit` (time/action/entity filters and paging) and `/api/settings` (connectors, capture and projects, retention, HTTP); deletion goes preview → confirm with the drift warning, and a cancel writes nothing; settings are validated before the atomic write and roll back on failure; filter and settings responses carry no DSN or password; `tests/e2e/ui_stats_test.go` runs the real process and proves the preview/cancel path leaves the issue count unchanged |
 | ☑ | EKB-060 | Installer and Start-menu UI integration | 052, 057-059 | ✅ Done (2026-10-23, v0.1.1 released): the installer `[Icons]` creates the "Start Error Knowledge Base" Start-menu shortcut (hidden PowerShell launching `errkb.exe ui --web`) and an uninstall shortcut, and `[Files]` ships `start-errkb.cmd`; `release.ps1` writes `errkb-toolbox.zip` (five whitelisted files, hashes in `SHA256SUMS`/manifest, ZIP byte-reproducibility exception documented); a silent dev-host install exits 0 and the shortcut and launcher exist. Remaining: the `vm-acceptance.ps1` ui phase, the clean-VM four-screen and copy evidence (blocked on EKB-052), and the release discipline (pre-release only until 052 passes) ; lifecycle unified: the installer calls `errkb pg` through the thin `postgres.ps1`, and the dev-host silent install, 3.4 s reboot replay and full `/DELETE_DATA=1` uninstall were re-verified |
 
-P8 gate: a standard user installs one traceable artifact, opens the toolbox from the Start menu, uses all four screens through the local pipe, reboots successfully, and can uninstall while keeping or deleting data.
+P8 gate: a standard user unpacks one traceable toolbox ZIP, runs `errkb pg install`, opens the toolbox with `start-errkb.cmd`, uses all four screens through the local pipe, replays the logon command successfully after a restart, and can uninstall while keeping or deleting data.
 
 ### 11.1 File order by card
 
@@ -518,3 +518,12 @@ Re-evaluate only after P7: per-host UI Automation where structured interfaces do
 
 Re-establish a real Git worktree from the current upstream `main`, copy the local-only EKB-057 files into a named branch, and verify the diff before changing behavior. Then complete EKB-057 in this order: command dispatch → installed-credential daemon recovery → e2e smoke test → release/launcher integration. Do not start EKB-058 until the packaged search shell opens successfully from a clean checkout.
 
+## 16 Portable distribution supersedes the installer (2026-10-25)
+
+The installer route was removed by owner decision because its first-run and lifecycle defects kept blocking releases. The supported delivery is the portable toolbox ZIP produced by `packaging/windows/release.ps1`:
+
+- `errkb-toolbox.zip` = `errkb.exe`, `start-errkb.cmd`, `autostart.ps1`, `postgres.ps1`, `migrations\*.sql`, `README.md`, `CHANGELOG.md`, `LICENSE`; the same release also carries the standalone `errkb.exe`, `SHA256SUMS`, `manifest.json`, `sbom.json`, `THIRD-PARTY-NOTICES.md`, `SIGNING.md` and `RELEASE-NOTES.md`.
+- First run is `errkb pg install`; logon recovery is the per-user HKCU Run entry written by `autostart.ps1`; the Web toolbox opens through `start-errkb.cmd`.
+- Removed files: `packaging/windows/installer.iss`, `ci-acceptance.ps1`, `vm-acceptance.ps1`, `recovery-acceptance.ps1`, `release-test.ps1`; `release.ps1` no longer takes installer parameters and `npm run test:release` is gone.
+- CI: the `windows-acceptance` job became `windows-go` (build, real PostgreSQL, the full Go suite, version and MCP selftest); `release.yml` builds the ZIP and publishes the npm package when `NPM_TOKEN` is configured.
+- Cards EKB-050/051/052/054/056/060 keep their historical status rows; their installer-specific claims are superseded by this section. `docs/acceptance-vm.md` is a historical record; the Windows smoke job and the release checks are the live gates.

@@ -1,6 +1,6 @@
 {
   "name": "dsh-errkb",
-  "version": "0.0.0",
+  "version": "0.1.2",
   "description": "DSH connector for the Error Knowledge Base: recycle errors - diagnose once, inject the known fix next time.",
   "license": "MIT",
   "repository": {
@@ -29,7 +29,6 @@
   "scripts": {
     "build": "tsdown",
     "test": "vitest run --coverage",
-    "test:release": "pwsh -NoProfile -File packaging/windows/release-test.ps1",
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "format": "prettier --write .",
@@ -53,5 +52,8 @@
   "engines": {
     "node": ">=22.13"
   },
-  "packageManager": "pnpm@11.7.0"
+  "packageManager": "pnpm@11.7.0",
+  "publishConfig": {
+    "access": "public"
+  }
 }

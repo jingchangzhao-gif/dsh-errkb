@@ -2,228 +2,121 @@
 
 [简体中文](install.zh-CN.md)
 
-This page separates the official v0.1.1 release from disposable local build output.
-
-> **Status note (2026-10-23).** v0.1.1 is the supported public release. Download it only
-> from the [GitHub Release page](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1) and verify it with the attached `SHA256SUMS` file.
-> WF-011A/WF-011B exercise its lifecycle and deterministic recovery in Windows CI. See
-> [`project-status.md`](project-status.md) and [`acceptance-vm.md`](acceptance-vm.md).
+This page covers the supported portable release: `errkb-toolbox.zip` from the
+[latest release](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/latest).
+There is no installer and no Start-menu shortcut; the ZIP is the distribution.
 
 ## Requirements
 
 - Windows 10 or 11, x64.
-- PostgreSQL 16 (EDB installer or an existing local instance). The installer can create a
-  dedicated cluster; it never bundles a server.
-- A standard (non-administrator) user account is supported. The application installs per
-  user and the installer does not require administrator elevation.
-- About 50 MB of disk for the application and binaries, plus the PostgreSQL data directory
-  (the installer default is a dedicated cluster under `%LOCALAPPDATA%\errkb\pg\data`).
+- PostgreSQL 16 installed (the EDB installer, or an existing local server). errkb never
+  bundles a database, but `errkb pg install` uses the installed PostgreSQL binaries to
+  create and manage its own cluster. Put `pg_ctl.exe` on `PATH`, or point
+  `ERRKB_PG_BIN` at the PostgreSQL `bin` directory.
+- A standard (non-administrator) account. The cluster, the daemon and the logon entry all
+  run as the signed-in user; nothing needs elevation.
 
-## Artifacts
+## What the ZIP contains
 
-| Artifact | How it is produced |
+| File | Purpose |
 | --- | --- |
-| `dist\errkb.exe` | `packaging\windows\build.ps1` — version-stamped, Windows resources, reproducible |
-| `dist\errkb.exe.sha256` | Written by `build.ps1` |
-| `dist\errkb-<version>-setup.exe` | `packaging\windows\release.ps1 -Mode package -IncludeInstaller` (requires Inno Setup 6) |
-| `dist\release\errkb-<version>\` | Release bundle with `SHA256SUMS`, `manifest.json`, `sbom.json`, `THIRD-PARTY-NOTICES.md`, `RELEASE-NOTES.md`, `SIGNING.md` |
+| `errkb.exe` | The single release binary (CLI, daemon, MCP server, Web toolbox host) |
+| `start-errkb.cmd` | Opens the Web toolbox (`errkb ui --web`), which starts the daemon |
+| `autostart.ps1` | Per-user logon recovery via the `HKCU\...\Run` key |
+| `postgres.ps1` | Thin wrapper over `errkb pg` (used by `autostart.ps1`) |
+| `migrations\*.sql` | The schema `errkb pg install` applies |
+| `README.md`, `CHANGELOG.md`, `LICENSE` | Documentation and license |
 
-The release is not code-signed. Verify `errkb.exe` and the setup executable against
-`SHA256SUMS` before installing, and expect a SmartScreen warning for an unsigned
-installer.
+Unpack the ZIP into a directory you own (for example
+`%LOCALAPPDATA%\errkb-portable`). The release is not code-signed; verify `errkb.exe`
+against the `SHA256SUMS` from the release page.
 
-Do not combine files from `dist\` and `dist\release\errkb-0.1.1\`. In the audited local
-copy, those directories contain different EXE revisions and command sets. A release must
-be rebuilt once from one tagged Git commit.
+## First run
 
-## Interactive install
+1. Create the cluster, apply the schema and write the credentials:
 
-1. Run `errkb-<version>-setup.exe` and accept the UAC prompt.
-2. Choose where to install (default: `%LOCALAPPDATA%\errkb`).
-3. Choose the PostgreSQL cluster option:
-   - **Dedicated cluster** (recommended): creates a new cluster on port **5433** next to the
-     application, generates a password, and starts it. It never touches an existing
-     PostgreSQL instance.
-   - **Reuse an existing instance**: you supply the DSN; nothing is created.
-   - **Other port**: same as dedicated, with a port you choose. A busy port is detected and
-     rejected in the wizard.
-4. Finish the wizard. In the current source, the installer starts the cluster, applies
-   migrations `0001`–`0008`, registers the per-user logon command, and copies `errkb.exe`,
-   the migrations and lifecycle scripts into the install directory.
+   ```powershell
+   .\errkb.exe pg install
+   ```
 
-The installer includes `start-errkb.cmd` and a Start-menu shortcut that launches
-`errkb.exe ui --web` without leaving a visible terminal. Running `errkb.exe` without a
-subcommand still prints CLI usage; it does not guess which interface the user intended.
+   This starts a dedicated cluster on port 5433 under `.\pg\data`, applies
+   `migrations\` and writes `.\pg\credentials.json` (mode 0600). Flags:
+   `--data-dir`, `--port`, `--database`, `--superuser`, `--migrations`.
 
-## Silent install
+   To use an existing PostgreSQL server instead, skip `pg install` and run
+   `errkb db migrate --dsn <your-dsn>` once.
 
-`errkb-<version>-setup.exe /VERYSILENT /SUPPRESSMSGBOXES` takes the defaults: install into
-`%LOCALAPPDATA%\errkb`, create a dedicated cluster on port 5433, start it. The wizard's
-three-way cluster question cannot be answered silently, so the automated acceptance run
-exercises the dedicated-cluster branch only; reuse and other-port branches are a manual
-gate.
+2. Start the product:
 
-## What lands where
+   ```powershell
+   .\start-errkb.cmd
+   ```
 
-| Path | Contents |
-| --- | --- |
-| `%LOCALAPPDATA%\errkb\` | application binaries, `postgres.ps1`, `README.md`, uninstaller |
-| `%LOCALAPPDATA%\errkb\pg\data\` | the dedicated PostgreSQL cluster (data directory) |
-| `%LOCALAPPDATA%\errkb\pg\credentials.json` | port, database, superuser, generated password, data directory; owner-only ACL |
-| `%LOCALAPPDATA%\errkb\logs\` | cluster/tool output written by `postgres.ps1` |
-| `%LOCALAPPDATA%\errkb\health.json` | daemon health document (when the daemon runs with default paths) |
-| `%LOCALAPPDATA%\errkb\logs\daemon.log` | daemon log; redacted before writing, rotated by size |
+   The toolbox opens at a local URL; `errkb ui --web` starts the daemon when it is not
+   running and keeps it running after the window closes. CLI and MCP hosts use the same
+   daemon (`\\.\pipe\errkb`).
 
-The daemon's default paths follow `%LOCALAPPDATA%`; pass `--health-file` and `--log-file`
-to put them elsewhere.
+3. Optional logon recovery:
 
-## Current source versus existing artifacts
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action install -AppDir "$PWD"
+   ```
 
-The installed layout resolves `pg\credentials.json` and `migrations\` next to
-`errkb.exe`, so the operational commands need no flags from an installation:
+   It writes the per-user Run value `errkb-autostart`. Windows does not let a standard
+   user register a Scheduled Task, so the Run key is the supported mechanism.
 
-```powershell
-errkb db status
-errkb doctor
-errkb daemon
-errkb ui --web
-```
+4. Check the state: `.\errkb.exe pg status` and the daemon health file.
 
-The installer source runs `errkb db migrate` with those explicit paths before
-registering HKCU startup. A missing or failed migration stops the install instead
-of leaving a nominally successful but unusable daemon.
+## Hosts
 
-The older EXE in `dist\release\errkb-0.1.1\` does not contain the `db` command. If that
-binary is paired with a new installer definition, first run fails because the schema
-cannot be created. This is why existing artifacts are acceptance evidence only.
-
-An unmigrated database produces an error similar to:
-
-```text
-errkb daemon: schema migration check failed: applied version "", expected "0008"
-(run `errkb db migrate` first)
-```
-
-For end-user installation, use the coherent tagged v0.1.1 bundle. The explicit DSN flow
-below remains supported for source development and diagnostics.
-
-## Start the daemon
-
-Installed layout (credentials and migrations next to `errkb.exe`):
-
-```powershell
-errkb daemon
-```
-
-Development tree (explicit connection):
-
-```powershell
-errkb db migrate --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
-errkb daemon --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable"
-```
-
-Useful flags: `--pipe` (Named Pipe name, default `\\.\pipe\errkb`), `--lock-name` (named
-mutex for the single instance), `--health-file`, `--log-file`, `--log-max-bytes`,
-`--health-interval`. The daemon never writes logs to stdout. Stop a console-started daemon
-with `Ctrl+C`; shutdown is graceful and waits for in-flight requests.
-
-Check the installation with:
-
-```powershell
-errkb doctor
-```
-
-The doctor reports nine read-only checks — version and database connectivity, migration
-ledger, optional `pg_trgm`, Named Pipe, MCP selftest, connectors, offline queue, privacy
-patterns, data directory writability — each with a readable fix when a check fails.
-
-## Register with an LLM host
-
-`errkb mcp` speaks MCP over stdio. It resolves the installed `pg\credentials.json` and
-`migrations\` itself, so the host only has to launch the binary:
-
-```powershell
-errkb mcp install --host codex     # codex mcp add errkb -- <path>\errkb.exe mcp
-errkb mcp install --host claude    # claude mcp add --scope user ... errkb -- <path>\errkb.exe mcp
-errkb mcp install --host dsh       # prints the dsh-errkb plugin path (no MCP entry needed)
-```
-
-Add `--print` to see the command for any host without running it. Restart the host after
-registration; `errkb mcp selftest` proves the server answers `initialize` and `tools/list`,
-and `errkb doctor` runs the same check.
-
-## Reusing an existing PostgreSQL
-
-Point `database.dsn` (config file) or `--dsn` (daemon flag) at the instance, create the
-database, apply migrations, and run `errkb doctor`. Nothing else changes; the installer's
-cluster options are only for the bundled path.
-
-## Backups
-
-The knowledge base is an ordinary PostgreSQL database. Back it up with `pg_dump`:
-
-```powershell
-$cred = Get-Content "$env:LOCALAPPDATA\errkb\pg\credentials.json" | ConvertFrom-Json
-$env:PGPASSWORD = $cred.password
-$pgDump = Join-Path ${env:ProgramFiles} "PostgreSQL\16\bin\pg_dump.exe"
-& $pgDump -Fc -h 127.0.0.1 -p $cred.port -U $cred.superuser -d $cred.database -f errkb.dump
-```
-
-Restore into a **fresh** database (the Go helper refuses to overwrite an existing one):
-
-```powershell
-& pg_restore -h 127.0.0.1 -p 5433 -U postgres -d errkb_restored errkb.dump
-```
-
-The repository's `internal/database` package also exposes `BackupDatabase` /
-`RestoreDatabase` (custom-format dump, SHA-256 manifest, table counts, ledger and
-constraint verification) for scripted backups.
+- **Codex / Claude Code:** `.\errkb.exe mcp install --host codex` or `--host claude`
+  registers the MCP server with the host CLI. DSH uses its plugin; the command prints the
+  plugin route instead.
+- **Any MCP host:** point it at `errkb.exe mcp`. The server resolves the installed
+  `pg\credentials.json` itself and starts the daemon when the pipe is unreachable.
 
 ## Upgrade
 
-- **Application:** run a newer installer over the same installation. Data survives; the
-  uninstaller and binaries are replaced.
-- **Schema:** migrations are applied by the Go migrator. A failed migration rolls back in
-  one transaction; an applied migration must never be edited (the ledger checksum fails).
-  A newer ledger version is refused explicitly.
-- **PostgreSQL cluster upgrade:** not automated by the installer yet. Back up with
-  `pg_dump` first; `packaging/windows/postgres.ps1` and the Go manager expose an upgrade
-  path, but a release-grade cluster upgrade is still a follow-up.
+1. Stop the daemon and replace `errkb.exe`, `migrations\` and the scripts with the new
+   release's files.
+2. Apply the schema:
+
+   ```powershell
+   .\errkb.exe pg status
+   .\errkb db migrate --credentials .\pg\credentials.json --migrations .\migrations
+   ```
+
+   Migrations are forward-only. The upgrade matrix in `spec/compat.cue`
+   (`compat.upgrade`) records which old schemas, configs and Markdown still load.
 
 ## Uninstall
 
-The uninstaller asks whether to **keep data** or **delete data**:
+```powershell
+.\errkb.exe pg uninstall -DeleteData
+powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action uninstall -AppDir "$PWD"
+```
 
-- **Keep:** removes the application files and uninstaller, leaves the cluster and
-  `%LOCALAPPDATA%\errkb\pg\` in place. A reinstall detects and can reuse the retained
-  cluster.
-- **Delete:** stops the cluster, removes the data directory and credentials, and then
-  checks that no service, port or directory is left behind. The acceptance harness checks
-  the residue: service, port, process and files.
+Omit `-DeleteData` to keep the cluster. Delete the unpacked folder afterwards. Nothing
+is registered outside the folder and `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
 
-A silent uninstall cannot answer the dialog: `unins000.exe /VERYSILENT` keeps the data and
-`unins000.exe /VERYSILENT /DELETE_DATA=1` deletes it. The first uninstaller phase records
-the choice as a marker file that the second phase and `postgres.ps1` read, so the two
-phases cannot disagree.
+## Build from source
 
-`packaging/windows/postgres.ps1 uninstall -DeleteData` refuses an implausibly short data
-path (a guard against deleting the wrong directory).
+```powershell
+./packaging/windows/build.ps1 -Version 0.1.2
+./packaging/windows/release.ps1 -Mode package -Version 0.1.2 -Tag v0.1.2
+```
+
+`build.ps1` writes the version-stamped binary; `release.ps1` writes the portable ZIP,
+manifest, SBOM, notices, signing policy and `SHA256SUMS`. Release checks compare the tag,
+the changelog section and the binary version; the Windows smoke job in CI runs the same
+executable with a real PostgreSQL.
 
 ## Troubleshooting
 
-| Symptom | Likely cause and fix |
+| Symptom | Fix |
 | --- | --- |
-| `schema migration check failed` | The ledger is missing or behind. Current installs resolve `pg\credentials.json` automatically, so run `errkb db status` and `errkb db migrate`; very old release binaries had no `db` command. |
-| `the local API is not reachable` | The daemon is not running or the pipe name differs. Start `errkb daemon` and check `errkb doctor`. |
-| `database: connection refused` | PostgreSQL is not running, or the DSN points at the wrong port. Check `errkb doctor`. |
-| `ui --web` waits and exits 4 | The daemon could not be recovered from installed credentials. Check `pg\credentials.json`, the managed cluster and the daemon log; pass a DSN during development. |
-| Port 5433 already in use | Another cluster is listening. Choose another port in the wizard or stop the other instance. |
-| Daemon log shows an access error under `%TEMP%` | Windows denies log writes in that directory for this process. Leave the default paths under `%LOCALAPPDATA%`. |
-
-## Related
-
-- [`docs/acceptance-vm.md`](acceptance-vm.md) — mandatory Windows CI acceptance, evidence and optional manual review.
-- [`docs/project-status.md`](project-status.md) — current source/artifact truth and release blockers.
-- [`docs/toolbox-ui.md`](toolbox-ui.md) — UI status and EKB-057–060 scope.
-- [`docs/privacy.md`](privacy.md) — what is stored and how it is protected.
-- [`packaging/windows/`](../packaging/windows) — build, release and installer scripts.
+| `pg install` says the PostgreSQL binaries are missing | Install PostgreSQL 16 or set `ERRKB_PG_BIN` to its `bin` directory |
+| `errkb db status` says no database | Pass `--credentials .\pg\credentials.json` or `--dsn`; the installed layout is resolved automatically when the file sits next to the EXE |
+| The pipe is missing | Run `errkb ui --web`, `start-errkb.cmd`, or `errkb daemon`; the MCP server and the toolbox start it themselves |
+| Port 5433 is busy | `errkb pg install --port <free-port>` (and `--data-dir` for a second instance) |
+| Schema version mismatch | `errkb db migrate --credentials .\pg\credentials.json --migrations .\migrations` |

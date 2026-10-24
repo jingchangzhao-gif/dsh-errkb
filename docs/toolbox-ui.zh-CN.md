@@ -2,7 +2,7 @@
 
 [English](toolbox-ui.md)
 
-状态：**已实现、有自动化测试覆盖，并随 v0.1.1 发布。** 当前源码包含 EKB-057 的搜索壳、EKB-058 的详情与编辑页面、EKB-059 的统计、审计与设置页面，统一由 `errkb.exe ui --web` 提供；`errkb-toolbox.zip` 与安装器均已发布，且携带启动器与快捷方式。WF-011A/WF-011B 覆盖安装生命周期与恢复；交互界面视觉检查是可选证据。目标仍是在 `errkb.exe` 中嵌入交互式 UI，不引入 Chromium、Electron 或 NW.js。
+状态：**已实现、有自动化测试覆盖，并随 v0.1.2 发布。** 当前源码包含 EKB-057 的搜索壳、EKB-058 的详情与编辑页面、EKB-059 的统计、审计与设置页面，统一由 `errkb.exe ui --web` 提供；`errkb-toolbox.zip` 携带启动器与登录脚本（安装器路线已移除）。交互界面视觉检查是可选证据。目标仍是在 `errkb.exe` 中嵌入交互式 UI，不引入 Chromium、Electron 或 NW.js。
 
 ## 当前状态
 
@@ -14,7 +14,7 @@
 | daemon 不可达时自动启动 | 已实现 | 读取 `pg/credentials.json` 与 migrations，拉起 daemon 并等待管道 |
 | 详情与编辑页面 | 已实现 | `/issues/{id}` 页面；追加版本、问题状态、解法状态与确认删除都在 daemon 事务内写审计 |
 | 统计、审计与设置页面 | 已实现 | `/stats` 与 `/settings` 页面，分别消费 `/api/stats`、`/api/audit`、`/api/settings` |
-| 启动器、开始菜单快捷方式与工具箱 ZIP | 已实现 | `start-errkb.cmd`、安装器 `[Icons]`、`release.ps1` 产出 `errkb-toolbox.zip`；WF-011A 覆盖安装生命周期 |
+| 启动器与工具箱 ZIP | 已实现 | `start-errkb.cmd`、`autostart.ps1`、`release.ps1` 产出 `errkb-toolbox.zip` |
 | 交互界面视觉检查 | 可选 | 可由人工在干净机查看 Edge 应用模式、复制行为、SmartScreen/UAC 与真实重启 |
 
 ## 架构决定
@@ -27,7 +27,7 @@
 ## 目标进程模型
 
 ```text
-start-errkb.cmd / 开始菜单快捷方式
+start-errkb.cmd
   -> errkb.exe ui --web
        -> 复用 daemon；不可达时使用安装凭据启动 PostgreSQL + daemon
        -> 在 127.0.0.1:<临时端口> 启动 HTTP 服务
@@ -35,7 +35,7 @@ start-errkb.cmd / 开始菜单快捷方式
        -> 关闭窗口后 daemon 继续运行
 ```
 
-WF-011A/WF-011B 自动验证安装、恢复与两种卸载；WF-012 已从已验收 tag 生成并核对最终发布包。真实重启和界面观感仅作可选人工证据。
+Windows 冒烟任务覆盖构建与生命周期基础；`release.ps1` 从已验收 tag 生成并核对最终发布包。真实重启和界面观感仅作可选人工证据。
 
 ## 页面范围
 
@@ -65,16 +65,16 @@ EKB-060 的打包实现当前已经做到：
 
 - `packaging/windows/build.ps1` 把静态资源嵌入 EXE。
 - `release.ps1` 按严格白名单生成 `errkb-toolbox.zip`。
-- `installer.iss` 安装启动器，并创建运行 `errkb.exe ui --web` 的开始菜单快捷方式；登录时不自动打开 UI。
-- ZIP、安装器和安装后的 EXE 必须标识同一个 tag/commit，并进入同一组发布校验和。
+- `start-errkb.cmd` 是运行 `errkb.exe ui --web` 的启动器；登录时不自动打开 UI。
+- ZIP 与独立 EXE 必须标识同一个 tag/commit，并进入同一组发布校验和。
 
-EKB-060 与 WF-012 均已完成。v0.1.1 带 tag 发布包含一致的安装器、工具箱 ZIP 与独立 EXE，下载后身份和哈希已经核对。本地忽略的 `dist/` 文件不是发布权威。
+EKB-060 已被便携发布形态取代。v0.1.2 带 tag 发布包含一致的工具箱 ZIP 与独立 EXE，下载后身份和哈希已经核对。本地忽略的 `dist/` 文件不是发布权威。
 
 ## 测试要求
 
 - 单元测试：token 拒绝、CSP、静态资源、路由校验、只绑定回环地址。
 - 集成测试：启动 `ui --web --no-browser`，经真实 daemon 完成搜索、详情、统计和删除预览/取消。
-- 安装冒烟：从开始菜单打开、四个页面可访问、无外部资源、窗口关闭后 daemon 保留。
+- 启动冒烟：运行 start-errkb.cmd 打开、四个页面可访问、无外部资源、窗口关闭后 daemon 保留。
 - 可选人工证据：首次打开、四个页面显示、复制行为、真实重启与交互提示。
 
 ## 任务顺序
@@ -82,5 +82,5 @@ EKB-060 与 WF-012 均已完成。v0.1.1 带 tag 发布包含一致的安装器�
 1. **EKB-057：本地已实现。** 服务器、嵌入资源、token、搜索页、详情页导航、凭据感知的 daemon 启动、e2e 与发布脚本中的工具箱 ZIP 都在；待评审与合入。
 2. **EKB-058：本地已实现。** 详情读取、追加版本、问题状态与解法状态写入、需确认的删除；每次编辑都在 daemon 事务内留下审计行，e2e 覆盖写入路径。
 3. **EKB-059：本地已实现。** 实测统计、可过滤的审计页，以及带删除预览与取消的设置页；e2e 验证预览不写数据。
-4. **EKB-060：已发布。** v0.1.1 包含启动器、快捷方式与工具箱 ZIP；WF-011A/WF-011B 覆盖生命周期/恢复，WF-012 已核对最终带 tag 发布。
+4. **EKB-060：已被便携形态取代。** v0.1.2 包含启动器、autostart 脚本与工具箱 ZIP；Windows 冒烟任务与发布检查核对最终带 tag 发布。
 

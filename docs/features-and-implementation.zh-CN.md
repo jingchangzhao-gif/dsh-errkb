@@ -64,7 +64,7 @@ CUE 定义数据形状和约束，不是运行时数据库；PL/pgSQL 保证数�
 | 诊断安装和连接器 | `errkb doctor` | `cmd/errkb/doctor.go`、`internal/service/doctor.go` | 已实现 |
 | 应用并检查数据库迁移 | `errkb db migrate`、`errkb db status` | `cmd/errkb/db.go`、`internal/database/migrate.go` | 当前源码已实现 |
 | 打开本地工具箱窗口 | `errkb ui`、`errkb ui --web` | `internal/ui/`、`internal/webshell/`、`cmd/errkb/web.go` | 内嵌 Web 壳已随 v0.1.1 发布（`errkb ui --web`） |
-| 安装和管理本地 PostgreSQL | Windows 安装器和 PostgreSQL 管理器 | `internal/service/pg_manage.go`、`packaging/windows/` | 已实现；WF-011A/WF-011B 在 Windows CI 中验证生命周期与恢复 |
+| 安装和管理本地 PostgreSQL | PostgreSQL 管理器与便携脚本 | `internal/service/pg_manage.go`、`packaging/windows/postgres.ps1` | 已实现；`errkb pg install` 创建实例，`autostart.ps1` 在登录时恢复 |
 | 安全保留与删除数据 | 保留期/定向删除函数和设置模型 | `0006_retention.sql`、`internal/ui/settings.go` | 已实现，包含 Web 预览/确认；自动定时执行不属于 v1 |
 
 ## 4. 错误采集
@@ -206,7 +206,7 @@ MCP 层调用 daemon 后端并重新校验返回值，不直接连接 PostgreSQL
 - 保留策略分别控制样本、规范化事件和审计记录；定向删除支持预览、确认和审计（`0006_retention.sql`）。
 - 崩溃测试会真实终止写入与迁移进程，再验证已提交数据完整性。
 
-WF-011A/WF-011B 已在 Windows CI 中覆盖安装生命周期与确定性恢复；WF-012 已于 2026-10-23 创建并核对公开的 v0.1.1 带 tag 发布包。
+Windows 冒烟任务会构建发布二进制并用真实 PostgreSQL 跑全套测试；`release.ps1` 于 2026-10-25 生成并核对便携 `v0.1.2` 发布包，安装器路线已移除。
 
 ## 11. 明确不提供的功能
 

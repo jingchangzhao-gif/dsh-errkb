@@ -4,7 +4,7 @@
 
 > **Recycles errors: the same failure is diagnosed once, recorded, and handed back as a known fix the next time it appears — locally, without calling a model.**
 
-**Project status (2026-10-23): v0.1.1 released.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Windows Web toolbox are available in the first verified Windows release. WF-011A/WF-011B enforce the installed lifecycle and deterministic recovery in CI. Download the installer or portable toolbox from the [v0.1.1 release](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1).
+**Project status (2026-10-25): v0.1.2 released.** The reusable core, PostgreSQL schema, CLI, daemon, MCP server, measured DSH/Codex/Claude connectors and embedded Web toolbox ship as a **portable toolbox ZIP** (plus a standalone EXE); the installer path was removed. Download `errkb-toolbox.zip` from the [latest release](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/latest).
 
 The **Error Knowledge Base** (`error-knowledge-base`) is a local platform with several interfaces: a command-line client, a background daemon, an MCP stdio server, a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin, host connectors and an embedded Windows Web toolbox. Every interface uses the same core and the same knowledge base; classification, redaction, normalisation, fingerprinting, storage, retrieval and fix trust are not reimplemented per host. The command remains `errkb`, and the DSH adapter package retains the name `dsh-errkb`.
 
@@ -38,7 +38,7 @@ It is deliberately **not**:
 - **A chat model.** The core never calls a model and makes no outbound network request. Connectors observe what the host already produced; the fix either already exists in the database or is written by the user. Local PostgreSQL, Named Pipe and an explicitly enabled loopback HTTP listener are the only transports.
 - **A log archive.** Only failures that earn an ID are stored, with bounded samples; retention is explicit.
 - **A cloud service.** There is no account, no telemetry and no remote endpoint. HTTP off by default; the local API is a Named Pipe.
-- **A drop-in binary with an embedded database.** The knowledge base is PostgreSQL, a runtime prerequisite (see [Requirements](#requirements)); the Windows installer creates and manages a dedicated cluster.
+- **A drop-in binary with an external database.** The knowledge base is PostgreSQL, a runtime prerequisite (see [Requirements](#requirements)); `errkb pg install` creates and manages a dedicated cluster on port 5433.
 
 ## Current delivery status
 
@@ -54,10 +54,10 @@ The project uses three different words deliberately:
 | PostgreSQL schema and retrieval | Implemented; integration tests require a real database | Migrations `0001`–`0008`, exact/fuzzy retrieval, solutions and outcomes exist |
 | CLI, daemon and MCP | Implemented | Usable from a development build when a migrated PostgreSQL instance and DSN are available |
 | DSH, Codex CLI and Claude Code connectors | Measured with pinned versions | See the connector matrix; unsupported host behavior is not implied |
-| Windows installer and recovery | Implemented; WF-011A/WF-011B are mandatory CI | The real installer, migration, knowledge loop, HKCU recovery and both uninstall choices are exercised on an ephemeral Windows runner |
+| Portable release and Windows recovery | Implemented; the Windows smoke job runs the same executable | The Windows CI job builds the binary, runs every Go test against a real PostgreSQL and answers the MCP self-test; `errkb pg install` plus `autostart.ps1` cover first run and logon recovery |
 | Embedded Web toolbox | Implemented and automated-test covered | Search, detail/edit, statistics/audit and settings routes are wired through `ui --web` |
 | Release provenance | Implemented and release-verified | Missing/mismatched tags and dirty source are rejected; accepted tag `v0.1.1` points to commit `1438473` |
-| Release bundle | Released as v0.1.1 | The GitHub Release contains the verified installer, portable toolbox, standalone EXE, manifest, SBOM and checksums |
+| Release bundle | Released as v0.1.2 | The GitHub Release contains the toolbox ZIP, the standalone EXE, manifest, SBOM and checksums; the npm package is published from the same tag when the repository has an `NPM_TOKEN` secret |
 
 ## Feature overview
 
@@ -118,33 +118,33 @@ Generic log and manual hosts use the template in [`connectors/templates/cli-log/
 
 ## Quick start
 
-> This is a **development checkout** procedure. There is not yet a supported one-click release. Do not mix `dist\errkb.exe` with `dist\release\...`; they were built from different revisions.
+The supported release is the portable toolbox ZIP: `errkb.exe` plus `start-errkb.cmd`, `autostart.ps1` and `postgres.ps1`. There is no installer; unpack the ZIP somewhere you own.
 
-1. **Install PostgreSQL 16** (EDB installer, or let the errkb installer create a dedicated cluster on port 5433). Record the DSN.
-2. **Build the current source and apply the schema:**
-
-   ```powershell
-   go build -o errkb.exe ./cmd/errkb
-   .\errkb.exe db migrate --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
-   ```
-
-3. **Start the daemon:**
+1. Install **PostgreSQL 16** once (EDB installer). errkb uses its binaries to create and manage its own cluster.
+2. Unpack `errkb-toolbox.zip`, then create the cluster and the schema:
 
    ```powershell
-   .\errkb.exe daemon --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable"
+   .\errkb.exe pg install
    ```
 
-4. **Capture a real failure** through the wrapper:
+   This starts a dedicated cluster on port 5433 under `.\pg\data`, applies migrations and writes `.\pg\credentials.json`. To reuse an existing server instead, run `errkb db migrate --dsn <your-dsn>`.
+
+3. Open the toolbox with `start-errkb.cmd` (or `.\errkb.exe ui --web`); it starts the daemon itself.
+4. Optional logon recovery:
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action install -AppDir "$PWD"
+   ```
+
+5. Capture a real failure and reuse the fix:
 
    ```powershell
    .\errkb.exe run --connector cli --session demo --project demo -- cmd /c "exit 9"
    ```
 
-5. **Record the fix** through the MCP server (`err_record_solution`) or a connector, then run the same command again; the wrapper prints the known fix, its source and its trust.
+   Record the fix through the MCP server (`err_record_solution`) or a connector, run the same command again, and the wrapper prints the known fix, its source and its trust.
 
-The embedded toolbox is available through `errkb ui --web` in the v0.1.1 installer and portable toolbox. It resolves installed credentials and migrations when it must recover a missing daemon.
-
-The full loop, including the recorded output, is in [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md).
+The full loop, including the recorded output, is in [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md); the portable install steps are in [`docs/install.md`](docs/install.md).
 
 ## Command line
 
@@ -164,7 +164,7 @@ One binary, several subcommands:
 | `errkb markdown import\|export` | Exchange the legacy `ERRORS.md` format |
 | `errkb daemon` | Local background service: Named Pipe API, health document, redacted log |
 | `errkb ui` | Native tray/search host from the source tree; not the released Web toolbox |
-| `errkb ui --web` | Local Web toolbox (search, detail/edit, statistics, settings); shipped in the v0.1.1 installer and toolbox ZIP |
+| `errkb ui --web` | Local Web toolbox (search, detail/edit, statistics, settings); shipped in the toolbox ZIP |
 | `errkb doctor` | Nine read-only environment, connector and MCP checks, with a fix per finding |
 | `errkb mcp` | MCP stdio server with nine tools; resolves the installed credentials and starts the daemon when it is not running |
 | `errkb mcp install --host codex\|claude\|dsh` | Register the MCP server with a local LLM host; DSH prints its plugin path instead |
@@ -209,9 +209,9 @@ Defaults: Named Pipe on, HTTP off, capture on, notices on, search limit 3, captu
 ## Requirements
 
 - **Windows 10 or 11, x64.** The daemon, tray, Named Pipe API and Windows connector service are Windows-specific.
-- **PostgreSQL 16** (server). Not bundled; the installer can create a dedicated cluster on port 5433. A running local instance can be reused instead.
-- **No Go, Node.js or development toolchain at runtime.** The release binary and the installer are self-contained apart from PostgreSQL.
-- Development only: Go 1.26.4, Node.js 24.16.0 with pnpm 11.7.0, CUE 0.17.1, Inno Setup 6 for the installer, and a local PostgreSQL for the database tests.
+- **PostgreSQL 16** (server). Not bundled; `errkb pg install` creates a dedicated cluster on port 5433 using the installed PostgreSQL binaries. A running local instance can be reused instead.
+- **No Go, Node.js or development toolchain at runtime.** The release is one `errkb.exe` plus small PowerShell scripts; PostgreSQL is the only external prerequisite.
+- Development only: Go 1.26.4, Node.js 24.16.0 with pnpm 11.7.0, CUE 0.17.1, and a local PostgreSQL for the database tests.
 
 ## Compatibility and version caliber
 
@@ -222,9 +222,9 @@ Defaults: Named Pipe on, HTTP off, capture on, notices on, search limit 3, captu
 
 ## Installing and uninstalling
 
-The released installer installs per user into `%LOCALAPPDATA%\errkb`, can create a dedicated PostgreSQL cluster on port 5433, applies migrations, registers per-user logon recovery, installs `start-errkb.cmd` and creates a Start-menu toolbox shortcut. Uninstalling can keep or delete the data. WF-011A/WF-011B exercise these paths in Windows CI. Use only the assets attached to the v0.1.1 GitHub Release; ignored local `dist/` files remain disposable build output.
+Releases are portable: download `errkb-toolbox.zip`, unpack it into a directory you own, and run `errkb.exe pg install` once. The cluster lives in `pg\data`, credentials in `pg\credentials.json` (mode 0600), and logs/health in the same directory; `autostart.ps1 -Action install` writes the per-user Run key for logon recovery. To uninstall, run `errkb.exe pg uninstall -DeleteData` (omit `-DeleteData` to keep the database), then remove the Run entry with `autostart.ps1 -Action uninstall` and delete the folder. The release is not code-signed; verify artifacts against `SHA256SUMS` from the release page.
 
-Full steps, data locations and silent-install behavior are in [`docs/install.md`](docs/install.md). Required Windows CI acceptance and optional clean-machine review are in [`docs/acceptance-vm.md`](docs/acceptance-vm.md). The release is not code-signed; verify artifacts against `SHA256SUMS` in the release bundle.
+Full steps, data locations and uninstall behavior are in [`docs/install.md`](docs/install.md).
 
 ## Privacy
 
@@ -244,18 +244,18 @@ Everything stays on the machine. The core never calls a model and makes no outbo
 | [`docs/privacy.md`](docs/privacy.md) / [中文](docs/privacy.zh-CN.md) | Data flow, redaction, retention, deletion |
 | [`docs/benchmarks.md`](docs/benchmarks.md) / [中文](docs/benchmarks.zh-CN.md) | Performance gate, dataset, plans, environment |
 | [`docs/test-record.md`](docs/test-record.md) / [中文](docs/test-record.zh-CN.md) | Durable full-suite and Windows acceptance runs |
-| [`docs/acceptance-vm.md`](docs/acceptance-vm.md) / [中文](docs/acceptance-vm.zh-CN.md) | Required Windows CI acceptance, evidence and optional manual review |
+| [`docs/acceptance-vm.md`](docs/acceptance-vm.md) / [中文](docs/acceptance-vm.zh-CN.md) | Historical clean-machine record; the live gate is the Windows smoke job |
 | [`docs/e2e-cli-loop.md`](docs/e2e-cli-loop.md) / [中文](docs/e2e-cli-loop.zh-CN.md) | The generic CLI loop, end to end, without a model |
 | [`CHANGELOG.md`](CHANGELOG.md) | What changed in each release |
-| [`packaging/windows/`](packaging/windows) | Build, release and installer scripts |
+| [`packaging/windows/`](packaging/windows) | Build and release scripts for the portable toolbox |
 
 ## Known limitations
 
 These are remaining limitations or deliberate boundaries, not hidden capabilities:
 
-- **A physical reboot and interactive clean-machine review are not continuously automated.** WF-011B tests the equivalent daemon/PostgreSQL/logon recovery deterministically; a real reboot and visual wizard review remain optional manual evidence.
+- **A physical reboot is not continuously automated.** The suite restarts the daemon and the PostgreSQL cluster and replays the logon command deterministically; a real reboot remains optional manual evidence.
 - **The release is not code-signed.** SmartScreen may warn; verify `SHA256SUMS`.
-- **PostgreSQL is a prerequisite.** The core needs a local PostgreSQL 16 server; the installer creates one, but the database is not embedded in the application.
+- **PostgreSQL is a prerequisite.** The core needs a local PostgreSQL 16 server; `errkb pg install` creates a dedicated cluster, but the database is not embedded in the application.
 - **The DSH plugin is pending store review.** Installing it by hand is the supported path for now.
 - **Two measured gaps in the connector matrix:** the DSH `tools/result` live path and the Codex `PostToolUse` hook are unverified.
 
@@ -275,7 +275,7 @@ gofmt -l .
 cue vet ./spec/...
 ```
 
-Database tests need a local PostgreSQL and `ERRKB_TEST_DATABASE_URL`; without it they skip. The build, release and installer scripts are in [`packaging/windows/`](packaging/windows), the task-by-task order is plan §11.1, and the repository conventions (one card per PR, both languages change together) are in the plan.
+Database tests need a local PostgreSQL and `ERRKB_TEST_DATABASE_URL`; without it they skip. The build and release scripts are in [`packaging/windows/`](packaging/windows), the task-by-task order is plan §11.1, and the repository conventions (one card per PR, both languages change together) are in the plan.
 
 ## Contributing
 

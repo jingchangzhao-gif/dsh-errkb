@@ -188,10 +188,11 @@ jobs:
       - name: Store lock and mtime cases
         run: pnpm exec vitest run tests/state.test.ts tests/store.test.ts
 
-  # WF-011A: an ephemeral Windows runner exercises the same setup executable
-  # users receive. This is a required, unattended product acceptance path; its
-  # evidence is uploaded even when a stage fails.
-  windows-acceptance:
+  # The supported distribution is the portable executable and the toolbox ZIP;
+  # the installer path is gone. This job keeps the Windows-only Go packages
+  # (cmd/errkb, internal/service, internal/ui) under a real Windows run with a
+  # real PostgreSQL, which the ubuntu `go` job cannot cover.
+  windows-go:
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
@@ -202,41 +203,30 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install Windows packaging and runtime prerequisites
+      - name: Install PostgreSQL 16
         shell: pwsh
         run: |
-          go install github.com/tc-hib/go-winres@v0.3.3
-          choco install innosetup postgresql16 --yes --no-progress --params "/Password:errkb-ci-only"
+          choco install postgresql16 --yes --no-progress --params "/Password:errkb-ci-only"
           $pgBin = Join-Path $env:ProgramFiles "PostgreSQL\16\bin"
           if (-not (Test-Path (Join-Path $pgBin "pg_ctl.exe"))) {
             throw "PostgreSQL 16 was not installed at $pgBin"
           }
           "ERRKB_PG_BIN=$pgBin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ERRKB_TEST_DATABASE_URL=postgres://postgres:errkb-ci-only@127.0.0.1:5432/postgres?sslmode=disable" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Build the Windows installer
+      - name: Build the portable executable
+        shell: pwsh
+        run: ./packaging/windows/build.ps1 -Version 0.0.0-ci
+
+      - name: Run every Go test on Windows
+        shell: pwsh
+        run: go test ./... -count=1
+
+      - name: Smoke the executable and the MCP self-test
         shell: pwsh
         run: |
-          ./packaging/windows/build.ps1 -Version 0.1.0
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-          if (-not (Test-Path $iscc)) { throw "ISCC.exe is missing at $iscc" }
-          & $iscc ./packaging/windows/installer.iss
-          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
-
-      - name: Run WF-011A and WF-011B Windows acceptance
-        shell: pwsh
-        run: ./packaging/windows/ci-acceptance.ps1 -ExpectedVersion 0.1.0 -EvidenceDir artifacts/windows-acceptance
-
-      - name: Upload WF-011A and WF-011B evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: wf-011-windows-acceptance-${{ github.run_id }}
-          path: artifacts/windows-acceptance/**
-          if-no-files-found: error
-
-  # EKB-011: schema compatibility gate. The checker lives inline because the
-  # card's scope is spec/compat.cue plus this workflow; if it outgrows this job,
-  # move it into spec/ under an explicit scope change.
+          ./dist/errkb.exe version
+          ./dist/errkb.exe mcp selftest
   compat:
     name: Schema compatibility
     runs-on: ubuntu-latest

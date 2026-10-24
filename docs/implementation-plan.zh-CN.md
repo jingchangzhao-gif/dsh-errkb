@@ -4,7 +4,7 @@
 
 本文件是项目从现有 DSH 插件升级为多宿主技术错误复用工具箱的唯一施工基线。实施者应从 `EKB-001` 开始，按照任务编号推进；一张任务卡只有在自动化检查和人工验收都通过后才能标记为完成。
 
-> **施工检查点（2026-10-23）。** EKB-002～060 记录历史实施顺序，其中带日期的状态文字不是实时队列。Web 工具箱、启动器、安装器接线与发布来源门禁均已实现。WF-011A/WF-011B 已成为强制 Windows CI，WF-012 已发布通过核对的 v0.1.1 包；真实整机重启与交互视觉检查仍是可选证据。当前交付事实以 [`project-status.zh-CN.md`](project-status.zh-CN.md) 为准；目前没有活动 WF 卡。
+> **施工检查点（2026-10-25）。** EKB-002～060 记录历史实施顺序，其中带日期的状态文字不是实时队列。安装器路线已移除（见 §16）：受支持的发布形态是便携 `errkb-toolbox.zip`，Web 工具箱与启动器保留，Windows 冒烟任务用真实 PostgreSQL 跑全套测试。当前交付事实以 [`project-status.zh-CN.md`](project-status.zh-CN.md) 为准；目前没有活动 WF 卡。
 
 若要按功能了解当前源码及每项用户能力的实现链路，请阅读 [`features-and-implementation.zh-CN.md`](features-and-implementation.zh-CN.md)；若要查看实时未解决问题和逐文件修复顺序，请从 [`workflow/README.zh-CN.md`](workflow/README.zh-CN.md) 开始。本文继续保存产品决定与历史任务依据。
 
@@ -62,7 +62,7 @@ errkb.exe doctor             环境和连接器诊断
 
 各宿主连接器只负责两件事：把可观察的失败转换成 `ErrorEvent`，以及在宿主允许时查询并回传历史解法。分类、脱敏、存储、搜索、解法可信度和审计全部属于核心平台，不能在不同插件里重复实现。
 
-由于 PostgreSQL 和 PL/pgSQL 是明确技术要求，版本一默认交付为安装器管理的本地应用，而不是宣称为真正的单文件便携程序。开发阶段先连接外部 PostgreSQL 16；发布前通过 `EKB-051` 决定并实现本地实例安装和生命周期管理。如果必须改成单文件便携版本，应先重新决定数据库技术，不能同时承诺强制 PostgreSQL 和零依赖便携 EXE。
+由于 PostgreSQL 和 PL/pgSQL 是明确技术要求，版本一以便携工具箱发布：`errkb.exe` 加脚本与迁移，数据库由 `errkb pg install` 管理，不宣称为真正的单文件便携程序。开发阶段先连接外部 PostgreSQL 16；发布前通过 `EKB-051` 实现本地实例安装和生命周期管理。如果必须改成单文件便携版本，应先重新决定数据库技术，不能同时承诺强制 PostgreSQL 和零依赖便携 EXE。
 
 本结论是 `EKB-051`（本地实例安装与生命周期）和 `EKB-050`（发布打包）的前提；改变本结论必须先修改本节，并通知相关卡。`EKB-045` 是搜索界面卡，不依赖本决定。
 
@@ -452,7 +452,7 @@ P6 门槛：用户不需要打开数据库或终端，就能暂停采集、搜�
 | ☑ | EKB-055 | 收口中英文文档 | 054 | ✅ 已完成并同步到 v0.1.1（2026-10-23；P7 按 EKB-052 决定由 windows-acceptance CI 与 v0.1.1 发布收口）：两份 README 按同一章节结构重写并逐节对应（这是什么、它怎么工作、支持的主机（实测）、核心保证、快速开始、命令行、配置、系统要求、兼容性与版本口径、安装与卸载、隐私、文档索引、已知局限、开发、参与贡献、许可证）；能力声明逐行指向实测来源（CLI：`docs/e2e-cli-loop.md`；DSH：EKB-039、PR #66；Codex：`connectors/codex/probe.md`；Claude Code：`connectors/claude/probe.md`），未实测项按 `docs/connector-matrix.md` 的 Unverified 清单如实标注；新增 `docs/install.md`（系统要求、交互/静默安装、数据位置、daemon 参数、复用实例、pg_dump 备份、升级、卸载保留/删除、故障排查）与 `docs/privacy.md`（数据流、脱敏单一来源、默认 Named Pipe 与 HTTP 关闭、三类保留期及当前手动执行的限制、带预览与审计的删除、离线队列原始观测的边界）；删除 `README.toolbox.md`、`README.toolbox.zh-CN.md`（经确认，内容已被主 README 与计划覆盖）；版本口径在 README 写清 rc.2 → rc.3（peer `^0.1.5-rc.2` 覆盖 rc.3、适配器 API 面不变）与 DSH 宿主 0.2.x（0.2.0-rc.2 实测，`dsh-ops` peer 为证）；无 P0/§17/T01–T18 残留；与 EKB-052 实测一致（安装目录、5433 专用实例、首次运行缺迁移、无自启均写明）；Contents 锚点全部自检通过，两份 README 章节数一致；未改代码；P7 收口仍受 EKB-052 ⚠ 阻塞：EKB-050–054 中 052 尚未 ☑，根因是干净虚拟机硬件缺失，与文档无关；项目和仓库已改名为 Error Knowledge Base（`error-knowledge-base`）；命令 `errkb` 与 DSH 插件包 `dsh-errkb` 保持不变，DSH STORE 条目待审完后再按新仓库地址重新提交 |
 | ☑ | EKB-056 | 打通安装版首启和重启自启 | 051、054 | ✅ 已完成（2026-10-23）：`cmd/errkb/db.go` 提供 `errkb db status`/`db migrate`（`--credentials`/`--dsn`/`--migrations`/`--json`），空库一次应用 0001–0008、重跑 `already up to date`；`cmd/errkb/run.go` 修正首位 `--` 切分并把 `--connector`/`--session` 默认设为 `cli`，裸跑 `errkb run -- cmd /c "exit 9"` 记录失败并透传子进程 9；`internal/service/pg_manage.go` 导出 `ReadCredentials`。`installer.iss` 在集群启动后、成功页前执行 `errkb db migrate`；`packaging/windows/autostart.ps1` 改为按用户 HKCU Run（Windows 不允许标准用户注册计划任务）：`-Action install` 写 Run 值并启动集群+daemon，`uninstall` 删除、`start` 幂等；卸载保留/删除数据由 `/DELETE_DATA` 与标记文件决定，静默可用。开发机实测：静默安装 exit 0，日志顺序 `postgres install → start → db migrate`(0)` → autostart install`(0)；裸跑首次记录、MCP `err_record_solution`+`err_feedback success`、二次运行回传 fix（trust 0.60）、`stats` events=2 issues=1 solutions=1 outcomes=1；重放 Run 命令 ~4 s 内 pipe 可连、health `status ok`（migrations 0008）；保留数据卸载留 `pg\`/`logs\`/`health.json` 并删 exe+Run 值，删除数据卸载移除整个目录；产物 `errkb.exe` 10,936,320 B `B116E5BA…`、安装包 4,959,460 B `F3E77D4C…`。偏差：安装向导交互分支与重启自启需干净 VM（EKB-052）；三条交付渠道（Releases、安装包分发、npm）未执行。 |
 
-P7 门槛：windows-acceptance CI 重建并验证安装、升级、备份、卸载及保留/删除数据；发布物有校验和与可追踪版本；本地干净虚拟机验收按 owner 决定（EKB-052）为可选证据。
+P7 门槛：windows-go 冒烟任务用真实 PostgreSQL 跑全套 Go 测试并验证版本与 MCP 自检；发布物由 `release.ps1` 检查 tag、变更日志、二进制身份与逐文件校验和，并产出可追踪的便携 ZIP 与 npm 包；本地干净虚拟机验收按 owner 决定（EKB-052）为可选证据。
 
 ### P8 交付交互式工具箱
 
@@ -463,7 +463,7 @@ P7 门槛：windows-acceptance CI 重建并验证安装、升级、备份、卸�
 | ☑ | EKB-059 | 统计、审计与设置 | 047、049、057-058 | ☑ 已完成（2026-10-22）：`/stats` 与 `/settings` 页面消费 `/api/stats`（真实数据库聚合：假合并、延迟分位、节省的实测/估算拆分与假设文本）、`/api/audit`（时间/动作/对象过滤与分页）、`/api/settings`（连接器、采集与项目、保留期、HTTP）；删除走预览→确认（漂移警告），取消零写入；设置保存先校验再原子写入，失败回滚；过滤与设置响应不含 DSN/密码；`tests/e2e/ui_stats_test.go` 真实进程验证统计、审计、设置与预览后取消的问题数不变 |
 | ☑ | EKB-060 | 安装器与开始菜单 UI 集成 | 052、057-059 | ✅ 已完成（2026-10-23，v0.1.1 已发布）：安装器 `[Icons]` 创建「Start Error Knowledge Base」开始菜单快捷方式（隐藏 PowerShell 启动 `errkb.exe ui --web`）与卸载快捷方式，`[Files]` 携带 `start-errkb.cmd`；`release.ps1` 产出 `errkb-toolbox.zip`（白名单 5 文件、哈希进 `SHA256SUMS`/manifest、ZIP 非字节可复现已记录）；开发机静默安装 exit 0、快捷方式与启动器存在。未完成：`vm-acceptance.ps1` 的 ui 阶段、干净 VM 四页与复制证据（EKB-052 阻塞）、发布纪律（未过 052 前仅预发布） ；生命周期统一：安装器经薄 `postgres.ps1` 调用 `errkb pg`，开发机静默安装、重启重放 3.4 s、`/DELETE_DATA=1` 卸载清除全部残留均已复验 |
 
-P8 门槛：标准用户安装一个可追踪产物，从开始菜单打开工具箱，通过本地 pipe 使用四类页面，真实重启后仍可用，并能选择保留或删除数据完成卸载。
+P8 门槛：标准用户解压一个可追踪的工具箱 ZIP，运行 `errkb pg install`，用 `start-errkb.cmd` 打开工具箱，通过本地 pipe 使用四类页面，重启后重放登录命令仍可用，并能选择保留或删除数据完成卸载。
 
 ### 11.1 按卡的文件施工顺序
 
@@ -600,3 +600,12 @@ errkb db migrate --check
 
 从当前上游 `main` 重新建立真实 Git 工作区，把本地独有的 EKB-057 文件放进具名分支，并在改变行为前核对完整 diff。然后按“命令分派 → 安装凭据恢复 daemon → e2e 冒烟测试 → 发布/启动器集成”的顺序完成 EKB-057。干净 checkout 中的搜索壳能通过安装产物成功打开之前，不开始 EKB-058。
 
+## 16 便携发布形态取代安装器（2026-10-25）
+
+因为首启与生命周期缺陷持续阻塞发布，owner 决定移除安装器路线。受支持的交付是由 `packaging/windows/release.ps1` 产出的便携工具箱 ZIP：
+
+- `errkb-toolbox.zip` = `errkb.exe`、`start-errkb.cmd`、`autostart.ps1`、`postgres.ps1`、`migrations\*.sql`、`README.md`、`CHANGELOG.md`、`LICENSE`；同一发布页另附独立 `errkb.exe`、`SHA256SUMS`、`manifest.json`、`sbom.json`、`THIRD-PARTY-NOTICES.md`、`SIGNING.md` 与 `RELEASE-NOTES.md`。
+- 首次运行是 `errkb pg install`；登录恢复由 `autostart.ps1` 写入当前用户 HKCU Run 项；Web 工具箱用 `start-errkb.cmd` 打开。
+- 已删除的文件：`packaging/windows/installer.iss`、`ci-acceptance.ps1`、`vm-acceptance.ps1`、`recovery-acceptance.ps1`、`release-test.ps1`；`release.ps1` 不再接受安装器参数，`npm run test:release` 已移除。
+- CI：`windows-acceptance` 任务改为 `windows-go`（构建、真实 PostgreSQL、全套 Go 测试、版本与 MCP 自检）；`release.yml` 构建 ZIP，并在配置 `NPM_TOKEN` 时发布 npm 包。
+- EKB-050/051/052/054/056/060 的历史状态行保留；其中与安装器相关的说法由本节取代。`docs/acceptance-vm.md` 只作历史记录；真正的门禁是 Windows 冒烟任务与发布检查。

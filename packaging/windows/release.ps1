@@ -12,8 +12,7 @@
              assembles the release directory:
                errkb.exe
                errkb.exe.sha256          checksum line for the binary
-               errkb-<version>-setup.exe (with -IncludeInstaller)
-               errkb-toolbox.zip         portable launcher: errkb.exe, start-errkb.cmd,
+                             errkb-toolbox.zip         portable launcher: errkb.exe, start-errkb.cmd, autostart.ps1, postgres.ps1, migrations,
                                          README.md and CHANGELOG.md, no data or credentials
                sbom.json                 Go modules + bundled and required tools
                THIRD-PARTY-NOTICES.md    license declarations
@@ -28,8 +27,8 @@
   build time comes from the commit (never the wall clock), the bundle is
   rebuilt from scratch, artifacts are sorted before they are hashed, and the
   manifest records the Go and go-winres versions so a difference is visible
-  instead of silent. The setup executable and errkb-toolbox.zip are the two
-  byte-level exceptions, because Inno Setup embeds its compilation time and
+  instead of silent. errkb-toolbox.zip is the one documented exception: ZIP
+  headers record file modification times.
   ZIP headers record file modification times; both are explained in
   manifest.json and verified through the errkb.exe hash they carry.
 
@@ -57,19 +56,6 @@
   Build stamp embedded in the binary. Defaults to the commit timestamp
   (git log -1 --format=%cI), which is what makes rebuilds byte-identical.
 
-.PARAMETER WindowsAcceptanceVersion
-  Version accepted by the mandatory WF-011A/WF-011B Windows runner. Defaults
-  to WINDOWS_ACCEPTANCE_VERSION. The tag workflow sets it only after the
-  installer lifecycle and recovery job succeeds; publishing without it is
-  refused.
-
-.PARAMETER IncludeInstaller
-  Also compile packaging\windows\installer.iss with Inno Setup and ship the
-  setup executable.
-
-.PARAMETER IsccPath
-  Path to ISCC.exe. Auto-detected when omitted.
-
 .PARAMETER OutputDir
   Bundle directory. Defaults to dist\release\errkb-<Version>.
 #>
@@ -81,9 +67,6 @@ param(
     [string]$Tag = "",
     [string]$Commit = "",
     [string]$BuildTime = "",
-    [string]$WindowsAcceptanceVersion = $env:WINDOWS_ACCEPTANCE_VERSION,
-    [switch]$IncludeInstaller,
-    [string]$IsccPath = "",
     [string]$OutputDir = ""
 )
 
@@ -92,7 +75,6 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 $changelogPath = Join-Path $repoRoot "CHANGELOG.md"
 $buildScript = Join-Path $PSScriptRoot "build.ps1"
-$installerScript = Join-Path $PSScriptRoot "installer.iss"
 $binaryPath = Join-Path $repoRoot "dist\errkb.exe"
 
 function Fail([string]$Message) {
@@ -180,44 +162,6 @@ function Assert-ChangelogSection([string]$ResolvedVersion) {
     }
 }
 
-function Assert-WindowsAcceptance([string]$ResolvedVersion) {
-    if ([string]::IsNullOrWhiteSpace($WindowsAcceptanceVersion)) {
-        Fail "no Windows CI acceptance result: WF-011A and WF-011B must pass for $ResolvedVersion, then set WINDOWS_ACCEPTANCE_VERSION (or pass -WindowsAcceptanceVersion)"
-    }
-    $accepted = $WindowsAcceptanceVersion.Trim()
-    if ($accepted.StartsWith("v")) {
-        $accepted = $accepted.Substring(1)
-    }
-    if ($accepted -ne $ResolvedVersion) {
-        Fail "the Windows CI acceptance covers version '$accepted' but this release is '$ResolvedVersion'; publish only after WF-011A and WF-011B pass for this version"
-    }
-}
-
-function Assert-InstallerVersion([string]$ResolvedVersion) {
-    if (-not (Test-Path $installerScript)) {
-        Fail "packaging\windows\installer.iss is missing"
-    }
-    $includesGeneratedVersion = Select-String -Path $installerScript -Pattern '^#include "\.\.\\\.\.\\dist\\build-version\.iss"$' -SimpleMatch:$false | Select-Object -First 1
-    if ($includesGeneratedVersion) {
-        # build.ps1 writes dist\build-version.iss from its own -Version, so the
-        # setup version cannot drift from the release being packaged. Verify the
-        # generator exists instead of a literal constant.
-        $match = Select-String -Path $buildScript -Pattern 'build-version\.iss' | Select-Object -First 1
-        if (-not $match) {
-            Fail "installer.iss includes dist\build-version.iss but build.ps1 does not write it"
-        }
-        return
-    }
-    $match = Select-String -Path $installerScript -Pattern '^#define AppVersion "([^"]+)"$' | Select-Object -First 1
-    if (-not $match) {
-        Fail "installer.iss has neither dist\build-version.iss nor '#define AppVersion "x.y.z"'"
-    }
-    $installerVersion = $match.Matches[0].Groups[1].Value
-    if ($installerVersion -ne $ResolvedVersion) {
-        Fail "installer.iss builds version '$installerVersion' but this release is '$ResolvedVersion'; update the definition before tagging"
-    }
-}
-
 function Resolve-Commit {
     if (-not [string]::IsNullOrWhiteSpace($Commit)) {
         return $Commit.Trim()
@@ -238,35 +182,6 @@ function Resolve-BuildTime {
         Fail "cannot resolve the commit timestamp; pass -BuildTime explicitly"
     }
     return $value.Trim()
-}
-
-function Resolve-Iscc {
-    if (-not [string]::IsNullOrWhiteSpace($IsccPath)) {
-        if (-not (Test-Path $IsccPath)) {
-            Fail "ISCC.exe not found at '$IsccPath'"
-        }
-        return (Resolve-Path $IsccPath).Path
-    }
-    $command = Get-Command iscc -ErrorAction SilentlyContinue
-    if ($command) {
-        return $command.Source
-    }
-    $candidates = @()
-    if ($env:LOCALAPPDATA) {
-        $candidates += (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe")
-    }
-    if (${env:ProgramFiles(x86)}) {
-        $candidates += (Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe")
-    }
-    if ($env:ProgramFiles) {
-        $candidates += (Join-Path $env:ProgramFiles "Inno Setup 6\ISCC.exe")
-    }
-    foreach ($candidate in $candidates) {
-        if ($candidate -and (Test-Path $candidate)) {
-            return (Resolve-Path $candidate).Path
-        }
-    }
-    Fail "ISCC.exe was not found; install Inno Setup 6 or pass -IsccPath"
 }
 
 function Get-GoVersion {
@@ -306,15 +221,10 @@ function Get-ReleaseToolchain {
 function Invoke-ReleaseChecks([string]$ResolvedVersion, [string]$ResolvedTag) {
     $tagCommit = Assert-ReleaseGitState $ResolvedTag
     Assert-ChangelogSection $ResolvedVersion
-    Assert-WindowsAcceptance $ResolvedVersion
-    if ($IncludeInstaller) {
-        Assert-InstallerVersion $ResolvedVersion
-    }
     Write-Output "release check: version $ResolvedVersion"
     Write-Output "release check: tag $ResolvedTag -> $tagCommit"
     Write-Output "release check: Git worktree clean"
     Write-Output "release check: changelog section present"
-    Write-Output "release check: Windows CI acceptance passed for $ResolvedVersion"
 }
 
 function Write-ReleaseNotes([string]$ResolvedVersion, [string]$TargetPath) {
@@ -379,7 +289,7 @@ function New-SbomPackage([string]$Name, [string]$PackageVersion, [string]$Licens
     }
 }
 
-function Write-Sbom([string]$TargetPath, [string]$ResolvedVersion, [string]$ResolvedCommit, [string]$ResolvedBuildTime, [hashtable]$Toolchain, [string]$BinaryPath, [string]$InstallerPath) {
+function Write-Sbom([string]$TargetPath, [string]$ResolvedVersion, [string]$ResolvedCommit, [string]$ResolvedBuildTime, [hashtable]$Toolchain, [string]$BinaryPath) {
     $modules = Get-EmbeddedModules $BinaryPath
     $goVersion = "unknown"
     if ($modules.go -match 'go[0-9][0-9A-Za-z.\-]*') {
@@ -397,15 +307,9 @@ function Write-Sbom([string]$TargetPath, [string]$ResolvedVersion, [string]$Reso
     $packages += New-SbomPackage "go" $goVersion "BSD-3-Clause" "build toolchain, not distributed" $false "https://go.dev"
     $packages += New-SbomPackage "github.com/tc-hib/go-winres" $Toolchain.go_winres "MIT" "build tool, not distributed" $false "https://github.com/tc-hib/go-winres"
     $packages += New-SbomPackage "PostgreSQL" "16 or later" "PostgreSQL" "runtime prerequisite, installed separately, not distributed" $false "https://www.postgresql.org"
-    if ($InstallerPath) {
-        $iscc = Resolve-Iscc
-        $innoVersion = (Get-Item $iscc).VersionInfo.ProductVersion
-        $packages += New-SbomPackage "Inno Setup" $innoVersion "Inno Setup License" "build tool for the setup executable; its runtime is compiled into the setup" $false "https://jrsoftware.org/isinfo.php"
-    }
 
     $artifactNames = @()
     if (Test-Path $BinaryPath) { $artifactNames += "errkb.exe" }
-    if ($InstallerPath) { $artifactNames += (Split-Path $InstallerPath -Leaf) }
     $document = [ordered]@{
         spdxVersion       = "SPDX-2.3"
         dataLicense       = "CC0-1.0"
@@ -417,13 +321,13 @@ function Write-Sbom([string]$TargetPath, [string]$ResolvedVersion, [string]$Reso
             creators = @("Tool: packaging/windows/release.ps1")
         }
         packages          = $packages
-        comment           = "The Go modules are compiled into errkb.exe. PostgreSQL is required at runtime but is not distributed here; the installer expects a PostgreSQL 16 installation. Inno Setup is a build tool whose runtime is compiled into the setup executable."
+        comment           = "The Go modules are compiled into errkb.exe. PostgreSQL is required at runtime but is not distributed here; distribution provides the binary; PostgreSQL 16 is a documented prerequisite. "
     }
     $json = $document | ConvertTo-Json -Depth 8
     [System.IO.File]::WriteAllText($TargetPath, ($json + "`n"), [System.Text.UTF8Encoding]::new($false))
 }
 
-function Write-ThirdPartyNotices([string]$TargetPath, [string]$ResolvedVersion, [hashtable]$Toolchain, [string]$BinaryPath, [bool]$WithInstaller) {
+function Write-ThirdPartyNotices([string]$TargetPath, [string]$ResolvedVersion, [hashtable]$Toolchain, [string]$BinaryPath) {
     $modules = Get-EmbeddedModules $BinaryPath
     $lines = @()
     $lines += "# Third-party notices"
@@ -444,9 +348,6 @@ function Write-ThirdPartyNotices([string]$TargetPath, [string]$ResolvedVersion, 
     $lines += "| Go | $($Toolchain.go) | BSD-3-Clause | build toolchain, not distributed |"
     $lines += "| go-winres | $($Toolchain.go_winres) | MIT | build tool, not distributed |"
     $lines += "| PostgreSQL | 16 or later | PostgreSQL License | runtime prerequisite, installed separately |"
-    if ($WithInstaller) {
-        $lines += "| Inno Setup | 6 | Inno Setup License | builds the setup executable; its runtime is compiled into it |"
-    }
     $lines += ""
     $lines += "## License texts"
     $lines += ""
@@ -484,12 +385,6 @@ function Write-ThirdPartyNotices([string]$TargetPath, [string]$ResolvedVersion, 
     $lines += "TO PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS."
     $lines += "```"
     $lines += ""
-    $lines += "### Inno Setup"
-    $lines += ""
-    $lines += "Inno Setup is used at build time to produce the setup executable and is not"
-    $lines += "redistributed as a standalone program. Its license text ships with the Inno"
-    $lines += "Setup installation used for the build; see https://jrsoftware.org/isinfo.php."
-    $lines += ""
     $lines += "### Go modules"
     $lines += ""
     $lines += "Each module keeps its own license (SPDX identifiers in the table above and in"
@@ -526,13 +421,13 @@ function Write-SigningPolicy([string]$TargetPath, [string]$ResolvedVersion) {
     $lines += ""
     $lines += "- Windows SmartScreen and corporate policies may warn or block an unsigned"
     $lines += "  executable; the user has to verify the checksum manually."
-    $lines += "- An unsigned installer gives no Authenticode proof that it came from this"
+    $lines += "- An unsigned binary gives no Authenticode proof that it came from this"
     $lines += "  repository. Verify it against SHA256SUMS from the release page."
     $lines += ""
     $lines += "## Plan"
     $lines += ""
-    $lines += "When an Authenticode certificate is available, sign errkb.exe and the setup"
-    $lines += "executable in release.yml with signtool and a timestamp server, then extend this"
+    $lines += "When an Authenticode certificate is available, sign errkb.exe in"
+    $lines += "release.yml with signtool and a timestamp server, then extend this"
     $lines += "document and SHA256SUMS with the signing record. Until then, treat the checksums"
     $lines += "as the integrity boundary."
     $lines += ""
@@ -563,13 +458,12 @@ function New-Manifest([string]$Bundle, [string]$ResolvedVersion, [string]$Resolv
         toolchain       = $Toolchain
         reproducibility = [ordered]@{
             scope     = "rebuilding the same tag, commit and build time with the same toolchain produces the same errkb.exe, errkb.exe.sha256, manifest.json, sbom.json, THIRD-PARTY-NOTICES.md, SIGNING.md, RELEASE-NOTES.md and SHA256SUMS (verified by packaging/windows/release.ps1 twice per release)"
-            installer = "the setup executable is not byte-reproducible: Inno Setup embeds its compilation time in setup.exe. Verify it by installing and comparing the installed errkb.exe with errkb.exe.sha256"
-            toolbox   = "errkb-toolbox.zip is not byte-reproducible: ZIP headers record file modification times. Verify the contained errkb.exe against errkb.exe.sha256 from the same release"
+                toolbox   = "errkb-toolbox.zip is not byte-reproducible: ZIP headers record file modification times. Verify the contained errkb.exe against errkb.exe.sha256 from the same release"
         }
         references      = [ordered]@{
             changelog      = "CHANGELOG.md"
             upgrade_matrix = "spec/compat.cue (compat.upgrade)"
-            acceptance     = "WF-011A/WF-011B in .github/workflows/release.yml; docs/acceptance-vm.md describes the boundary"
+            acceptance     = "the Windows smoke job in .github/workflows/ci.yml; docs/install.md describes the supported distribution"
             signing        = "SIGNING.md"
         }
         artifacts       = $artifacts
@@ -646,7 +540,9 @@ $toolboxWhitelist = @(
     @{ Source = (Join-Path $repoRoot "README.md"); Name = "README.md" },
     @{ Source = (Join-Path $repoRoot "CHANGELOG.md"); Name = "CHANGELOG.md" },
     @{ Source = (Join-Path $repoRoot "LICENSE"); Name = "LICENSE" },
-    @{ Source = (Join-Path $repoRoot "packaging\windows\start-errkb.cmd"); Name = "start-errkb.cmd" }
+    @{ Source = (Join-Path $repoRoot "packaging\windows\start-errkb.cmd"); Name = "start-errkb.cmd" },
+    @{ Source = (Join-Path $repoRoot "packaging\windows\autostart.ps1"); Name = "autostart.ps1" },
+    @{ Source = (Join-Path $repoRoot "packaging\windows\postgres.ps1"); Name = "postgres.ps1" }
 )
 foreach ($entry in $toolboxWhitelist) {
     if (-not (Test-Path $entry.Source)) {
@@ -654,31 +550,18 @@ foreach ($entry in $toolboxWhitelist) {
     }
     Copy-Item $entry.Source (Join-Path $toolboxStaging $entry.Name) -Force
 }
+$toolboxMigrations = Join-Path $toolboxStaging "migrations"
+New-Item -ItemType Directory -Path $toolboxMigrations -Force | Out-Null
+Copy-Item (Join-Path $repoRoot "db\migrations\*.sql") $toolboxMigrations -Force
+
 $toolboxPath = Join-Path $bundle "errkb-toolbox.zip"
 Compress-Archive -Path (Join-Path $toolboxStaging "*") -DestinationPath $toolboxPath -Force
 Remove-Item -Recurse -Force $toolboxStaging
-Write-Output "release package: wrote errkb-toolbox.zip (errkb.exe, start-errkb.cmd, README.md, CHANGELOG.md, LICENSE)"
-
-$installerPath = $null
-if ($IncludeInstaller) {
-    $iscc = Resolve-Iscc
-    Assert-InstallerVersion $resolvedVersion
-    Write-Output "release package: compiling the setup executable with $iscc"
-    & $iscc $installerScript
-    if ($LASTEXITCODE -ne 0) {
-        Fail "Inno Setup failed with exit code $LASTEXITCODE"
-    }
-    $builtInstaller = Join-Path $repoRoot "dist\errkb-$resolvedVersion-setup.exe"
-    if (-not (Test-Path $builtInstaller)) {
-        Fail "Inno Setup did not produce $builtInstaller"
-    }
-    $installerPath = Join-Path $bundle "errkb-$resolvedVersion-setup.exe"
-    Copy-Item $builtInstaller $installerPath -Force
-}
+Write-Output "release package: wrote errkb-toolbox.zip (errkb.exe, start-errkb.cmd, autostart.ps1, postgres.ps1, migrations, README.md, CHANGELOG.md, LICENSE)"
 
 Write-Output "release package: writing sbom.json, THIRD-PARTY-NOTICES.md, SIGNING.md"
-Write-Sbom (Join-Path $bundle "sbom.json") $resolvedVersion $resolvedCommit $resolvedBuildTime $toolchain $binaryPath $installerPath
-Write-ThirdPartyNotices (Join-Path $bundle "THIRD-PARTY-NOTICES.md") $resolvedVersion $toolchain $binaryPath ([bool]$installerPath)
+Write-Sbom (Join-Path $bundle "sbom.json") $resolvedVersion $resolvedCommit $resolvedBuildTime $toolchain $binaryPath
+Write-ThirdPartyNotices (Join-Path $bundle "THIRD-PARTY-NOTICES.md") $resolvedVersion $toolchain $binaryPath
 Write-SigningPolicy (Join-Path $bundle "SIGNING.md") $resolvedVersion
 Write-ReleaseNotes $resolvedVersion (Join-Path $bundle "RELEASE-NOTES.md")
 

@@ -64,7 +64,7 @@ CUE defines shapes and constraints; it is not the runtime database. PL/pgSQL kee
 | Diagnose installation/connectors | `errkb doctor` | `cmd/errkb/doctor.go`, `internal/service/doctor.go` | Implemented |
 | Apply and inspect migrations | `errkb db migrate`, `errkb db status` | `cmd/errkb/db.go`, `internal/database/migrate.go` | Implemented in current source |
 | Run a local toolbox window | `errkb ui`, `errkb ui --web` | `internal/ui/`, `internal/webshell/`, `cmd/errkb/web.go` | Embedded Web shell shipped in v0.1.1 (`errkb ui --web`; the release includes it) |
-| Manage local PostgreSQL | Windows installer and PostgreSQL manager | `internal/service/pg_manage.go`, `packaging/windows/` | Implemented; WF-011A/WF-011B exercise lifecycle and recovery in Windows CI |
+| Manage local PostgreSQL | PostgreSQL manager and portable scripts | `internal/service/pg_manage.go`, `packaging/windows/postgres.ps1` | Implemented; `errkb pg install` creates the cluster, `autostart.ps1` restores it at logon |
 | Retain/delete data safely | Retention/deletion functions and settings models | `0006_retention.sql`, `internal/ui/settings.go` | Implemented, including Web preview/confirm; automatic scheduling remains outside v1 |
 
 ## 4. Failure capture
@@ -206,7 +206,7 @@ The local `errkb ui --web` embeds static assets, binds only to `127.0.0.1`, gene
 - Retention has separate sample, normalized-event and audit periods. Scoped deletion supports preview, confirmation and audit (`0006_retention.sql`).
 - Crash tests kill real writer and migration processes and verify committed-data integrity.
 
-WF-011A/WF-011B cover the installer lifecycle and deterministic recovery in Windows CI. WF-012 produced and verified the public v0.1.1 tagged bundle on 2026-10-23.
+The Windows smoke job builds the release binary and runs the full suite with a real PostgreSQL. `release.ps1` produced and verified the portable `v0.1.2` bundle on 2026-10-25; the installer path was removed.
 
 ## 11. Explicit non-features
 

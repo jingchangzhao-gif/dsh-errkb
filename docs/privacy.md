@@ -116,7 +116,7 @@ pass.
 - **Retention is manual.** See the limitation above.
 - **Backups copy everything.** A `pg_dump` includes the same data the database holds
   (redacted, but complete). Protect the dump file like the database.
-- **The installer is unsigned.** Integrity is protected by the release `SHA256SUMS`, not by
+- **The release is unsigned.** Integrity is protected by the release `SHA256SUMS`, not by
   a signature.
 
 ## User controls

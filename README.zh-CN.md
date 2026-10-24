@@ -4,7 +4,7 @@
 
 > **回收报错：同一个失败只诊断一次，记录下来，下次出现时作为已知解法交回 —— 全程本地完成，不调用模型。**
 
-**项目状态（2026-10-23）：v0.1.1 已正式发布。** 可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、已实测的 DSH/Codex/Claude 连接器和内嵌 Windows Web 工具箱均已进入首个通过验证的 Windows 版本。WF-011A/WF-011B 会在 CI 中强制验证安装生命周期与确定性恢复。可从 [v0.1.1 发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/tag/v0.1.1)下载安装器或便携工具箱。
+**项目状态（2026-10-25）：v0.1.2 已正式发布。** 可复用核心、PostgreSQL schema、CLI、后台服务、MCP 服务、已实测的 DSH/Codex/Claude 连接器和内嵌 Web 工具箱以**便携工具箱 ZIP**（外加独立 EXE）形式发布；安装器路线已移除。从[最新发布页](https://github.com/jingchangzhao-gif/error-knowledge-base/releases/latest)下载 `errkb-toolbox.zip`。
 
 **错误知识库**（`error-knowledge-base`）是一个本地平台，有多种使用入口：命令行客户端、后台服务、MCP stdio 服务、[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 插件、宿主连接器与内嵌 Windows Web 工具箱。所有入口共用同一套核心与知识库；分类、脱敏、规范化、指纹、存储、检索和解法可信度不会在每个宿主里重复实现。命令仍是 `errkb`，DSH 适配器包继续使用 `dsh-errkb`。
 
@@ -38,7 +38,7 @@
 - **聊天模型。** 核心从不调用模型，也不发起外网请求。连接器只观察宿主已经产生的事件；解法要么本来就在数据库里，要么由用户写入。传输只包括本地 PostgreSQL、Named Pipe，以及显式启用的回环 HTTP。
 - **日志仓库。** 只有够格拿编号的失败才会入库，且样本有上限；保留期是显式配置的。
 - **云服务。** 没有账号、没有遥测、没有远程端点。HTTP 默认关闭，本地 API 是 Named Pipe。
-- **无需外部数据库的单文件工具。** 知识库是 PostgreSQL，属于运行时前置条件（见[系统要求](#系统要求)）；Windows 安装器会创建并管理一个专用实例。
+- **无需外部数据库的单文件工具。** 知识库是 PostgreSQL，属于运行时前置条件（见[系统要求](#系统要求)）；`errkb pg install` 会创建并管理一个专用实例。
 
 ## 当前交付状态
 
@@ -54,10 +54,10 @@
 | PostgreSQL schema 与检索 | 已实现；集成测试需要真实数据库 | 已有 0001–0008 迁移、精确/近似检索、解法与结果 |
 | CLI、后台服务与 MCP | 已实现 | 有已迁移的 PostgreSQL 和 DSN 时，可使用开发构建运行 |
 | DSH、Codex CLI、Claude Code 连接器 | 已按固定版本实测 | 只承诺连接器矩阵中已经验证的能力 |
-| Windows 安装器与恢复 | 已实现；WF-011A/WF-011B 为强制 CI | 临时 Windows Runner 会运行真实安装包、迁移、知识闭环、HKCU 恢复和两种卸载选择 |
+| 便携发布与 Windows 恢复 | 已实现；Windows 冒烟任务运行同一个可执行文件 | Windows CI 任务构建二进制、用真实 PostgreSQL 跑全部 Go 测试并回答 MCP 自检；`errkb pg install` 与 `autostart.ps1` 覆盖首次运行和登录恢复 |
 | 内嵌 Web 工具箱 | 已实现并有自动化测试覆盖 | 搜索、详情/编辑、统计/审计和设置路由均已接入 `ui --web` |
-| 发布来源门禁 | 已实现并通过发布验证 | 会拒绝缺失/不匹配 tag 与脏源码；已验收 tag `v0.1.1` 指向提交 `1438473` |
-| 发布包 | 已发布为 v0.1.1 | GitHub Release 包含已核对的安装器、便携工具箱、独立 EXE、manifest、SBOM 与校验和 |
+| 发布来源门禁 | 已实现并通过发布验证 | 会拒绝缺失/不匹配 tag 与脏源码；已验收 tag `v0.1.2` 指向提交 `1438473` 之后的修复线 |
+| 发布包 | 已发布为 v0.1.2 | GitHub Release 包含工具箱 ZIP、独立 EXE、manifest、SBOM 与校验和；仓库配置 `NPM_TOKEN` 时同一 tag 还会发布 npm 包 |
 
 ## 功能总览
 
@@ -118,33 +118,33 @@
 
 ## 快速开始
 
-> 以下是**开发工作区**流程，目前还没有受支持的一键安装版本。不要混用 `dist\errkb.exe` 与 `dist\release\...`，它们来自不同修订。
+受支持的发布物是便携工具箱 ZIP：`errkb.exe` 加上 `start-errkb.cmd`、`autostart.ps1`、`postgres.ps1`。没有安装器，解压到你有写权限的目录即可。
 
-1. **安装 PostgreSQL 16**（EDB 安装包，或让 errkb 安装器在 5433 端口创建专用实例）。记下 DSN。
-2. **构建当前源码并应用 schema：**
-
-   ```powershell
-   go build -o errkb.exe ./cmd/errkb
-   .\errkb.exe db migrate --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable" --migrations .\db\migrations
-   ```
-
-3. **启动后台服务：**
+1. 先安装一次 **PostgreSQL 16**（EDB 安装包）。errkb 用它的二进制创建并管理自己的实例。
+2. 解压 `errkb-toolbox.zip`，创建实例与 schema：
 
    ```powershell
-   .\errkb.exe daemon --dsn "postgres://postgres@127.0.0.1:5433/errkb?sslmode=disable"
+   .\errkb.exe pg install
    ```
 
-4. **用包装器采集一次真实失败：**
+   它会在 5433 端口、`.\pg\data` 下启动专用实例，应用迁移并写入 `.\pg\credentials.json`。若想复用已有服务器，改用 `errkb db migrate --dsn <你的 DSN>`。
+
+3. 用 `start-errkb.cmd`（或 `.\errkb.exe ui --web`）打开工具箱；daemon 缺失时它会自动拉起。
+4. 可选的登录自启：
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\autostart.ps1 -Action install -AppDir "$PWD"
+   ```
+
+5. 采集一次真实失败并复用解法：
 
    ```powershell
    .\errkb.exe run --connector cli --session demo --project demo -- cmd /c "exit 9"
    ```
 
-5. **记录解法** —— 通过 MCP 服务（`err_record_solution`）或连接器 —— 再跑同一条命令，包装器就会打印已知解法及其来源与可信度。
+   通过 MCP 服务（`err_record_solution`）或连接器记录解法，再跑同一条命令，包装器会打印已知解法及其来源与可信度。
 
-v0.1.1 安装器和便携工具箱都可以通过 `errkb ui --web` 打开内嵌工具箱；daemon 缺失时，它会解析安装凭据与 migrations 进行恢复。
-
-含真实输出的完整闭环见 [`docs/e2e-cli-loop.zh-CN.md`](docs/e2e-cli-loop.zh-CN.md)。
+含真实输出的完整闭环见 [`docs/e2e-cli-loop.zh-CN.md`](docs/e2e-cli-loop.zh-CN.md)；便携安装步骤见 [`docs/install.zh-CN.md`](docs/install.zh-CN.md)。
 
 ## 命令行
 
@@ -164,7 +164,7 @@ v0.1.1 安装器和便携工具箱都可以通过 `errkb ui --web` 打开内嵌�
 | `errkb markdown import\|export` | 导入或导出旧版 `ERRORS.md` 格式 |
 | `errkb daemon` | 本地后台服务：Named Pipe API、健康文档、脱敏日志 |
 | `errkb ui` | 源码树中的原生托盘/搜索宿主；不是已发布的 Web 工具箱 |
-| `errkb ui --web` | 本地 Web 工具箱（搜索、详情/编辑、统计、设置）；v0.1.1 安装器与工具箱 ZIP 已包含 |
+| `errkb ui --web` | 本地 Web 工具箱（搜索、详情/编辑、统计、设置）；随工具箱 ZIP 提供 |
 | `errkb doctor` | 九项只读检查：环境、连接器与 MCP，每条发现附修复建议 |
 | `errkb mcp` | 带九个工具的 MCP stdio 服务；自动解析已安装凭据，daemon 未运行时自动拉起 |
 | `errkb mcp install --host codex\|claude\|dsh` | 把 MCP 服务注册到本机 LLM 宿主；DSH 打印插件路径 |
@@ -209,9 +209,9 @@ retention:
 ## 系统要求
 
 - **Windows 10 或 11，x64。** 后台服务、托盘、Named Pipe API 与 Windows 连接器服务都是 Windows 专用。
-- **PostgreSQL 16**（服务端）。不随附；安装器可以在 5433 端口创建专用实例，也可以复用已有本地实例。
-- **运行时不需要 Go、Node.js 或开发工具链。** 发布二进制与安装器除 PostgreSQL 外自给自足。
-- 仅开发需要：Go 1.26.4、Node.js 24.16.0（pnpm 11.7.0）、CUE 0.17.1、Inno Setup 6，以及一个本地 PostgreSQL 用于数据库测试。
+- **PostgreSQL 16**（服务端）。不随附；`errkb pg install` 可用已安装的 PostgreSQL 二进制在 5433 端口创建专用实例，也可以复用已有本地实例。
+- **运行时不需要 Go、Node.js 或开发工具链。** 发布物是一个 `errkb.exe` 加几个 PowerShell 脚本，PostgreSQL 是唯一外部前提。
+- 仅开发需要：Go 1.26.4、Node.js 24.16.0（pnpm 11.7.0）、CUE 0.17.1，以及一个本地 PostgreSQL 用于数据库测试。
 
 ## 兼容性与版本口径
 
@@ -222,9 +222,9 @@ retention:
 
 ## 安装与卸载
 
-正式安装器按用户安装到 `%LOCALAPPDATA%\errkb`，可在 5433 端口创建专用 PostgreSQL 实例、应用迁移、登记当前用户登录恢复、安装 `start-errkb.cmd` 并创建开始菜单工具箱快捷方式；卸载时可以保留或删除数据。WF-011A/WF-011B 会在 Windows CI 中验证这些路径。请只使用 v0.1.1 GitHub Release 附带的文件；本地忽略的 `dist/` 仍是可丢弃的构建输出。
+发布物是便携的：下载 `errkb-toolbox.zip`，解压到你有写权限的目录，运行一次 `errkb.exe pg install`。实例位于 `pg\data`，凭据在 `pg\credentials.json`（0600），日志与健康文件也在同一目录；`autostart.ps1 -Action install` 写入当前用户 Run 键实现登录恢复。卸载时运行 `errkb.exe pg uninstall -DeleteData`（省略 `-DeleteData` 可保留数据），再用 `autostart.ps1 -Action uninstall` 删除 Run 项并删除目录。发布物未做代码签名；请用发布页的 `SHA256SUMS` 校验。
 
-完整步骤、数据位置与静默安装行为见 [`docs/install.md`](docs/install.md)。强制 Windows CI 验收与可选干净机检查见 [`docs/acceptance-vm.zh-CN.md`](docs/acceptance-vm.zh-CN.md)。发布物未做代码签名；请用发布包里的 `SHA256SUMS` 校验。
+完整步骤、数据位置与卸载行为见 [`docs/install.zh-CN.md`](docs/install.zh-CN.md)。
 
 ## 隐私
 
@@ -244,18 +244,18 @@ retention:
 | [`docs/privacy.zh-CN.md`](docs/privacy.zh-CN.md) / [English](docs/privacy.md) | 数据流向、脱敏、保留期、删除 |
 | [`docs/benchmarks.zh-CN.md`](docs/benchmarks.zh-CN.md) / [English](docs/benchmarks.md) | 性能门槛、数据集、查询计划、环境 |
 | [`docs/test-record.zh-CN.md`](docs/test-record.zh-CN.md) / [English](docs/test-record.md) | 长期保存的完整测试与 Windows 验收记录 |
-| [`docs/acceptance-vm.zh-CN.md`](docs/acceptance-vm.zh-CN.md) / [English](docs/acceptance-vm.md) | 强制 Windows CI 验收、证据与可选人工检查 |
+| [`docs/acceptance-vm.zh-CN.md`](docs/acceptance-vm.zh-CN.md) / [English](docs/acceptance-vm.md) | 干净机验收历史记录；实时门禁是 Windows 冒烟任务 |
 | [`docs/e2e-cli-loop.zh-CN.md`](docs/e2e-cli-loop.zh-CN.md) / [English](docs/e2e-cli-loop.md) | 通用 CLI 闭环，全程不经过模型 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 每个版本改了什么 |
-| [`packaging/windows/`](packaging/windows) | 构建、发布与安装脚本 |
+| [`packaging/windows/`](packaging/windows) | 便携工具箱的构建与发布脚本 |
 
 ## 已知局限
 
 以下是仍然存在的局限或刻意保留的边界，不是隐藏能力：
 
-- **真实重启与交互式干净机检查没有持续自动化。** WF-011B 会确定性测试等价的 daemon/PostgreSQL/登录恢复；真实重启和安装向导视觉检查保留为可选人工证据。
+- **物理重启没有持续自动化。** 测试会重启 daemon 与 PostgreSQL 实例并重放登录命令；真实重启仍是可选人工证据。
 - **发布物未做代码签名。** SmartScreen 可能告警；请核对 `SHA256SUMS`。
-- **PostgreSQL 是前置条件。** 核心需要本地 PostgreSQL 16 服务；安装器会创建实例，但数据库不内嵌在程序里。
+- **PostgreSQL 是前置条件。** 核心需要本地 PostgreSQL 16 服务；`errkb pg install` 会创建专用实例，但数据库不内嵌在程序里。
 - **DSH 插件仍在等待商店审核。** 目前以手动安装为受支持路径。
 - **连接器矩阵里有两处实测缺口：** DSH 的 `tools/result` 实时路径与 Codex 的 `PostToolUse` Hook 尚未验证。
 
@@ -275,7 +275,7 @@ gofmt -l .
 cue vet ./spec/...
 ```
 
-数据库测试需要本地 PostgreSQL 与 `ERRKB_TEST_DATABASE_URL`；没设置时会跳过。构建、发布与安装脚本在 [`packaging/windows/`](packaging/windows)；逐卡施工顺序见计划 §11.1；仓库约定（一张卡一个 PR、两种语言同步改动）见计划。
+数据库测试需要本地 PostgreSQL 与 `ERRKB_TEST_DATABASE_URL`；没设置时会跳过。构建与发布脚本在 [`packaging/windows/`](packaging/windows)；逐卡施工顺序见计划 §11.1；仓库约定（一张卡一个 PR、两种语言同步改动）见计划。
 
 ## 参与贡献
 

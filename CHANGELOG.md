@@ -10,6 +10,8 @@ They never claim more than the acceptance records in this repository prove.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-25
+
 ### Added
 
 - `errkb mcp install --host codex|claude|dsh` registers the MCP server with a
@@ -39,6 +41,36 @@ They never claim more than the acceptance records in this repository prove.
   `runtime_versions`); only the keys set take part in the comparison, so
   "issues seen on Linux with Node 20" is one call rather than client-side
   filtering.
+
+### Changed
+
+- The supported distribution is the portable `errkb-toolbox.zip` (plus a
+  standalone EXE). The installer, its acceptance scripts and the installer
+  cards are superseded: `errkb pg install` creates the cluster,
+  `autostart.ps1` writes the per-user Run key and `start-errkb.cmd` opens the
+  toolbox.
+- `errkb db`, `errkb doctor`, `errkb markdown` and `errkb mcp` resolve the
+  installed `pg\credentials.json` and `migrations\` when they sit next to the
+  EXE, so a freshly unpacked toolbox needs no flags.
+- `errkb run` defaults `--connector` and `--session` to `cli`, so a bare
+  `errkb run -- <command>` records again.
+- CI: the Windows acceptance job became a Windows smoke job (build, real
+  PostgreSQL, the full Go suite, version and MCP selftest). The release
+  workflow no longer builds an installer and adds an npm publish job that runs
+  when `NPM_TOKEN` is configured.
+
+### Removed
+
+- `packaging/windows/installer.iss`, `ci-acceptance.ps1`, `vm-acceptance.ps1`,
+  `recovery-acceptance.ps1`, `release-test.ps1`, the installer parameters of
+  `release.ps1` and `npm run test:release`.
+
+### Fixed
+
+- Silent uninstall with `DELETE_DATA` now removes the cluster, logs and health
+  file; the uninstaller passes the choice through a marker file instead of
+  losing it while cloning arguments.
+- `errkb mcp` no longer requires a running daemon or explicit credentials.
 
 ## [0.1.1] - 2026-10-23
 

@@ -5,8 +5,9 @@
 Status: **implemented, automated-test covered and released in v0.1.1**. The
 current source carries the EKB-057 search shell, the EKB-058 detail and editing screens, and
 the EKB-059 statistics, audit and settings screens, all served by `errkb.exe ui --web`;
-`packaging/windows/release.ps1` writes `errkb-toolbox.zip` and the installer ships the
-launcher and shortcuts. WF-011A/WF-011B cover the installed lifecycle and recovery; a
+`packaging/windows/release.ps1` writes `errkb-toolbox.zip`; the ZIP ships the
+launcher, autostart script and migrations. The Windows smoke job covers build and
+lifecycle basics; a
 visual interactive review remains optional. The target remains an interactive UI embedded in `errkb.exe`,
 without Chromium, Electron or NW.js.
 
@@ -20,14 +21,14 @@ without Chromium, Electron or NW.js.
 | Start a missing daemon | Implemented | resolves `pg/credentials.json` and migrations, spawns the daemon and waits for the pipe |
 | Detail/edit pages | Implemented | `/issues/{id}` page; appending a version, issue status, solution status and confirmed deletion are audited in the daemon transaction |
 | Statistics/audit/settings pages | Implemented | `/stats` and `/settings` pages over `/api/stats`, `/api/audit`, `/api/settings` |
-| Launcher, Start-menu shortcut and toolbox ZIP | Implemented | `start-errkb.cmd`, installer `[Icons]`, `errkb-toolbox.zip` in `release.ps1`; installer lifecycle covered by WF-011A |
+| Launcher and toolbox ZIP | Implemented | `start-errkb.cmd`, `autostart.ps1`, `errkb-toolbox.zip` in `release.ps1` |
 | Interactive visual review | Optional | A human may inspect Edge app mode, copy behavior, SmartScreen/UAC and a physical reboot on a clean machine |
 
 ## Decisions
 
 1. **The UI is embedded in `errkb.exe`.** HTML/CSS/JS live under `internal/webshell/assets/`
    and are compiled with `//go:embed`. The release binary stays a single file; the
-   installer, the portable zip and the SBOM keep the same shape.
+   the portable zip and the SBOM keep the same shape.
 2. **The window is the system browser in app mode.** `errkb ui --web` starts a loopback HTTP
    server and opens `msedge --app=<url>` (fallback: the default browser). This is only a
    window host; the product does not depend on a specific browser engine.
@@ -43,7 +44,7 @@ without Chromium, Electron or NW.js.
 ## Process model
 
 ```
-start-errkb.cmd / Start-menu shortcut
+start-errkb.cmd
   -> errkb.exe ui --web
        -> ensure daemon (start it if the pipe is not reachable)
        -> HTTP server on 127.0.0.1:<ephemeral port> (token)
@@ -88,12 +89,12 @@ The EKB-060 packaging implementation now does the following:
 
 - `packaging/windows/build.ps1` embeds the assets in the binary.
 - `release.ps1` produces `errkb-toolbox.zip` from a strict file allowlist.
-- `installer.iss` installs the launcher and creates a Start-menu shortcut that runs
+- `start-errkb.cmd` is the launcher that runs
   `errkb.exe ui --web`; the UI itself is not opened automatically at logon.
-- The ZIP, installer and installed EXE identify one tag/commit and share release hashes.
+- The ZIP and the standalone EXE identify one tag/commit and share release hashes.
 
 EKB-060 and WF-012 are complete. The v0.1.1 tagged release contains the coherent
-installer, toolbox ZIP and standalone EXE; its identity and hashes were verified after
+toolbox ZIP and standalone EXE; its identity and hashes were verified after
 download. Local ignored `dist/` files are not release authority.
 
 ## Testing
@@ -122,8 +123,8 @@ download. Local ignored `dist/` files are not release authority.
 3. `EKB-059` stats, audit and settings screens: **implemented locally** — measured
    statistics, filtered audit page, and the settings page with a deletion preview and
    cancel; the e2e test checks the preview leaves the rows untouched.
-4. `EKB-060` installer/Start-menu integration: **released** — launcher, shortcut and
-   toolbox ZIP ship in v0.1.1; WF-011A/WF-011B cover lifecycle/recovery and WF-012
-   verified the tagged release.
+4. `EKB-060` packaging integration: **superseded** by the portable distribution — launcher and
+   toolbox ZIP ship in v0.1.2; the Windows smoke job and the release checks
+   verify the tagged release.
 
 All land in the existing release pipeline; no new runtime is introduced.
