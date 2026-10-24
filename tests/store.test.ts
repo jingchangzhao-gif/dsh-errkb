@@ -929,7 +929,9 @@ describe("store: real filesystem", () => {
     // concurrency safety is still what this test proves.
     const results = await Promise.all(
       Array.from({ length: 50 }, (_, n) =>
-        createStore(kb, { lockRetryMs: 2, lockTimeoutMs: 60_000 }).append(input(n)),
+        createStore(kb, { lockRetryMs: 2, lockTimeoutMs: 60_000 }).append(
+          input(n),
+        ),
       ),
     );
     const ids = results.map((r) => r.id);

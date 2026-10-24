@@ -203,6 +203,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Install the release tooling
+        shell: pwsh
+        run: |
+          go install github.com/tc-hib/go-winres@v0.3.3
+          "$(go env GOPATH)\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Install PostgreSQL 16
         shell: pwsh
         run: |
